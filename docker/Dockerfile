@@ -85,11 +85,11 @@ USER root
 RUN echo "Install OS dependencies for test build" && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-      sudo \
-      make \
-      curl \
-      libxml2-dev libxslt-dev zlib1g-dev \
-      git && \
+    sudo \
+    make \
+    curl \
+    libxml2-dev libxslt-dev zlib1g-dev \
+    git && \
     apt-get -y clean && \
     rm -rf /var/lib/apt/lists/* /tmp/*
 RUN usermod -aG sudo notify
