@@ -3975,37 +3975,63 @@ def test_should_set_per_minute_rate_limit(
 
 
 @pytest.mark.parametrize(
-    "endpoint, extra_args, form_data, expected_error_message",
+    "endpoint, extra_args, form_data, expected_error_message, patches",
     (
         (
             "main.set_per_minute_rate_limit",
             {},
             {"rate_limit": ""},
             "Error: Cannot be empty",
+            {},
+        ),
+        (
+            "main.set_per_minute_rate_limit",
+            {},
+            {"rate_limit": "-1"},
+            "Error: Number must be greater than or equal to 0",
+            {},
         ),
         (
             "main.set_per_minute_rate_limit",
             {},
             {"rate_limit": "foo"},
             "Error: Number of messages must be a whole number",
+            {},
         ),
         (
             "main.set_per_day_message_limit",
             {"notification_type": "sms"},
             {"message_limit": ""},
             "Error: Cannot be empty",
+            {},
+        ),
+        (
+            "main.set_per_day_message_limit",
+            {"notification_type": "email"},
+            {"message_limit": "-1"},
+            "Error: Number must be greater than or equal to 0",
+            {},
         ),
         (
             "main.set_per_day_message_limit",
             {"notification_type": "email"},
             {"message_limit": "foo"},
             "Error: Number of emails must be a whole number",
+            {},
         ),
         (
             "main.set_per_day_message_limit",
             {"notification_type": "letter"},
             {"message_limit": "12.34"},
             "Error: Number of letters must be a whole number",
+            {},
+        ),
+        (
+            "main.set_free_sms_allowance",
+            {},
+            {"free_sms_allowance": "-1"},
+            "Error: Number must be greater than or equal to 0",
+            {"app.billing_api_client.get_free_sms_fragment_limit_for_year": 0},
         ),
     ),
 )
@@ -4016,7 +4042,12 @@ def test_should_show_error_for_invalid_message_limits(
     extra_args,
     form_data,
     expected_error_message,
+    mocker,
+    patches,
 ):
+    for patch, patch_retval in patches.items():
+        mocker.patch(patch, return_value=patch_retval)
+
     client_request.login(platform_admin_user)
     page = client_request.post(
         endpoint,
@@ -5229,7 +5260,6 @@ def test_show_service_data_retention(
     service_one,
     mock_get_service_data_retention,
 ):
-
     mock_get_service_data_retention.return_value[0]["days_of_retention"] = 5
 
     client_request.login(platform_admin_user)
@@ -5241,6 +5271,11 @@ def test_show_service_data_retention(
     rows = page.select("tbody tr")
     assert len(rows) == 1
     assert normalize_spaces(rows[0].text) == "Email 5 days Change"
+
+    assert page.select_one(".govuk-back-link")["href"] == url_for(
+        "main.service_settings",
+        service_id=SERVICE_ONE_ID,
+    )
 
 
 def test_view_add_service_data_retention(
@@ -5255,6 +5290,11 @@ def test_view_add_service_data_retention(
     )
     assert normalize_spaces(page.select_one("input")["value"]) == "email"
     assert page.select_one("input", attrs={"name": "days_of_retention"})
+
+    assert page.select_one(".govuk-back-link")["href"] == url_for(
+        "main.data_retention",
+        service_id=SERVICE_ONE_ID,
+    )
 
 
 def test_add_service_data_retention(

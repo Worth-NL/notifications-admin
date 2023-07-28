@@ -1014,7 +1014,6 @@ def service_delete_sms_sender(service_id, sms_sender_id):
 @main.route("/services/<uuid:service_id>/service-settings/set-free-sms-allowance", methods=["GET", "POST"])
 @user_is_platform_admin
 def set_free_sms_allowance(service_id):
-
     form = AdminServiceSMSAllowanceForm(free_sms_allowance=current_service.free_sms_fragment_limit)
 
     if form.validate_on_submit():
@@ -1103,7 +1102,7 @@ def service_set_branding(service_id, notification_type):
     return render_template(
         "views/service-settings/set-branding.html",
         form=form,
-        search_form=SearchByNameForm(),
+        _search_form=SearchByNameForm(),
         notification_type=notification_type,
     )
 
@@ -1226,7 +1225,7 @@ def link_service_to_organisation(service_id):
         "views/service-settings/link-service-to-organisation.html",
         has_organisations=all_organisations,
         form=form,
-        search_form=SearchByNameForm(),
+        _search_form=SearchByNameForm(),
     )
 
 

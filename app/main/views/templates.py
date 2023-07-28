@@ -62,7 +62,6 @@ from app.template_previews import (
 )
 from app.utils import (
     NOTIFICATION_TYPES,
-    service_has_permission,
     should_skip_template_page,
 )
 from app.utils.letters import (
@@ -184,8 +183,8 @@ def choose_template(service_id, template_type="all", template_folder_id=None):
         show_template_nav=(current_service.has_multiple_template_types and (len(current_service.all_templates) > 2)),
         template_nav_items=get_template_nav_items(template_folder_id),
         template_type=template_type,
-        search_form=SearchTemplatesForm(current_service.api_keys),
-        templates_and_folders_form=templates_and_folders_form,
+        _search_form=SearchTemplatesForm(current_service.api_keys),
+        form=templates_and_folders_form,
         move_to_children=templates_and_folders_form.move_to.children(),
         user_has_template_folder_permission=user_has_template_folder_permission,
         single_notification_channel=single_notification_channel,
@@ -372,14 +371,14 @@ def choose_template_to_copy(
             ),
             template_folder_path=service.get_template_folder_path(from_folder),
             from_service=service,
-            search_form=SearchTemplatesForm(current_service.api_keys),
+            _search_form=SearchTemplatesForm(current_service.api_keys),
         )
 
     else:
         return render_template(
             "views/templates/copy.html",
             services_templates_and_folders=UserTemplateLists(current_user),
-            search_form=SearchTemplatesForm(current_service.api_keys),
+            _search_form=SearchTemplatesForm(current_service.api_keys),
         )
 
 
@@ -909,7 +908,6 @@ def get_template_sender_form_dict(service_id, template):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/attach-pages", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
-@service_has_permission("extra_letter_formatting")
 def letter_template_attach_pages(service_id, template_id):
     template = current_service.get_template(template_id)
 
@@ -976,7 +974,6 @@ def view_letter_attachment_preview(service_id, attachment_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/attach-pages/edit", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
-@service_has_permission("extra_letter_formatting")
 def letter_template_edit_pages(template_id, service_id):
     template = current_service.get_template(template_id)
 
