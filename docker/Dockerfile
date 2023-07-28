@@ -42,4 +42,8 @@ COPY application.py gunicorn_config.py ./
 COPY --from=frontend-build /usr/frontend/app/static app/static
 COPY --from=frontend-build /usr/frontend/app/templates app/templates
 
+RUN chown -R notify:notify /home/vcap/app
+
 USER notify
+
+CMD ["sh", "-c", "gunicorn -c gunicorn_config.py application"]
