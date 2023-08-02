@@ -1,6 +1,8 @@
 {% extends "admin_template.html" %}
 
-{% set mainClasses = "govuk-!-padding-top-0 govuk-!-padding-bottom-12" %}
+{% from "components/error-summary.html" import errorSummary %}
+
+{% set mainClasses = "govuk-!-padding-top-0 govuk-!-padding-bottom-12" if not error_summary_enabled else "" %}
 
 {% block beforeContent %}
     {% if current_service and current_service.active and current_user.is_authenticated and current_user.belongs_to_service(current_service.id) %}
@@ -13,5 +15,10 @@
 
 {% block content %}
     {% include 'flash_messages.html' %}
+    {% block errorSummary %}
+      {% if error_summary_enabled %}
+        {% if form and form.errors %}{{ errorSummary(form) }}{% endif %}
+      {% endif %}
+    {% endblock %}
     {% block maincolumn_content %}{% endblock %}
 {% endblock %}
