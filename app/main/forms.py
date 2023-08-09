@@ -161,7 +161,7 @@ class RadioField(WTFormsRadioField):
             raise ValidationError(f"Select {self.thing}")
 
 
-def make_email_address_field(label="Email address", gov_user=True, required=True, thing=None):
+def make_email_address_field(label="Email address", *, gov_user: bool, required=True, thing=None):
 
     validators = [
         ValidEmail(),
@@ -252,8 +252,13 @@ def uk_mobile_number(label="Mobile number"):
     return UKMobileNumber(label, validators=[DataRequired(message="Cannot be empty")])
 
 
-def international_phone_number(label="Mobile number"):
-    return InternationalPhoneNumber(label, validators=[DataRequired(message="Cannot be empty")])
+def international_phone_number(label="Mobile number", thing=None):
+    validators_list = []
+    if thing:
+        validators_list.append(NotifyDataRequired(thing=thing))
+    else:
+        validators_list.append(DataRequired(message="Cannot be empty"))
+    return InternationalPhoneNumber(label, validators=validators_list)
 
 
 def make_password_field(label="Password", thing="a password"):
@@ -285,7 +290,21 @@ class GovukSearchField(GovukTextInputFieldMixin, SearchField):
     param_extensions = {"classes": "govuk-!-width-full"}
 
 
-class GovukDateField(GovukTextInputFieldMixin, DateField):
+class NotifyDateField(DateField):
+    """A thin wrapper around WTForm's DateField providing our own error message."""
+
+    def __init__(self, label=None, validators=None, format="%Y-%m-%d", thing="a date", **kwargs):
+        super().__init__(label, validators, format, **kwargs)
+        self.thing = thing
+
+    def process_formdata(self, valuelist):
+        try:
+            super().process_formdata(valuelist)
+        except ValueError as e:
+            raise ValueError(f"Enter {self.thing} in the correct format") from e
+
+
+class GovukDateField(GovukTextInputFieldMixin, NotifyDateField):
     pass
 
 
@@ -295,7 +314,7 @@ class SMSCode(GovukTextInputField):
     input_type = "tel"
     param_extensions = {"attributes": {"pattern": "[0-9]*"}}
     validators = [
-        DataRequired(message="Cannot be empty"),
+        NotifyDataRequired(thing="your text message code"),
         Regexp(regex=r"^\d+$", message="Numbers only"),
         Length(min=5, message="Not enough numbers"),
         Length(max=5, message="Too many numbers"),
@@ -366,7 +385,7 @@ class GovukIntegerField(GovukTextInputField):
 
 class HexColourCodeField(GovukTextInputField, RequiredValidatorsMixin):
     required_validators = [
-        Regexp(regex="^$|^#?(?:[0-9a-fA-F]{3}){1,2}$", message="Must be a valid hex colour code"),
+        Regexp(regex="^$|^#?(?:[0-9a-fA-F]{3}){1,2}$", message="Enter a hex colour code in the correct format"),
     ]
     param_extensions = {
         "prefix": {
@@ -550,15 +569,13 @@ class VirusScannedFileField(FileField_wtf, RequiredValidatorsMixin):
 
 
 class LoginForm(StripWhitespaceForm):
-    email_address = GovukEmailField(
-        "Email address", validators=[Length(min=5, max=255), DataRequired(message="Cannot be empty"), ValidEmail()]
-    )
-    password = GovukPasswordField("Password", validators=[DataRequired(message="Enter your password")])
+    email_address = make_email_address_field(gov_user=False, thing="your email address")
+    password = GovukPasswordField("Password", validators=[NotifyDataRequired(thing="your password")])
 
 
 class RegisterUserForm(StripWhitespaceForm):
-    name = GovukTextInputField("Full name", validators=[DataRequired(message="Cannot be empty")])
-    email_address = make_email_address_field()
+    name = GovukTextInputField("Full name", validators=[NotifyDataRequired(thing="your full name")])
+    email_address = make_email_address_field(gov_user=True)
     mobile_number = international_phone_number()
     password = make_password_field()
     # always register as sms type
@@ -566,6 +583,15 @@ class RegisterUserForm(StripWhitespaceForm):
 
 
 class RegisterUserFromInviteForm(RegisterUserForm):
+    custom_field_order = (
+        "name",
+        "mobile_number",
+        "password",
+        "service",
+        "email_address",
+        "auth_type",
+    )
+
     def __init__(self, invited_user):
         super().__init__(
             service=invited_user.service,
@@ -574,14 +600,14 @@ class RegisterUserFromInviteForm(RegisterUserForm):
             name=guess_name_from_email_address(invited_user.email_address),
         )
 
-    mobile_number = InternationalPhoneNumber("Mobile number", validators=[])
+    mobile_number = InternationalPhoneNumber("Mobile number")
     service = HiddenField("service")
     email_address = HiddenField("email_address")
     auth_type = HiddenField("auth_type", validators=[DataRequired()])
 
     def validate_mobile_number(self, field):
         if self.auth_type.data == "sms_auth" and not field.data:
-            raise ValidationError("Cannot be empty")
+            raise ValidationError("Enter your mobile number")
 
 
 class RegisterUserFromOrgInviteForm(StripWhitespaceForm):
@@ -591,9 +617,11 @@ class RegisterUserFromOrgInviteForm(StripWhitespaceForm):
             email_address=invited_org_user.email_address,
         )
 
-    name = GovukTextInputField("Full name", validators=[DataRequired(message="Cannot be empty")])
+    name = GovukTextInputField("Full name", validators=[NotifyDataRequired(thing="your full name")])
 
-    mobile_number = InternationalPhoneNumber("Mobile number", validators=[DataRequired(message="Cannot be empty")])
+    mobile_number = InternationalPhoneNumber(
+        "Mobile number", validators=[NotifyDataRequired(thing="your mobile number")]
+    )
     password = make_password_field()
     organisation = HiddenField("organisation")
     email_address = HiddenField("email_address")
@@ -1533,7 +1561,7 @@ class ChangeEmailForm(StripWhitespaceForm):
         self.validate_email_func = validate_email_func
         super(ChangeEmailForm, self).__init__(*args, **kwargs)
 
-    email_address = make_email_address_field()
+    email_address = make_email_address_field(gov_user=True)
 
     def validate_email_address(self, field):
         # The validate_email_func can be used to call API to check if the email address is already in
@@ -1681,7 +1709,7 @@ class AdminProviderRatioForm(OrderableFieldsForm):
             return True
 
         for provider in self._providers:
-            getattr(self, provider["identifier"]).errors += ["Must add up to 100%"]
+            getattr(self, provider["identifier"]).errors += ["The total must add up to 100%"]
 
         return False
 
@@ -1859,7 +1887,7 @@ class AdminEditEmailBrandingForm(StripWhitespaceForm):
     def validate_name(self, name):
         op = request.form.get("operation")
         if op == "email-branding-details" and not self.name.data:
-            raise ValidationError("This field is required")
+            raise ValidationError("Enter a name for the branding")
 
     def validate(self):
         rv = super().validate()
@@ -1869,11 +1897,11 @@ class AdminEditEmailBrandingForm(StripWhitespaceForm):
             # we only want to validate alt_text/text if we're editing the fields, not the file
 
             if self.alt_text.data and self.text.data:
-                self.alt_text.errors.append("Must be empty if you enter logo text")
+                self.alt_text.errors.append("Alt text must be empty if you have already entered logo text")
                 return False
 
             if not (self.alt_text.data or self.text.data):
-                self.alt_text.errors.append("Cannot be empty if you do not have logo text")
+                self.alt_text.errors.append("Enter alt text for your logo")
                 return False
 
         return rv
@@ -1926,7 +1954,12 @@ class AdminSetBrandingAddToBrandingPoolStepForm(StripWhitespaceForm):
 
 
 class AdminEditLetterBrandingForm(StripWhitespaceForm):
-    name = GovukTextInputField("Name of brand", validators=[DataRequired()])
+    name = GovukTextInputField("Name of brand")
+
+    def validate_name(self, name):
+        op = request.form.get("operation")
+        if op == "branding-details" and not self.name.data:
+            raise ValidationError("Enter a name for the branding")
 
 
 class AdminEditLetterBrandingSVGUploadForm(StripWhitespaceForm):
@@ -2043,19 +2076,19 @@ class GuestList(StripWhitespaceForm):
 
 
 class DateFilterForm(StripWhitespaceForm):
-    start_date = GovukDateField("Start Date", [validators.optional()])
-    end_date = GovukDateField("End Date", [validators.optional()])
+    start_date = GovukDateField("Start date", [validators.optional()], thing="a start date")
+    end_date = GovukDateField("End date", [validators.optional()], thing="an end date")
     include_from_test_key = GovukCheckboxField("Include test keys")
 
 
 class RequiredDateFilterForm(StripWhitespaceForm):
-    start_date = GovukDateField("Start Date")
-    end_date = GovukDateField("End Date")
+    start_date = GovukDateField("Start date", thing="a start date")
+    end_date = GovukDateField("End date", thing="an end date")
 
 
 class BillingReportDateFilterForm(StripWhitespaceForm):
-    start_date = GovukDateField("First day covered by report")
-    end_date = GovukDateField("Last day covered by report")
+    start_date = GovukDateField("Start date", thing="a start date")
+    end_date = GovukDateField("End date", thing="an end date")
 
 
 class SearchByNameForm(StripWhitespaceForm):
@@ -2336,7 +2369,7 @@ class AdminReturnedLettersForm(StripWhitespaceForm):
     references = TextAreaField(
         "Letter references",
         validators=[
-            DataRequired(message="Cannot be empty"),
+            NotifyDataRequired(thing="the returned letter references"),
         ],
     )
 
@@ -2489,13 +2522,11 @@ class TemplateAndFoldersSelectionForm(OrderableFieldsForm):
 
 
 class AdminClearCacheForm(StripWhitespaceForm):
-    model_type = GovukCheckboxesField(
-        "What do you want to clear today",
-    )
+    model_type = GovukCheckboxesField("What do you want to clear today")
 
     def validate_model_type(self, field):
         if not field.data:
-            raise ValidationError("Select at least one option")
+            raise ValidationError("Select at least one type of cache")
 
 
 class AdminOrganisationGoLiveNotesForm(StripWhitespaceForm):
@@ -2791,5 +2822,5 @@ class FindByUuidForm(StripWhitespaceForm):
 class PlatformAdminSearchForm(StripWhitespaceForm):
     search = GovukSearchField(
         "Search",
-        validators=[DataRequired()],
+        validators=[NotifyDataRequired(thing="a search term")],
     )
