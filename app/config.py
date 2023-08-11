@@ -114,15 +114,15 @@ class Development(Config):
     DEBUG = True
     SESSION_COOKIE_SECURE = False
     SESSION_PROTECTION = None
-    S3_BUCKET_CSV_UPLOAD = "development-notifications-csv-upload"
-    S3_BUCKET_CONTACT_LIST_UPLOAD = "development-contact-list"
-    S3_BUCKET_LOGO_UPLOAD = "public-logos-tools"
-    S3_BUCKET_MOU = "notify.tools-mou"
-    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = "development-transient-uploaded-letters"
-    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = "development-letters-precompiled-originals-backup"
-    S3_BUCKET_LETTER_ATTACHMENTS = "development-letter-attachments"
+    S3_BUCKET_CSV_UPLOAD = "development-notifications-csv-upload-notifynl"
+    S3_BUCKET_CONTACT_LIST_UPLOAD = "development-contact-list-notifynl"
+    S3_BUCKET_LOGO_UPLOAD = "public-logos-tools-notifynl"
+    S3_BUCKET_MOU = "notify.tools-mou-notifynl"
+    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = "development-transient-uploaded-letters-notifynl"
+    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = "development-letters-precompiled-originals-backup-notifynl"
+    S3_BUCKET_LETTER_ATTACHMENTS = "development-letter-attachments-notifynl"
 
-    LOGO_CDN_DOMAIN = "static-logos.notify.tools"
+    LOGO_CDN_DOMAIN = "d26j1qfpsndp6a.cloudfront.net"
 
     ADMIN_CLIENT_SECRET = "dev-notify-secret-key"
     DANGEROUS_SALT = "dev-notify-salt"
