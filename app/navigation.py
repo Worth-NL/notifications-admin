@@ -35,14 +35,14 @@ class Navigation:
 class HeaderNavigation(Navigation):
 
     mapping = {
-        "support": {
-            "bat_phone",
-            "feedback",
-            "support",
-            "support_public",
-            "thanks",
-            "triage",
-        },
+        # "support": {
+        #     "bat_phone",
+        #     "feedback",
+        #     "support",
+        #     "support_public",
+        #     "thanks",
+        #     "triage",
+        # },
         "features": {
             "guidance_features",
             "guidance_roadmap",
@@ -149,7 +149,7 @@ class HeaderNavigation(Navigation):
         from app import current_user
 
         nav_items = [
-            {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
+            # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
             {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
             {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
             {
