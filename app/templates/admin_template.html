@@ -56,84 +56,86 @@
   }) }}
 {% endblock %}
 
-{% block footer %}
-  {% set meta_items = [
-    {
-      "href": url_for("main.privacy"),
-      "text": "Privacy"
-    },
-    {
-      "href": url_for("main.accessibility_statement"),
-      "text": "Accessibility statement"
-    },
-    {
-      "href": url_for("main.terms_of_use"),
-      "text": "Terms of use"
-    },
-    {
-      "href": url_for("main.cookies"),
-      "text": "Cookies"
-    }
-  ] %}
-
-  {% set meta_suffix = 'Built by the <a href="https://www.gov.uk/government/organisations/government-digital-service" class="govuk-footer__link">Government Digital Service</a>' %}
-
-  {{ govukFooter({
-    "classes": "js-footer",
-    "navigation": [
+{# commented-out
+  {% block footer %}
+    {% set meta_items = [
       {
-        "title": "About Notify",
-        "columns": 1,
-        "width": "one-half",
-        "items": [
-          {
-            "href": url_for("main.guidance_features"),
-            "text": "Features"
-          },
-          {
-            "href": url_for("main.guidance_pricing"),
-            "text": "Pricing"
-          },
-          {
-            "href": url_for("main.guidance_using_notify"),
-            "text": "Using Notify"
-          },
-          {
-            "href": "https://gds.blog.gov.uk/category/gov-uk-notify/",
-            "text": "Blog"
-          }
-        ]
+        "href": url_for("main.privacy"),
+        "text": "Privacy"
       },
       {
-        "title": "Support",
-        "columns": 1,
-        "width": "one-half",
-        "items": [
-          {
-            "href": url_for('main.support'),
-            "text": "Contact support"
-          },
-          {
-            "href": "https://ukgovernmentdigital.slack.com/messages/C0E1ADVPC",
-            "text": "Chat to us on Slack"
-          },
-          {
-            "href": "https://status.notifications.service.gov.uk",
-            "text": "System status"
-          },
-          {
-            "href": url_for("main.guidance_api_documentation"),
-            "text": "API documentation"
-          }
-        ]
+        "href": url_for("main.accessibility_statement"),
+        "text": "Accessibility statement"
       },
-    ],
-    "meta": {
-      "items": meta_items,
-      "html": meta_suffix
-    }
-  }) }}
-{% endblock %}
+      {
+        "href": url_for("main.terms_of_use"),
+        "text": "Terms of use"
+      },
+      {
+        "href": url_for("main.cookies"),
+        "text": "Cookies"
+      }
+    ] %}
+
+    {% set meta_suffix = 'Built by the <a href="https://www.gov.uk/government/organisations/government-digital-service" class="govuk-footer__link">Government Digital Service</a>' %}
+
+    {{ govukFooter({
+      "classes": "js-footer",
+      "navigation": [
+        {
+          "title": "About Notify",
+          "columns": 1,
+          "width": "one-half",
+          "items": [
+            {
+              "href": url_for("main.guidance_features"),
+              "text": "Features"
+            },
+            {
+              "href": url_for("main.guidance_pricing"),
+              "text": "Pricing"
+            },
+            {
+              "href": url_for("main.guidance_using_notify"),
+              "text": "Using Notify"
+            },
+            {
+              "href": "https://gds.blog.gov.uk/category/gov-uk-notify/",
+              "text": "Blog"
+            }
+          ]
+        },
+        {
+          "title": "Support",
+          "columns": 1,
+          "width": "one-half",
+          "items": [
+            {
+              "href": url_for('main.support'),
+              "text": "Contact support"
+            },
+            {
+              "href": "https://ukgovernmentdigital.slack.com/messages/C0E1ADVPC",
+              "text": "Chat to us on Slack"
+            },
+            {
+              "href": "https://status.notifications.service.gov.uk",
+              "text": "System status"
+            },
+            {
+              "href": url_for("main.guidance_api_documentation"),
+              "text": "API documentation"
+            }
+          ]
+        },
+      ],
+      "meta": {
+        "items": meta_items,
+        "html": meta_suffix
+      }
+    }) }}
+  {% endblock %}
+#}
 
 {% block bodyEnd %}
   {% block extra_javascripts %}
