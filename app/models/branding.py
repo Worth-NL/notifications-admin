@@ -60,7 +60,7 @@ class EmailBranding(Branding):
         *,
         logo,
         alt_text,
-        colour,
+        # colour,
         brand_type,
     ):
         name = email_branding_client.get_email_branding_name_for_alt_text(alt_text)
@@ -73,7 +73,7 @@ class EmailBranding(Branding):
             text=None,
             created_by_id=current_user.id,
             logo=logo,
-            colour=colour,
+            # colour=colour,
             brand_type=brand_type,
         )
         return cls(new_email_branding)
