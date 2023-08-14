@@ -97,8 +97,10 @@ def platform_admin_update_email_branding(branding_id, logo=None):
                 name=form.name.data,
                 alt_text=form.alt_text.data,
                 text=form.text.data,
-                colour=form.colour.data,
-                brand_type=form.brand_type.data,
+                # colour=form.colour.data,
+                # brand_type=form.brand_type.data,
+                # set brand_type by default to org, which maps to "Branding only", i.e., only logo
+                brand_type="org",
                 updated_by_id=current_user.id,
             )
             create_update_email_branding_event(
@@ -206,8 +208,8 @@ def platform_admin_create_email_branding(logo=None):
     form = AdminEditEmailBrandingForm(
         name=request.args.get("name"),
         text=request.args.get("text"),
-        colour=request.args.get("colour"),
-        brand_type=request.args.get("brand_type", "org"),
+        # colour=request.args.get("colour"),
+        # brand_type=request.args.get("brand_type", "org"),
     )
 
     # TODO: remove the `logo`-based URL path
@@ -233,8 +235,10 @@ def platform_admin_create_email_branding(logo=None):
                 name=form.name.data,
                 alt_text=form.alt_text.data,
                 text=form.text.data,
-                colour=form.colour.data,
-                brand_type=form.brand_type.data,
+                # colour=form.colour.data,
+                # brand_type=form.brand_type.data,
+                # set brand_type by default to org, which maps to "Branding only", i.e., only logo
+                brand_type="org",
                 created_by_id=current_user.id,
             )
         except HTTPError as e:
