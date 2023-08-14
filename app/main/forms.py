@@ -1873,7 +1873,7 @@ class AdminEditEmailBrandingForm(StripWhitespaceForm):
     alt_text = GovukTextInputField(
         "Alt text", param_extensions={"hint": {"text": "Text for people who cannot see the logo"}}
     )
-    colour = HexColourCodeField("Colour")
+    # colour = HexColourCodeField("Colour")
     file = VirusScannedFileField("Upload a PNG logo", validators=[FileAllowed(["png"], "PNG Images only!")])
     brand_type = GovukRadiosField(
         "Brand type",
