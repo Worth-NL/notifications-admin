@@ -13,7 +13,7 @@ $button-shadow-size: $govuk-border-width-form-element;
     position: relative;
     margin: -10px 0 govuk-spacing(6) * 1.5 0;
     background: $product-page-blue;
-    color: govuk-colour("white");
+    color: govuk-colour("black");
 
     &-wrapper {
 
@@ -44,7 +44,7 @@ $button-shadow-size: $govuk-border-width-form-element;
 
     p {
       @include govuk-font(24);
-      color: govuk-colour("white");
+      color: govuk-colour("black");
       margin: govuk-spacing(3) 0 govuk-spacing(6);
     }
 
