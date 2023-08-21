@@ -9,7 +9,7 @@ def features_nav():
                 #     "link": "main.guidance_roadmap",
                 # },
                 {
-                    "name": "Who can use Notify",
+                    "name": "Who can use NotifyNL",
                     "link": "main.guidance_who_can_use_notify",
                 },
                 {
