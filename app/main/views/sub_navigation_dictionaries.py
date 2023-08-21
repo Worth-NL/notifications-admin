@@ -47,10 +47,10 @@ def pricing_nav():
                     "name": "Text messages",
                     "link": "main.guidance_pricing_text_messages",
                 },
-                {
-                    "name": "Letters",
-                    "link": "main.guidance_pricing_letters",
-                },
+                # {
+                #     "name": "Letters",
+                #     "link": "main.guidance_pricing_letters",
+                # },
                 {
                     "name": "How to pay",
                     "link": "main.guidance_how_to_pay",
@@ -86,10 +86,10 @@ def using_notify_nav():
                     "name": "API documentation",
                     "link": "main.guidance_api_documentation",
                 },
-                {
-                    "name": "Attach pages",
-                    "link": "main.guidance_attach_pages",
-                },
+                # {
+                #     "name": "Attach pages",
+                #     "link": "main.guidance_attach_pages",
+                # },
                 {
                     "name": "Bulk sending",
                     "link": "main.guidance_bulk_sending",
@@ -107,13 +107,13 @@ def using_notify_nav():
                     "link": "main.guidance_email_branding",
                 },
                 {
-                    "name": "Formatting emails and letters",
+                    "name": "Formatting emails",
                     "link": "main.guidance_formatting",
                 },
-                {
-                    "name": "Letter branding",
-                    "link": "main.guidance_letter_branding",
-                },
+                # {
+                #     "name": "Letter branding",
+                #     "link": "main.guidance_letter_branding",
+                # },
                 {
                     "name": "Links and URLs",
                     "link": "main.guidance_links_and_URLs",

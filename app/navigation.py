@@ -51,7 +51,7 @@ class HeaderNavigation(Navigation):
         "pricing": {
             "guidance_pricing",
             "guidance_pricing_text_messages",
-            "guidance_pricing_letters",
+            # "guidance_pricing_letters",
             "guidance_trial_mode",
             "guidance_how_to_pay",
             "guidance_billing_details",
@@ -59,13 +59,13 @@ class HeaderNavigation(Navigation):
         "using-notify": {
             "guidance_using_notify",
             "guidance_api_documentation",
-            "guidance_attach_pages",
+            # "guidance_attach_pages",
             "guidance_bulk_sending",
             "guidance_data_retention_period",
             "guidance_delivery_times",
             "guidance_email_branding",
             "guidance_formatting",
-            "guidance_letter_branding",
+            # "guidance_letter_branding",
             "guidance_links_and_URLs",
             "guidance_message_status",
             "guidance_optional_content",
@@ -80,7 +80,7 @@ class HeaderNavigation(Navigation):
             "guidance_templates",
             "guidance_text_message_sender",
             "guidance_unsubscribe_links",
-            "guidance_upload_a_letter",
+            # "guidance_upload_a_letter",
         },
         "user-profile": {
             "user_profile",
@@ -152,8 +152,10 @@ class HeaderNavigation(Navigation):
 
         nav_items = [
             # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
-            {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
-            {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
+            {"href": url_for("main.guidance_features"), "text": "Features",
+             "active": self.is_selected("features")},
+            {"href": url_for("main.guidance_pricing"), "text": "Pricing",
+             "active": self.is_selected("pricing")},
             {
                 "href": url_for("main.guidance_using_notify"),
                 "text": "Using NotifyNL",
@@ -180,7 +182,8 @@ class HeaderNavigation(Navigation):
             )
         else:
             nav_items.append(
-                {"href": url_for("main.sign_in"), "text": "Sign in", "active": self.is_selected("sign-in")}
+                {"href": url_for("main.sign_in"), "text": "Sign in",
+                 "active": self.is_selected("sign-in")}
             )
 
         return nav_items
