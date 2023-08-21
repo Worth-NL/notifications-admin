@@ -229,7 +229,7 @@
 
       {% endcall %}
 
-      {% call mapping_table(
+      {#{% call mapping_table(
         caption='Letter settings',
         field_headings=['Label', 'Value', 'Action'],
         field_headings_visible=False,
@@ -298,7 +298,7 @@
           )}}
         {% endcall %}
 
-      {% endcall %}
+      {% endcall %}#}
     </div>
 
     {% if current_service.trial_mode %}
@@ -310,7 +310,7 @@
           <li>send messages to yourself and other people in your team</li>
           <li>send {{ current_service.email_message_limit | message_count('email') }} per day</li>
           <li>send {{ current_service.sms_message_limit | message_count('sms') }} per day</li>
-          <li>create letter templates, but not send them</li>
+          <!--<li>create letter templates, but not send them</li>-->
         </ul>
 
       <p class="govuk-body">
