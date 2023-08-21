@@ -76,7 +76,7 @@
       height: (7 / 16) * 1em; // get 7px in ems, from a font-size of 16px
       transform: rotate(45deg);
       border: solid;
-      border-color: currentColor;
+      border-color: govuk-colour("black");
       border-width: 1px 1px 0 0;
       margin: auto 0;
     }
@@ -93,8 +93,8 @@
   }
 
   &--inverse {
-    border-bottom: 1px govuk-colour("white") solid;
-    border-bottom-color: rgba(govuk-colour("white"), 0.25);
+    border-bottom: 1px govuk-colour("black") solid;
+    border-bottom-color: rgba(govuk-colour("black"), 0.75);
 
     .govuk-link--inverse {
       &:link,
