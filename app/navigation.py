@@ -53,7 +53,7 @@ class HeaderNavigation(Navigation):
         "pricing": {
             "guidance_pricing",
             "guidance_pricing_text_messages",
-            "guidance_pricing_letters",
+            # "guidance_pricing_letters",
             "guidance_trial_mode",
             "guidance_how_to_pay",
             "guidance_billing_details",
@@ -61,13 +61,13 @@ class HeaderNavigation(Navigation):
         "using-notify": {
             "guidance_using_notify",
             "guidance_api_documentation",
-            "guidance_attach_pages",
+            # "guidance_attach_pages",
             "guidance_bulk_sending",
             "guidance_message_status",
             "guidance_delivery_times",
             "guidance_email_branding",
             "guidance_formatting",
-            "guidance_letter_branding",
+            # "guidance_letter_branding",
             "guidance_links_and_URLs",
             "guidance_optional_content",
             "guidance_personalisation",
@@ -78,7 +78,7 @@ class HeaderNavigation(Navigation):
             "guidance_team_members_and_permissions",
             "guidance_templates",
             "guidance_text_message_sender",
-            "guidance_upload_a_letter",
+            # "guidance_upload_a_letter",
         },
         "user-profile": {
             "user_profile",
