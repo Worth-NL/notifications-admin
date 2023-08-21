@@ -130,7 +130,7 @@
           )
         }}
       {% endcall %}
-      {% call row() %}
+      {#{% call row() %}
         {{ text_field('Letter branding options') }}
         {% set letter_branding_html %}
           <div {% if current_org.letter_branding_pool_excluding_default %}class="govuk-!-margin-bottom-3"{% endif %}>
@@ -158,7 +158,7 @@
             suffix='letter branding options for the organisation'
             )
         }}
-      {% endcall %}
+      {% endcall %}#}
       {% call row() %}
         {{ text_field('Known email domains') }}
         {{ optional_text_field(current_org.domains or None, default='None') }}
