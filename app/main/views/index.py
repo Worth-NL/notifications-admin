@@ -366,7 +366,7 @@ REDIRECTS = {
     "/integration_testing": "main.guidance_api_documentation",
     "/integration-testing": "main.guidance_api_documentation",
     "/performance": "main.performance",
-    "/roadmap": "main.guidance_roadmap",
+    # "/roadmap": "main.guidance_roadmap",
     "/terms": "main.terms_of_use",
     "/trial-mode": "main.guidance_trial_mode",
     "/using-notify/delivery-status": "main.guidance_message_status",
