@@ -34,7 +34,7 @@
 
 {% block pageTitle %}
   {% block errorPrefix %}{% if form and form.errors %}Error: {% endif %}{% endblock %}
-  {% block per_page_title %}{% endblock %} – GOV.UK Notify
+  {% block per_page_title %}{% endblock %} NotifyNL
 {% endblock %}
 
 {% block bodyStart %}
@@ -49,7 +49,7 @@
 {% block header %}
   {{ govukHeader({
     "homepageUrl": url_for('main.show_accounts_or_dashboard'),
-    "productName": "Notify",
+    "productName": "NotifyNL",
     "navigation": header_navigation.visible_header_nav(),
     "navigationClasses": "govuk-header__navigation--end",
     "assetsPath": asset_path + "images"
