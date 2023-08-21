@@ -43,7 +43,7 @@ class HeaderNavigation(Navigation):
         # },
         "features": {
             "guidance_features",
-            "guidance_roadmap",
+            # "guidance_roadmap",
             "guidance_security",
             "guidance_who_can_use_notify",
             "performance",

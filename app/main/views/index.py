@@ -35,7 +35,8 @@ def index():
         "views/signedout.html",
         sms_rate=CURRENT_SMS_RATE,
         counts=status_api_client.get_count_of_live_services_and_organisations(),
-        one_page_second_class_letter_cost=LetterRates().get(sheet_count=1, post_class="second"),
+        one_page_second_class_letter_cost=LetterRates().get(
+            sheet_count=1, post_class="second"),
     )
 
 
@@ -121,22 +122,26 @@ def letter_template():
     if branding_style:
         if filename:
             abort(400, "Cannot provide both branding_style and filename")
-        filename = letter_branding_client.get_letter_branding(branding_style)["filename"]
+        filename = letter_branding_client.get_letter_branding(branding_style)[
+            "filename"]
     elif not filename:
         filename = "no-branding"
     template = {"subject": subject, "content": "", "template_type": "letter"}
-    image_url = url_for("no_cookie.letter_branding_preview_image", filename=filename)
+    image_url = url_for(
+        "no_cookie.letter_branding_preview_image", filename=filename)
 
     template_image = str(
         TemplatedLetterImageTemplate(
             template,
             image_url=image_url,
-            page_counts={"count": 1, "welsh_page_count": 0, "attachment_page_count": 0},
+            page_counts={"count": 1, "welsh_page_count": 0,
+                         "attachment_page_count": 0},
         )
     )
 
     resp = make_response(
-        render_template("views/service-settings/letter-preview.html", template=template_image, subject=subject)
+        render_template("views/service-settings/letter-preview.html",
+                        template=template_image, subject=subject)
     )
 
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
@@ -416,7 +421,7 @@ REDIRECTS = {
     "/integration-testing": "main.guidance_api_documentation",
     "/performance": "main.performance",
     "/pricing/trial-mode": "main.guidance_trial_mode",
-    "/roadmap": "main.guidance_roadmap",
+    # "/roadmap": "main.guidance_roadmap",
     "/terms": "main.terms_of_use",
     "/trial-mode": "main.guidance_trial_mode",
     "/using-notify/delivery-status": "main.guidance_message_status",
@@ -448,4 +453,5 @@ REDIRECTS = {
 }
 
 for old_url, new_endpoint in REDIRECTS.items():
-    redirects.add_url_rule(old_url, defaults={"new_endpoint": new_endpoint}, view_func=historical_redirects)
+    redirects.add_url_rule(old_url, defaults={
+                           "new_endpoint": new_endpoint}, view_func=historical_redirects)

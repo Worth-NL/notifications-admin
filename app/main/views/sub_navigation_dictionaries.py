@@ -4,10 +4,10 @@ def features_nav():
             "name": "Features",
             "link": "main.guidance_features",
             "sub_navigation_items": [
-                {
-                    "name": "Roadmap",
-                    "link": "main.guidance_roadmap",
-                },
+                # {
+                #     "name": "Roadmap",
+                #     "link": "main.guidance_roadmap",
+                # },
                 {
                     "name": "Who can use Notify",
                     "link": "main.guidance_who_can_use_notify",
