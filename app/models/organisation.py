@@ -34,11 +34,11 @@ class Organisation(JSONModel):
     TYPE_LABELS = {
         TYPE_CENTRAL: "Central government",
         TYPE_LOCAL: "Local government",
-        TYPE_NHS_CENTRAL: "NHS – central government agency or public body",
-        TYPE_NHS_LOCAL: "NHS Trust or Clinical Commissioning Group",
-        TYPE_NHS_GP: "GP surgery",
-        TYPE_EMERGENCY_SERVICE: "Emergency service",
-        TYPE_SCHOOL_OR_COLLEGE: "School or college",
+        # TYPE_NHS_CENTRAL: "NHS – central government agency or public body",
+        # TYPE_NHS_LOCAL: "NHS Trust or Clinical Commissioning Group",
+        # TYPE_NHS_GP: "GP surgery",
+        # TYPE_EMERGENCY_SERVICE: "Emergency service",
+        # TYPE_SCHOOL_OR_COLLEGE: "School or college",
         TYPE_OTHER: "Other",
     }
 
@@ -232,7 +232,8 @@ class Organisation(JSONModel):
         organisations_client.update_service_organisation(service_id, self.id)
 
     def services_and_usage(self, financial_year) -> tuple[dict, Optional[datetime.date]]:
-        response = organisations_client.get_services_and_usage(self.id, financial_year)
+        response = organisations_client.get_services_and_usage(
+            self.id, financial_year)
         updated_at = response.get("updated_at")
         if updated_at:
             updated_at = datetime.datetime.fromisoformat(updated_at)
