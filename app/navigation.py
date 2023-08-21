@@ -154,7 +154,7 @@ class HeaderNavigation(Navigation):
             {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
             {
                 "href": url_for("main.guidance_using_notify"),
-                "text": "Using Notify",
+                "text": "Using NotifyNL",
                 "active": self.is_selected("using-notify"),
             },
         ]
