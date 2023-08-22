@@ -44,12 +44,12 @@
             {% endfor %}
           </div>
         </div>
-        <div class='govuk-grid-column-one-third'>
+        <!--<div class='govuk-grid-column-one-third'>
           <h2 class='heading-small'>Letters</h2>
           <div class="keyline-block">
             {{ big_number(letter_sent, 'sent', smaller=True) }}
           </div>
-        </div>
+        </div>-->
       </div>
 
       <div class='govuk-grid-row'>
@@ -63,20 +63,20 @@
             {{ big_number(
               sms_cost,
               'spent',
-              currency="£",
+              currency="€",
               smaller=True
             ) }}
           </div>
         </div>
-        <div class='govuk-grid-column-one-third'>
+        <!--<div class='govuk-grid-column-one-third'>
           <div class="keyline-block">
             {{ big_number(
                 letter_cost,
                 'spent',
-                currency="£",
+                currency="€",
                 smaller=True
               ) }}
-          </div>
+          </div>-->
         </div>
 
       </div>
@@ -100,7 +100,7 @@
             {% call field(align='left') %}
               {{ big_number(
                 item.sms_cost + item.letter_cost,
-                currency="£",
+                currency="€",
                 smallest=True
               ) }}
               <ul class="govuk-list">

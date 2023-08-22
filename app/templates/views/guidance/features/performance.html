@@ -20,7 +20,7 @@
   </div>
 
   <h2 class="govuk-heading-m" id='messages-sent-since-may-2016'>
-    Messages sent since May 2016
+    Messages sent since September 2023
   </h2>
 
   <div class="totals totals--4-column">
@@ -42,13 +42,13 @@
         smallest=True,
       ) }}
     </p>
-    <p class="totals__set-type">
+    <!--<p class="totals__set-type">
       {{ big_number(
         letter_notifications|format_billions,
         label=letter_notifications|message_count_noun('letter'),
         smallest=True,
       ) }}
-    </p>
+    </p>-->
   </div>
 
   <div class="dashboard-table dashboard-table--4-column">
@@ -60,7 +60,6 @@
         'Date',
         99|message_count_noun('email')|capitalize,
         99|message_count_noun('sms')|capitalize,
-        99|message_count_noun('letter')|capitalize,
       ],
       empty_message='No data to show'
     ) %}

@@ -35,17 +35,17 @@ class Navigation:
 class HeaderNavigation(Navigation):
 
     mapping = {
-        "support": {
-            "bat_phone",
-            "feedback",
-            "support",
-            "support_public",
-            "thanks",
-            "triage",
-        },
+        # "support": {
+        #     "bat_phone",
+        #     "feedback",
+        #     "support",
+        #     "support_public",
+        #     "thanks",
+        #     "triage",
+        # },
         "features": {
             "guidance_features",
-            "guidance_roadmap",
+            # "guidance_roadmap",
             "guidance_security",
             "guidance_who_can_use_notify",
             "performance",
@@ -53,7 +53,7 @@ class HeaderNavigation(Navigation):
         "pricing": {
             "guidance_pricing",
             "guidance_pricing_text_messages",
-            "guidance_pricing_letters",
+            # "guidance_pricing_letters",
             "guidance_trial_mode",
             "guidance_how_to_pay",
             "guidance_billing_details",
@@ -61,13 +61,13 @@ class HeaderNavigation(Navigation):
         "using-notify": {
             "guidance_using_notify",
             "guidance_api_documentation",
-            "guidance_attach_pages",
+            # "guidance_attach_pages",
             "guidance_bulk_sending",
             "guidance_message_status",
             "guidance_delivery_times",
             "guidance_email_branding",
             "guidance_formatting",
-            "guidance_letter_branding",
+            # "guidance_letter_branding",
             "guidance_links_and_URLs",
             "guidance_optional_content",
             "guidance_personalisation",
@@ -78,7 +78,7 @@ class HeaderNavigation(Navigation):
             "guidance_team_members_and_permissions",
             "guidance_templates",
             "guidance_text_message_sender",
-            "guidance_upload_a_letter",
+            # "guidance_upload_a_letter",
         },
         "user-profile": {
             "user_profile",
@@ -149,12 +149,12 @@ class HeaderNavigation(Navigation):
         from app import current_user
 
         nav_items = [
-            {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
+            # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
             {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
             {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
             {
                 "href": url_for("main.guidance_using_notify"),
-                "text": "Using Notify",
+                "text": "Using NotifyNL",
                 "active": self.is_selected("using-notify"),
             },
         ]
@@ -251,19 +251,19 @@ class MainNavigation(Navigation):
             "reject_broadcast_message",
             "cancel_broadcast_message",
         },
-        "uploads": {
-            "upload_contact_list",
-            "check_contact_list",
-            "save_contact_list",
-            "contact_list",
-            "delete_contact_list",
-            "upload_letter",
-            "uploaded_letter_preview",
-            "uploaded_letters",
-            "uploads",
-            "view_job",
-            "view_jobs",
-        },
+        # "uploads": {
+        #     "upload_contact_list",
+        #     "check_contact_list",
+        #     "save_contact_list",
+        #     "contact_list",
+        #     "delete_contact_list",
+        #     "upload_letter",
+        #     "uploaded_letter_preview",
+        #     "uploaded_letters",
+        #     "uploads",
+        #     "view_job",
+        #     "view_jobs",
+        # },
         "team-members": {
             "confirm_edit_user_email",
             "confirm_edit_user_mobile_number",
@@ -376,19 +376,19 @@ class CaseworkNavigation(Navigation):
             "view_notifications",
             "view_notification",
         },
-        "uploads": {
-            "view_jobs",
-            "view_job",
-            "upload_contact_list",
-            "check_contact_list",
-            "save_contact_list",
-            "contact_list",
-            "delete_contact_list",
-            "upload_letter",
-            "uploaded_letter_preview",
-            "uploaded_letters",
-            "uploads",
-        },
+        # "uploads": {
+        #     "view_jobs",
+        #     "view_job",
+        #     "upload_contact_list",
+        #     "check_contact_list",
+        #     "save_contact_list",
+        #     "contact_list",
+        #     "delete_contact_list",
+        #     "upload_letter",
+        #     "uploaded_letter_preview",
+        #     "uploaded_letters",
+        #     "uploads",
+        # },
     }
 
 

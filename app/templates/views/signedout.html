@@ -2,11 +2,11 @@
 {% from "govuk_frontend_jinja/components/button/macro.html" import govukButton %}
 
 {% block meta %}
-  <meta name="description" content="GOV.UK Notify lets you send emails, text messages and letters to your users. Try it now if you work in central government, a local authority, or the NHS.">
+  <meta name="description" content="NotifyNL lets you send emails, text messages and letters to your users. Try it now if you work in central government or a local authority.">
 {% endblock %}
 
 {% block pageTitle %}
-  GOV.UK Notify
+  NotifyNL
 {% endblock %}
 
 {% block content %}
@@ -16,10 +16,10 @@
       <nav class="breadcrumbs breadcrumbs--inverse" aria-label="Breadcrumbs">
        <ol itemscope itemtype="http://schema.org/BreadcrumbList">
          <li class="breadcrumbs__item" itemprop="itemListElement" itemscope itemtype="http://schema.org/ListItem">
-           <a class="govuk-link govuk-link--inverse" href="https://www.gov.uk/service-toolkit#gov-uk-services" itemprop="item"><span itemprop="name">GOV.UK services</span></a>
+           <a class="govuk-link" href="" itemprop="item"><span itemprop="name">NotifyNL services</span></a>
          </li>
          <li class="breadcrumbs__item breadcrumbs__item--active" itemprop="itemListElement" itemscope itemtype="http://schema.org/ListItem">
-           <a class="govuk-link govuk-link--inverse" href="#main" itemprop="item"><span itemprop="name">GOV.UK Notify</span></a>
+           <a class="govuk-link" href="#main" itemprop="item"><span itemprop="name">NotifyNL</span></a>
          </li>
        </ol>
       </nav>
@@ -29,7 +29,7 @@
             Send emails, text messages and letters to your users
           </h1>
           <p class="govuk-body">
-            Try GOV.UK Notify now if you work in central government, a&nbsp;local authority, or the NHS.
+            Try NotifyNL now if you work in central government or a&nbsp;local authority.
           </p>
           <div class="button-container">
             {{ govukButton({
@@ -38,7 +38,7 @@
               "classes": "product-page-button button-container__button govuk-!-margin-right-3",
               "href": url_for('main.register' )
             }) }}
-            or <a class="govuk-link govuk-link--inverse" href="{{ url_for('main.sign_in' )}}">sign in</a> if you’ve used
+            or <a class="govuk-link" href="{{ url_for('main.sign_in' )}}">sign in</a> if you’ve used
             it before
           </div>
         </div>
@@ -89,7 +89,7 @@
       <div class="govuk-grid-column-one-half">
         <p class="govuk-body">
           Upload a spreadsheet of email&nbsp;addresses or
-          phone&nbsp;numbers and Notify sends the messages.
+          phone&nbsp;numbers and NotifyNL sends the messages.
         </p>
         <img
           src="{{ asset_url('images/product/03-spreadsheet.svg') }}"
@@ -98,7 +98,7 @@
       </div>
       <div class="govuk-grid-column-one-half">
         <p class="govuk-body">
-          Integrate the GOV.UK Notify API with your web&nbsp;application or
+          Integrate the NotifyNL API with your web&nbsp;application or
           back office system.
         </p>
         <img
@@ -110,7 +110,7 @@
   </div>
   <div class="product-page-section">
     <div class="with-keyline bottom-gutter-2" id="whos-using-notify">
-      <h2>Who’s using GOV.UK Notify</h2>
+      <h2>Who’s using NotifyNL</h2>
       <div class="govuk-grid-row bottom-gutter">
         <div class="govuk-grid-column-one-half">
           <span class="govuk-visually-hidden">There are</span>
@@ -121,7 +121,7 @@
           <span class="govuk-visually-hidden">and</span>
           <div class="product-page-big-number">{{ counts.services|format_thousands }}</div>
           services
-          <span class="govuk-visually-hidden">using Notify.</span>
+          <span class="govuk-visually-hidden">using NotifyNL.</span>
         </div>
       </div>
       <p class="govuk-body">
@@ -142,14 +142,14 @@
         <div class="govuk-grid-column-one-half">
           <h3 class="govuk-visually-hidden">Text messages</h3>
           <div class="product-page-big-number">Up to 40,000</div>
-          free text messages a year,<br>
-          then {{ sms_rate }} pence per message
+          free text messages a year<br>
+          <!--then {{ sms_rate }} pence per message-->
         </div>
-        <div class="govuk-grid-column-one-half">
+        <!--<div class="govuk-grid-column-one-half">
           <h3 class="govuk-visually-hidden">Letters</h3>
           <div class="product-page-big-number">47 pence</div>
           to print and post a one page letter
-        </div>
+        </div>-->
         <div class="govuk-grid-column-one-half">
           <p class="align-with-big-number-hint">
             There’s no monthly charge, no setup fee and no&nbsp;procurement process.
@@ -160,7 +160,7 @@
       </div>
     </div>
   </div>
-  <div class="product-page-section">
+  <!--<div class="product-page-section">
     <div class="govuk-grid-row">
       <div class="govuk-grid-column-one-half">
         <h2 class="with-keyline">
@@ -182,7 +182,7 @@
         >
       </div>
     </div>
-  </div>
+  </div>-->
 
 
 {% endblock %}

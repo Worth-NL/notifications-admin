@@ -15,9 +15,9 @@
     {% if not current_user.has_permissions('view_activity') %}
       <li class="navigation__item"><a class="govuk-link govuk-link--no-visited-state govuk-link--no-underline{{ casework_navigation.is_selected('sent-messages') }}" href="{{ url_for('main.view_notifications', service_id=current_service.id, status='sending,delivered,failed') }}">Sent messages</a></li>
     {% endif %}
-    {% if not current_service.has_permission('broadcast') %}
-      <li class="navigation__item"><a class="govuk-link govuk-link--no-visited-state govuk-link--no-underline{{ main_navigation.is_selected('uploads') }}" href="{{ url_for('main.uploads', service_id=current_service.id) }}">Uploads</a></li>
-    {% endif %}
+    {#{% if not current_service.has_permission('broadcast') %}
+      <!--<li class="navigation__item"><a class="govuk-link govuk-link--no-visited-state govuk-link--no-underline{{ main_navigation.is_selected('uploads') }}" href="{{ url_for('main.uploads', service_id=current_service.id) }}">Uploads</a></li>-->
+    {% endif %}#}
     <li class="navigation__item"><a class="govuk-link govuk-link--no-visited-state govuk-link--no-underline{{ main_navigation.is_selected('team-members') }}" href="{{ url_for('main.manage_users', service_id=current_service.id) }}">Team members</a></li>
     {% if current_user.has_permissions('manage_service', allow_org_user=True) and not current_service.has_permission('broadcast') %}
       <li class="navigation__item"><a class="govuk-link govuk-link--no-visited-state govuk-link--no-underline{{ main_navigation.is_selected('usage') }}" href="{{ url_for('main.usage', service_id=current_service.id) }}">Usage</a></li>

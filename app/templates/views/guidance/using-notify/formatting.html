@@ -3,16 +3,16 @@
 {% from "components/service-link.html" import service_link %}
 
 {# Used by the content_template.html layout, prefixes the "navigation" accessible name #}
-{% set navigation_label_prefix = 'Using Notify' %}
+{% set navigation_label_prefix = 'Using NotifyNL' %}
 
 {% block per_page_title %}
-  Formatting emails and letters
+  Formatting emails
 {% endblock %}
 
 {% block content_column_content %}
-  <h1 class="heading-large">Formatting emails and letters</h1>
+  <h1 class="heading-large">Formatting emails</h1>
 
-<p class="govuk-body">GOV.UK Notify uses Markdown to format content.</p>
+<p class="govuk-body">NotifyNL uses Markdown to format content.</p>
 <p class="govuk-body">You can see formatting instructions while you’re editing a template:</p>
 
   <ol class="govuk-list govuk-list--number">
@@ -31,14 +31,14 @@
     <li><a class="govuk-link govuk-link--no-visited-state" href="#numbered-steps">numbered steps</a></li>
   </ul>
 
- <p class="govuk-body">Letters can include:</p>
+ <!--<p class="govuk-body">Letters can include:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li><a class="govuk-link govuk-link--no-visited-state" href="#bullets">bullet points</a></li>
     <li><a class="govuk-link govuk-link--no-visited-state" href="#headings-and-subheadings">headings</a></li>
     <li><a class="govuk-link govuk-link--no-visited-state" href="#numbered-steps">numbered steps</a></li>
     <li><a class="govuk-link govuk-link--no-visited-state" href="#page-breaks">page breaks</a></li>
   </ul>
-
+ -->
 <p class="govuk-body">You cannot use bold, italics, underlined text, different typefaces or fonts. This is because they can make it harder for people to read what you’ve written.</p>
 
 <h2 class="heading-medium">Guidance</h2>
@@ -57,15 +57,15 @@
 </code></pre>
 
 <p class="govuk-body">To create sub-items, add an indent of 2 spaces before the asterisk or dash.</p>
-<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
-    href="https://www.gov.uk/guidance/style-guide/a-to-z-of-gov-uk-style#bullet-points-steps">guidance about bullet points on GOV.UK</a>.</p>
+<!--<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
+    href="https://www.gov.uk/guidance/style-guide/a-to-z-of-gov-uk-style#bullet-points-steps">guidance about bullet points on GOV.UK</a>.</p>-->
 
 <h3 class="heading-small" id="headings-and-subheadings">Headings</h3>
-<p class="govuk-body">Use a heading to tell recipients what your email or letter is about.</p>
-<p class="govuk-body">For emails, use subheadings to break up the rest of your content. Your first subheading must come after a heading.</p>
-<p class="govuk-body">For letters, use headings to break up the rest of your content.</p>
+<p class="govuk-body">Use a heading to tell recipients what your email is about.</p>
+<p class="govuk-body">Use subheadings to break up the rest of your content. Your first subheading must come after a heading.</p>
+<!--<p class="govuk-body">For letters, use headings to break up the rest of your content.</p>-->
 <p class="govuk-body">Write all headings and subheadings in sentence case.</p>
-<p class="govuk-body">Use one hash symbol followed by a space for a heading in emails and letters, for example:</p>
+<p class="govuk-body">Use one hash symbol followed by a space for a heading in emails, for example:</p>
 
 <pre class="formatting-example"><code class="lang-md"># This is a heading
 </code></pre>
@@ -75,8 +75,8 @@
 <pre class="formatting-example"><code class="lang-md">## This is a subheading
 </code></pre>
 
-<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
-    href="https://www.gov.uk/guidance/content-design/writing-for-gov-uk#headings">guidance about headings on GOV.UK</a>.</p>
+<!--<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
+    href="https://www.gov.uk/guidance/content-design/writing-for-gov-uk#headings">guidance about headings on GOV.UK</a>.</p>-->
 
 <h3 class="heading-small" id="horizontal-lines">Horizontal lines</h3>
 <p class="govuk-body">Use a horizontal line to create separate sections in an email template.</p>
@@ -102,8 +102,8 @@ Second paragraph
 </code></pre>
 
 <p class="govuk-body">Use inset text very sparingly – it’s less effective if it’s overused.</p>
-<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
-    href="https://design-system.service.gov.uk/components/inset-text/">guidance about inset text in the GOV.UK Design System</a>.</p>
+<!--<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
+    href="https://design-system.service.gov.uk/components/inset-text/">guidance about inset text in the GOV.UK Design System</a>.</p>-->
 
 <h3 class="heading-small" id="numbered-steps">Numbered steps</h3>
 <p class="govuk-body">Use numbered steps instead of bullet points to guide a user through a process, or when the order of the items in a list is relevant.</p>
@@ -117,8 +117,8 @@ Second paragraph
 </code></pre>
 
 <p class="govuk-body">To create sub-items, add an indent of 2 spaces before the number.</p>
-<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
-    href="https://design-system.service.gov.uk/styles/typography/#numbered-lists">guidance about numbered lists in the GOV.UK Design System</a>.</p>
+<!--<p class="govuk-body">There’s more <a class="govuk-link govuk-link--no-visited-state"
+    href="https://design-system.service.gov.uk/styles/typography/#numbered-lists">guidance about numbered lists in the GOV.UK Design System</a>.</p>-->
 
 <h3 class="heading-small" id="page-breaks">Page breaks</h3>
 <p class="govuk-body">To insert a page break in a letter template, use 3 asterisks. For example:</p>

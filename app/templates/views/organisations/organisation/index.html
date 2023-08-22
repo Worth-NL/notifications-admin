@@ -37,22 +37,22 @@
         {{ big_number(
           total_sms_cost,
           'spent',
-          currency="£",
+          currency="€",
           smaller=True
         ) }}
       </div>
     </div>
-    <div class="govuk-grid-column-one-third">
+    <!--<div class="govuk-grid-column-one-third">
       <h2 class="heading-small">Letters</h2>
       <div class="keyline-block">
         {{ big_number(
           total_letter_cost,
           'spent',
-          currency="£",
+          currency="€",
           smaller=True
         ) }}
       </div>
-    </div>
+    </div>-->
   </div>
 
   {% if _search_form %}
@@ -86,7 +86,7 @@
             {{ big_number(
               service.sms_cost,
               'spent on text messages',
-              currency="£",
+              currency="€",
               smallest=True
             ) }}
           {% else %}
@@ -101,7 +101,7 @@
           {{ big_number(
             service.letter_cost,
             'spent on letters',
-            currency="£",
+            currency="€",
             smallest=True
           ) }}
         </div>
@@ -111,7 +111,7 @@
   <div class="keyline-block govuk-!-margin-top-2"></div>
   {% if not services %}
     <p class="govuk-body govuk-hint">
-      {{ current_org.name }} has no live services on GOV.UK Notify
+      {{ current_org.name }} has no live services on NotifyNL
     </p>
     <div class="keyline-block govuk-!-margin-top-2"></div>
   {% else %}

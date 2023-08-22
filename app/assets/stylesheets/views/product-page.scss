@@ -1,4 +1,3 @@
-$product-page-blue: #1D70B8;
 // See https://github.com/alphagov/govuk-frontend/blob/v2.13.0/src/components/button/_button.scss#L24
 $button-shadow-size: $govuk-border-width-form-element;
 
@@ -12,8 +11,8 @@ $button-shadow-size: $govuk-border-width-form-element;
     // negative margin-top it overlaps the theme bar at the bottom of the header
     position: relative;
     margin: -10px 0 govuk-spacing(6) * 1.5 0;
-    background: $product-page-blue;
-    color: govuk-colour("white");
+    background: govuk-colour("white");
+    color: govuk-colour("black");
 
     &-wrapper {
 
@@ -44,7 +43,7 @@ $button-shadow-size: $govuk-border-width-form-element;
 
     p {
       @include govuk-font(24);
-      color: govuk-colour("white");
+      color: govuk-colour("black");
       margin: govuk-spacing(3) 0 govuk-spacing(6);
     }
 
@@ -92,14 +91,14 @@ $button-shadow-size: $govuk-border-width-form-element;
   // based on the govuk-button styles:
   // https://github.com/alphagov/govuk-frontend/blob/v2.13.0/src/components/button/_button.scss
   @include govuk-font($size: 24, $weight: bold);
-  color: $product-page-blue;
-  box-shadow: 0 $button-shadow-size 0 govuk-shade($colour: $product-page-blue, $percentage: 15%);
-  background: govuk-colour("white");
+  color: govuk-colour("white");
+  box-shadow: 0 $button-shadow-size 0 govuk-shade($colour: govuk-colour("blue"), $percentage: 75%);
+  background: govuk-colour("blue");
 
   &:link,
   &:visited,
   &:hover {
-    color: $product-page-blue;
+    color: govuk-colour("white");
   }
 
   &:focus {
@@ -107,7 +106,8 @@ $button-shadow-size: $govuk-border-width-form-element;
   }
 
   &:hover {
-    background: govuk-tint(govuk-colour("light-blue"), 75);
+    background: govuk-colour("light-blue");
+    color: govuk-colour("black");
     outline: none;
   }
 

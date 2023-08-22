@@ -2,7 +2,7 @@
 {% from "govuk_frontend_jinja/components/inset-text/macro.html" import govukInsetText %}
 
 {# Used by the content_template.html layout, prefixes the "navigation" accessible name #}
-{% set navigation_label_prefix = 'About Notify' %}
+{% set navigation_label_prefix = 'About NotifyNL' %}
 
 {% block per_page_title %}
   Features
@@ -12,7 +12,7 @@
 
 <h1 class="heading-large">Features</h1>
 
-<p class="govuk-body">GOV.UK Notify makes it easy for public sector service teams to send emails, text messages and letters.</p>
+<p class="govuk-body">NotifyNL makes it easy for public sector service teams to send emails, text messages and letters.</p>
 <p class="govuk-body">You do not need any technical knowledge to:</p>
 <ul class="govuk-list govuk-list--bullet">
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_templates') }}">create and send messages</a></li>
@@ -23,7 +23,7 @@
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_team_members_and_permissions') }}">collaborate with your team</a></li>
 </ul>
 
-<p class="govuk-body">Find out <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_who_can_use_notify') }}">who can use GOV.UK Notify</a>.</p>
+<p class="govuk-body">Find out <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_who_can_use_notify') }}">who can use NotifyNL</a>.</p>
 
 {% if not current_user.is_authenticated %}
   {% set insetHtml %}
@@ -47,22 +47,22 @@
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_text_message_sender') }}">Tell recipients who your messages are from</a></li>
 </ul>
 
-<h2 class="heading-medium">GOV.UK Notify prints and posts your letters for you</h2>
+<!--<h2 class="heading-medium">GOV.UK Notify prints and posts your letters for you</h2>
 <ul class="govuk-list govuk-list--bullet">
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_pricing_letters') }}">Choose your postage</a></li>
   <li>Send international letters</li>
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_letter_branding') }}">Add letter branding</a></li>
   <li><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_upload_a_letter') }}">Upload a letter from a PDF</a></li>
-</ul>
+</ul>-->
 
 <h2 class="heading-medium">Automatic sending</h2>
-<p class="govuk-body">To send messages automatically, you’ll need a developer to integrate with the GOV.UK Notify API.</p>
+<p class="govuk-body">To send messages automatically, you’ll need a developer to integrate with the NotifyNL API.</p>
 <p class="govuk-body">For more information, read our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_api_documentation') }}">API documentation</a>.</p>
 
 <h2 class="heading-medium">Keep your data secure</h2>
-<p class="govuk-body">Find out more about <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_security') }}">security on GOV.UK Notify</a>.</p>
+<p class="govuk-body">Find out more about <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_security') }}">security on NotifyNL</a>.</p>
 
-<h2 class="heading-medium">Performance</h2>
+<!--<h2 class="heading-medium">Performance</h2>
 <p class="govuk-body">GOV.UK Notify commits to:</p>
 <ul class="govuk-list govuk-list--bullet">
   <li>sending 95% of emails and text messages within 10 seconds</li>
@@ -72,6 +72,6 @@
 
 <h2 class="heading-medium" id="support">24-hour online support</h2>
 <p class="govuk-body">If you have an emergency outside office hours, we’ll reply within 30 minutes.</p>
-<p class="govuk-body"><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">Contact the GOV.UK Notify team</a>.</p>
+<p class="govuk-body"><a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">Contact the GOV.UK Notify team</a>.</p>-->
 
 {% endblock %}
