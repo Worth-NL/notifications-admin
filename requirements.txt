@@ -75,13 +75,7 @@ govuk-bank-holidays==0.11
     # via
     #   -r requirements.in
     #   notifications-utils
-<<<<<<< HEAD
 govuk-frontend-jinja @ git+https://github.com/Worth-NL/notifynl-frontend-jinja.git@20240402.2-notifynl
-||||||| parent of 5dfbb330e (Use Worth govuk-frontend-jinja package v2.3.5)
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/govuk-frontend-jinja.git@2.3.4
-=======
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/govuk-frontend-jinja.git@2.3.5
->>>>>>> 5dfbb330e (Use Worth govuk-frontend-jinja package v2.3.5)
     # via -r requirements.in
 greenlet==3.0.3
     # via eventlet
