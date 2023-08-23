@@ -15,8 +15,10 @@ When working locally with `govuk-frontend` package, add in `package.json` the pa
 "govuk-frontend": "file:///replace_with_absolute_path_to/govuk-frontend/package/",
 ```
 
-After each build of `govuk-frontend`, make sure to rebuild the styles for the `admin`. For this, run `npm run build`. Run the app with `make run-flask`.
-
+After each build of `govuk-frontend`:
+1. Run `npm install` in case a file has been added to/removed from the `govuk-frontend`. Sometimes, the changes don't get picked up without running `install`
+1. Run `npm run build` to rebuild the styles for the `admin`
+1. Run the app with `make run-flask`
 
 ## Working locally with `govuk-frontend-jinja`
 
