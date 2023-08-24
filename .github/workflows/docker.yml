@@ -70,4 +70,4 @@ jobs:
         if: steps.build-admin-image.outcome == 'success'
         uses: actions-hub/kubectl@master
         with:
-          args: rollout restart -n notify-sandbox deployments/notifications-api-deployment-admin
+          args: rollout restart -n notify-sandbox deployments/notifications-admin-deployment
