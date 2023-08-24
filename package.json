@@ -21,7 +21,7 @@
   "homepage": "https://github.com/alphagov/notifications-admin#readme",
   "dependencies": {
     "cbor-js": "0.1.0",
-    "govuk-frontend": "git://github.com/Worth-NL/govuk-frontend-package.git#4.2.3",
+    "govuk-frontend": "git://github.com/Worth-NL/govuk-frontend-package.git#4.2.4",
     "hogan": "1.0.2",
     "jquery": "3.5.0",
     "leaflet": "1.6.0",
