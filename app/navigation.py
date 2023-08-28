@@ -41,13 +41,13 @@ class HeaderNavigation(Navigation):
         #     "thanks",
         #     "triage",
         # },
-        "features": {
-            "guidance_features",
-            # "guidance_roadmap",
-            "guidance_security",
-            "guidance_who_can_use_notify",
-            "performance",
-        },
+        # "features": {
+        #     "guidance_features",
+        #     "guidance_roadmap",
+        #     "guidance_security",
+        #     "guidance_who_can_use_notify",
+        #     "performance",
+        # },
         "pricing": {
             "guidance_pricing",
             "guidance_pricing_text_messages",
@@ -152,8 +152,7 @@ class HeaderNavigation(Navigation):
 
         nav_items = [
             # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
-            {"href": url_for("main.guidance_features"), "text": "Features",
-             "active": self.is_selected("features")},
+            # {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
             {"href": url_for("main.guidance_pricing"), "text": "Pricing",
              "active": self.is_selected("pricing")},
             {
