@@ -295,12 +295,12 @@ def guidance_schedule_messages():
     )
 
 
-@main.route("/using-notify/send-files-by-email")
-def guidance_send_files_by_email():
-    return render_template(
-        "views/guidance/using-notify/send-files-by-email.html",
-        navigation_links=using_notify_nav(),
-    )
+# @main.route("/using-notify/send-files-by-email")
+# def guidance_send_files_by_email():
+#     return render_template(
+#         "views/guidance/using-notify/send-files-by-email.html",
+#         navigation_links=using_notify_nav(),
+#     )
 
 
 @main.route("/using-notify/team-members-and-permissions")
@@ -387,7 +387,7 @@ REDIRECTS = {
     "/using-notify/guidance/reply-to-email-address": "main.guidance_reply_to_email_address",
     "/using-notify/guidance/schedule-emails-and-text-messages": "main.guidance_schedule_messages",
     "/using-notify/guidance/schedule-messages": "main.guidance_schedule_messages",
-    "/using-notify/guidance/send-files-by-email": "main.guidance_send_files_by_email",
+    # "/using-notify/guidance/send-files-by-email": "main.guidance_send_files_by_email",
     "/using-notify/guidance/team-members-and-permissions": "main.guidance_team_members_and_permissions",
     "/using-notify/guidance/templates": "main.guidance_templates",
     "/using-notify/guidance/text-message-sender": "main.guidance_text_message_sender",

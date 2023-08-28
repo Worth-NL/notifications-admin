@@ -74,7 +74,7 @@ class HeaderNavigation(Navigation):
             "guidance_receive_text_messages",
             "guidance_reply_to_email_address",
             "guidance_schedule_messages",
-            "guidance_send_files_by_email",
+            # "guidance_send_files_by_email",
             "guidance_team_members_and_permissions",
             "guidance_templates",
             "guidance_text_message_sender",
