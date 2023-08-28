@@ -70,14 +70,14 @@ def pricing_nav():
 
 def using_notify_nav():
     return [
-        {
-            "name": "Features",
-            "link": "main.guidance_features",
-        },
-        {
-            "name": "Pricing",
-            "link": "main.guidance_pricing",
-        },
+        # {
+        #     "name": "Features",
+        #     "link": "main.guidance_features",
+        # },
+        # {
+        #     "name": "Pricing",
+        #     "link": "main.guidance_pricing",
+        # },
         {
             "name": "Using NotifyNL",
             "link": "main.guidance_using_notify",
