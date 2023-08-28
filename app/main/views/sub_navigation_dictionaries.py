@@ -146,10 +146,10 @@ def using_notify_nav():
                     "name": "Schedule messages",
                     "link": "main.guidance_schedule_messages",
                 },
-                {
-                    "name": "Send files by email",
-                    "link": "main.guidance_send_files_by_email",
-                },
+                # {
+                #     "name": "Send files by email",
+                #     "link": "main.guidance_send_files_by_email",
+                # },
                 {
                     "name": "Sign-in method",
                     "link": "main.guidance_sign_in_method",
