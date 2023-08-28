@@ -15,7 +15,11 @@ export NOTIFY_ENVIRONMENT='development'
 export FLASK_APP=application.py
 export FLASK_DEBUG=1
 export WERKZEUG_DEBUG_PIN=off
+export APPLICATIONINSIGHTS_ENABLED=1
+export APPLICATIONINSIGHTS_CONNECTION_STRING=<InstrumentationKey>
 ```
+1. Ask your team for correct `<InstrumentationKey>`
+1. Run `$ source environment.sh` to load the env vars from the file
 1. Run `$ make bootstrap` to install all the dependencies
 1. Run `$ make run-flask` to run the app
 1. The app is now available at `localhost:6012`
