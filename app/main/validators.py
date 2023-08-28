@@ -51,6 +51,9 @@ class ValidGovEmail:
         # """.format(
         #     url_for("main.guidance_who_can_use_notify")
         # )
+
+        message = "Enter a public sector email address"
+
         if not is_gov_user(field.data.lower()):
             raise ValidationError(message)
 
