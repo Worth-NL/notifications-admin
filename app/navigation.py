@@ -43,21 +43,21 @@ class HeaderNavigation(Navigation):
         #     "thanks",
         #     "triage",
         # },
-        "features": {
-            "guidance_features",
-            # "guidance_roadmap",
-            "guidance_security",
-            "guidance_who_can_use_notify",
-            "performance",
-        },
-        "pricing": {
-            "guidance_pricing",
-            "guidance_pricing_text_messages",
-            # "guidance_pricing_letters",
-            "guidance_trial_mode",
-            "guidance_how_to_pay",
-            "guidance_billing_details",
-        },
+        # "features": {
+        #     "guidance_features",
+        #     "guidance_roadmap",
+        #     "guidance_security",
+        #     "guidance_who_can_use_notify",
+        #     "performance",
+        # },
+        # "pricing": {
+        #     "guidance_pricing",
+        #     "guidance_pricing_text_messages",
+        #     "guidance_pricing_letters",
+        #     "guidance_trial_mode",
+        #     "guidance_how_to_pay",
+        #     "guidance_billing_details",
+        # },
         "using-notify": {
             "guidance_using_notify",
             "guidance_api_documentation",
@@ -74,7 +74,7 @@ class HeaderNavigation(Navigation):
             "guidance_receive_text_messages",
             "guidance_reply_to_email_address",
             "guidance_schedule_messages",
-            "guidance_send_files_by_email",
+            # "guidance_send_files_by_email",
             "guidance_team_members_and_permissions",
             "guidance_templates",
             "guidance_text_message_sender",
@@ -150,8 +150,8 @@ class HeaderNavigation(Navigation):
 
         nav_items = [
             # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
-            {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
-            {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
+            # {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
+            # {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
             {
                 "href": url_for("main.guidance_using_notify"),
                 "text": "Using NotifyNL",

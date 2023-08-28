@@ -74,14 +74,14 @@ def pricing_nav():
 
 def using_notify_nav():
     return [
-        {
-            "name": "Features",
-            "link": "main.guidance_features",
-        },
-        {
-            "name": "Pricing",
-            "link": "main.guidance_pricing",
-        },
+        # {
+        #     "name": "Features",
+        #     "link": "main.guidance_features",
+        # },
+        # {
+        #     "name": "Pricing",
+        #     "link": "main.guidance_pricing",
+        # },
         {
             "name": "Using NotifyNL",
             "link": "main.guidance_using_notify",
@@ -142,10 +142,10 @@ def using_notify_nav():
                     "name": "Schedule messages",
                     "link": "main.guidance_schedule_messages",
                 },
-                {
-                    "name": "Send files by email",
-                    "link": "main.guidance_send_files_by_email",
-                },
+                # {
+                #     "name": "Send files by email",
+                #     "link": "main.guidance_send_files_by_email",
+                # },
                 {
                     "name": "Team members and permissions",
                     "link": "main.guidance_team_members_and_permissions",

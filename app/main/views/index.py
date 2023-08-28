@@ -143,27 +143,27 @@ def terms_of_use():
 # --- Guidance pages --- #
 
 
-@main.route("/features")
-def guidance_features():
-    return render_template("views/guidance/features/index.html", navigation_links=features_nav())
+# @main.route("/features")
+# def guidance_features():
+#     return render_template("views/guidance/features/index.html", navigation_links=features_nav())
 
 
-@main.route("/features/roadmap")
-def guidance_roadmap():
-    return render_template("views/guidance/features/roadmap.html", navigation_links=features_nav())
+# @main.route("/features/roadmap")
+# def guidance_roadmap():
+#     return render_template("views/guidance/features/roadmap.html", navigation_links=features_nav())
 
 
-@main.route("/features/security")
-def guidance_security():
-    return render_template("views/guidance/features/security.html", navigation_links=features_nav())
+# @main.route("/features/security")
+# def guidance_security():
+#     return render_template("views/guidance/features/security.html", navigation_links=features_nav())
 
 
-@main.route("/features/who-can-use-notify")
-def guidance_who_can_use_notify():
-    return render_template(
-        "views/guidance/features/who-can-use-notify.html",
-        navigation_links=features_nav(),
-    )
+# @main.route("/features/who-can-use-notify")
+# def guidance_who_can_use_notify():
+#     return render_template(
+#         "views/guidance/features/who-can-use-notify.html",
+#         navigation_links=features_nav(),
+#     )
 
 
 @main.route("/using-notify")
@@ -197,7 +197,7 @@ def guidance_bulk_sending():
         max_spreadsheet_rows=RecipientCSV.max_rows,
         rate_limits=[
             message_count(limit, channel)
-            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items()
+            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items() if channel != "letter"
         ],
         navigation_links=using_notify_nav(),
     )
@@ -295,12 +295,12 @@ def guidance_schedule_messages():
     )
 
 
-@main.route("/using-notify/send-files-by-email")
-def guidance_send_files_by_email():
-    return render_template(
-        "views/guidance/using-notify/send-files-by-email.html",
-        navigation_links=using_notify_nav(),
-    )
+# @main.route("/using-notify/send-files-by-email")
+# def guidance_send_files_by_email():
+#     return render_template(
+#         "views/guidance/using-notify/send-files-by-email.html",
+#         navigation_links=using_notify_nav(),
+#     )
 
 
 @main.route("/using-notify/team-members-and-permissions")
@@ -351,18 +351,18 @@ REDIRECTS = {
     "/callbacks": "main.guidance_api_documentation",
     "/delivery-and-failure": "main.guidance_message_status",
     "/documentation": "main.guidance_api_documentation",
-    "/features/email": "main.guidance_features",
-    "/features/get-started": "main.guidance_features",
-    "/features/letters": "main.guidance_features",
-    "/features/messages-status": "main.guidance_message_status",
-    "/features/sms": "main.guidance_features",
-    "/features/terms": "main.terms_of_use",
-    "/features/trial-mode": "main.guidance_trial_mode",
-    "/features/using-notify": "main.guidance_using_notify",
-    "/features/who-its-for": "main.guidance_who_can_use_notify",
+    # "/features/email": "main.guidance_features",
+    # "/features/get-started": "main.guidance_features",
+    # "/features/letters": "main.guidance_features",
+    # "/features/messages-status": "main.guidance_message_status",
+    # "/features/sms": "main.guidance_features",
+    # "/features/terms": "main.terms_of_use",
+    # "/features/trial-mode": "main.guidance_trial_mode",
+    # "/features/using-notify": "main.guidance_using_notify",
+    # "/features/who-its-for": "main.guidance_who_can_use_notify",
     "/guidance_using_notify": "main.guidance_using_notify",
-    "/information-risk-management": "main.guidance_security",
-    "/information-security": "main.guidance_security",
+    # "/information-risk-management": "main.guidance_security",
+    # "/information-security": "main.guidance_security",
     "/integration_testing": "main.guidance_api_documentation",
     "/integration-testing": "main.guidance_api_documentation",
     "/performance": "main.performance",
@@ -387,7 +387,7 @@ REDIRECTS = {
     "/using-notify/guidance/reply-to-email-address": "main.guidance_reply_to_email_address",
     "/using-notify/guidance/schedule-emails-and-text-messages": "main.guidance_schedule_messages",
     "/using-notify/guidance/schedule-messages": "main.guidance_schedule_messages",
-    "/using-notify/guidance/send-files-by-email": "main.guidance_send_files_by_email",
+    # "/using-notify/guidance/send-files-by-email": "main.guidance_send_files_by_email",
     "/using-notify/guidance/team-members-and-permissions": "main.guidance_team_members_and_permissions",
     "/using-notify/guidance/templates": "main.guidance_templates",
     "/using-notify/guidance/text-message-sender": "main.guidance_text_message_sender",
