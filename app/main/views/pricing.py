@@ -10,12 +10,12 @@ from app.models.letter_rates import LetterRates
 CURRENT_SMS_RATE = "1.97"
 
 
-# @main.route("/pricing")
-# def guidance_pricing():
-#     return render_template(
-#         "views/guidance/pricing/index.html",
-#         navigation_links=pricing_nav(),
-#     )
+@main.route("/pricing")
+def guidance_pricing():
+    return render_template(
+        "views/guidance/pricing/index.html",
+        navigation_links=pricing_nav(),
+    )
 
 
 # @main.route("/pricing/text-messages")
