@@ -143,27 +143,27 @@ def terms_of_use():
 # --- Guidance pages --- #
 
 
-@main.route("/features")
-def guidance_features():
-    return render_template("views/guidance/features/index.html", navigation_links=features_nav())
+# @main.route("/features")
+# def guidance_features():
+#     return render_template("views/guidance/features/index.html", navigation_links=features_nav())
 
 
-@main.route("/features/roadmap")
-def guidance_roadmap():
-    return render_template("views/guidance/features/roadmap.html", navigation_links=features_nav())
+# @main.route("/features/roadmap")
+# def guidance_roadmap():
+#     return render_template("views/guidance/features/roadmap.html", navigation_links=features_nav())
 
 
-@main.route("/features/security")
-def guidance_security():
-    return render_template("views/guidance/features/security.html", navigation_links=features_nav())
+# @main.route("/features/security")
+# def guidance_security():
+#     return render_template("views/guidance/features/security.html", navigation_links=features_nav())
 
 
-@main.route("/features/who-can-use-notify")
-def guidance_who_can_use_notify():
-    return render_template(
-        "views/guidance/features/who-can-use-notify.html",
-        navigation_links=features_nav(),
-    )
+# @main.route("/features/who-can-use-notify")
+# def guidance_who_can_use_notify():
+#     return render_template(
+#         "views/guidance/features/who-can-use-notify.html",
+#         navigation_links=features_nav(),
+#     )
 
 
 @main.route("/using-notify")
