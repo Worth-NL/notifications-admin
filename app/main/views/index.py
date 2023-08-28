@@ -197,7 +197,7 @@ def guidance_bulk_sending():
         max_spreadsheet_rows=RecipientCSV.max_rows,
         rate_limits=[
             message_count(limit, channel)
-            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items()
+            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items() if channel != "letter"
         ],
         navigation_links=using_notify_nav(),
     )
