@@ -50,14 +50,14 @@ class HeaderNavigation(Navigation):
         #     "guidance_who_can_use_notify",
         #     "performance",
         # },
-        "pricing": {
-            "guidance_pricing",
-            "guidance_pricing_text_messages",
-            # "guidance_pricing_letters",
-            "guidance_trial_mode",
-            "guidance_how_to_pay",
-            "guidance_billing_details",
-        },
+        # "pricing": {
+        #     "guidance_pricing",
+        #     "guidance_pricing_text_messages",
+        #     "guidance_pricing_letters",
+        #     "guidance_trial_mode",
+        #     "guidance_how_to_pay",
+        #     "guidance_billing_details",
+        # },
         "using-notify": {
             "guidance_using_notify",
             "guidance_api_documentation",
@@ -151,7 +151,7 @@ class HeaderNavigation(Navigation):
         nav_items = [
             # {"href": url_for("main.support"), "text": "Support", "active": self.is_selected("support")},
             # {"href": url_for("main.guidance_features"), "text": "Features", "active": self.is_selected("features")},
-            {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
+            # {"href": url_for("main.guidance_pricing"), "text": "Pricing", "active": self.is_selected("pricing")},
             {
                 "href": url_for("main.guidance_using_notify"),
                 "text": "Using NotifyNL",
