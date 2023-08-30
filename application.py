@@ -10,9 +10,17 @@ from app import create_app  # noqa
 
 application = Flask("app")
 
+
+def callback_function(envelope):
+    envelope.tags['ai.cloud.role'] = 'admin'
+
+
+azure_exporter = AzureExporter()
+azure_exporter.add_telemetry_processor(callback_function)
+
 FlaskMiddleware(
     application,
-    exporter=AzureExporter(),
+    exporter=azure_exporter,
     sampler=ProbabilitySampler(rate=1.0),
 )
 
