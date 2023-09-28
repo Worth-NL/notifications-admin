@@ -64,8 +64,8 @@ class EmailBranding(Branding):
         brand_type,
     ):
         name = email_branding_client.get_email_branding_name_for_alt_text(alt_text)
-        if brand_type == "both":
-            name = f"GOV.UK and {name}"
+        # if brand_type == "both":
+        #     name = f"GOV.UK and {name}"
 
         new_email_branding = email_branding_client.create_email_branding(
             name=name,
