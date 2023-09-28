@@ -247,7 +247,7 @@ def platform_admin_create_email_branding(logo=None):
                 name=form.name.data,
                 alt_text=form.alt_text.data,
                 text=form.text.data,
-                # colour=form.colour.data,
+                colour=form.colour.data,
                 # brand_type=form.brand_type.data,
                 # set brand_type by default to org, which maps to "Branding only", i.e., only logo
                 brand_type="org",
