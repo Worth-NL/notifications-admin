@@ -1955,17 +1955,17 @@ class AdminEditEmailBrandingForm(StripWhitespaceForm):
     alt_text = GovukTextInputField(
         "Alt text", param_extensions={"hint": {"text": "Text for people who cannot see the logo"}}
     )
-    # colour = HexColourCodeField("Colour")
+    colour = HexColourCodeField("Colour")
     file = VirusScannedFileField("Upload a PNG logo", validators=[FileAllowed(["png"], "PNG Images only!")])
     # disable choices for brand_type
-    # brand_type = GovukRadiosField(
-    #     "Brand type",
-    #     choices=[
-    #         ("both", "GOV.UK and branding"),
-    #         ("org", "Branding only"),
-    #         ("org_banner", "Branding banner"),
-    #     ],
-    # )
+    brand_type = GovukRadiosField(
+        "Brand type",
+        choices=[
+            # ("both", "GOV.UK and branding"),
+            ("org", "Branding only"),
+            ("org_banner", "Branding banner"),
+        ],
+    )
 
     def validate_name(self, name):
         op = request.form.get("operation")
