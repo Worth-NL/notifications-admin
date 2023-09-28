@@ -96,10 +96,8 @@ def platform_admin_update_email_branding(branding_id, logo=None):
                 name=form.name.data,
                 alt_text=form.alt_text.data,
                 text=form.text.data,
-                # colour=form.colour.data,
-                # brand_type=form.brand_type.data,
-                # set brand_type by default to org, which maps to "Branding only", i.e., only logo
-                brand_type="org",
+                colour=form.colour.data,
+                brand_type=form.brand_type.data,
                 updated_by_id=current_user.id,
             )
             create_update_email_branding_event(
@@ -220,8 +218,8 @@ def platform_admin_create_email_branding(logo=None):
     form = AdminEditEmailBrandingForm(
         name=request.args.get("name"),
         text=request.args.get("text"),
-        # colour=request.args.get("colour"),
-        # brand_type=request.args.get("brand_type", "org"),
+        colour=request.args.get("colour"),
+        brand_type=request.args.get("brand_type", "org"),
     )
 
     # TODO: remove the `logo`-based URL path
@@ -248,9 +246,7 @@ def platform_admin_create_email_branding(logo=None):
                 alt_text=form.alt_text.data,
                 text=form.text.data,
                 colour=form.colour.data,
-                # brand_type=form.brand_type.data,
-                # set brand_type by default to org, which maps to "Branding only", i.e., only logo
-                brand_type="org",
+                brand_type=form.brand_type.data,
                 created_by_id=current_user.id,
             )
         except HTTPError as e:
@@ -262,12 +258,12 @@ def platform_admin_create_email_branding(logo=None):
         if not form.errors:
             return redirect(url_for(".email_branding"))
 
-    # if request.args.get("back") == "government-identity":
-    #     back_link = url_for(
-    #         "main.create_email_branding_government_identity_colour", filename=request.args.get("government_identity")
-    #     )
-    # else:
-    back_link = url_for("main.email_branding")
+    if request.args.get("back") == "government-identity":
+        back_link = url_for(
+            "main.create_email_branding_government_identity_colour", filename=request.args.get("government_identity")
+        )
+    else:
+        back_link = url_for("main.email_branding")
 
     return (
         render_template(
