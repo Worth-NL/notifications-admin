@@ -298,7 +298,7 @@
         <ul class="govuk-list govuk-list--bullet">
           <li>{{ current_service.email_message_limit | message_count('email') }} per day</li>
           <li>{{ current_service.sms_message_limit | message_count('sms') }} per day</li>
-          <li>{{ current_service.letter_message_limit | message_count('letter') }} per day</li>
+          {#<li>{{ current_service.letter_message_limit | message_count('letter') }} per day</li>#}
         </ul>
         <p class="govuk-body">
           If you need to discuss these limits,
