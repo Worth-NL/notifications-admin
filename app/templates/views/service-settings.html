@@ -170,7 +170,7 @@
             }}
           {% endcall %}
 
-          {% call settings_row(if_has_permission='sms') %}
+          {#{% call settings_row(if_has_permission='sms') %}
             {{ text_field('Send international text messages') }}
             {{ boolean_field('international_sms' in current_service.permissions) }}
             {{ edit_field(
@@ -180,9 +180,9 @@
                 suffix='your settings for sending international text messages',
             )
             }}
-          {% endcall %}
+          {% endcall %}#}
 
-          {% call settings_row(if_has_permission='sms') %}
+          {#{% call settings_row(if_has_permission='sms') %}
             {{ text_field('Receive text messages') }}
             {{ boolean_field('inbound_sms' in current_service.permissions) }}
             {{ edit_field(
@@ -192,7 +192,7 @@
                 suffix='your settings for receiving text messages',
             )
             }}
-          {% endcall %}
+          {% endcall %}#}
 
         {% endcall %}
 
