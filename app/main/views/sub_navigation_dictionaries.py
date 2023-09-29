@@ -130,18 +130,14 @@ def using_notify_nav():
                     "name": "Personalisation",
                     "link": "main.guidance_personalisation",
                 },
-                {
-                    "name": "QR codes",
-                    "link": "main.guidance_qr_codes",
-                },
-                {
-                    "name": "Receive text messages",
-                    "link": "main.guidance_receive_text_messages",
-                },
-                {
-                    "name": "Reply-to email address",
-                    "link": "main.guidance_reply_to_email_address",
-                },
+                # {
+                #     "name": "Receive text messages",
+                #     "link": "main.guidance_receive_text_messages",
+                # },
+                # {
+                #     "name": "Reply-to email address",
+                #     "link": "main.guidance_reply_to_email_address",
+                # },
                 {
                     "name": "Schedule messages",
                     "link": "main.guidance_schedule_messages",
