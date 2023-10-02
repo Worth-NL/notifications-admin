@@ -252,7 +252,7 @@ def uk_mobile_number(label="Mobile number"):
     return UKMobileNumber(label, validators=[DataRequired(message="Cannot be empty")])
 
 
-def international_phone_number(label="Mobile number", thing=None):
+def international_phone_number(label="Mobile number. Expected format: +31621111111", thing=None):
     validators_list = []
     if thing:
         validators_list.append(NotifyDataRequired(thing=thing))
@@ -600,7 +600,7 @@ class RegisterUserFromInviteForm(RegisterUserForm):
             name=guess_name_from_email_address(invited_user.email_address),
         )
 
-    mobile_number = InternationalPhoneNumber("Mobile number")
+    mobile_number = InternationalPhoneNumber("Mobile number. Expected format: +31621111111")
     service = HiddenField("service")
     email_address = HiddenField("email_address")
     auth_type = HiddenField("auth_type", validators=[DataRequired()])
@@ -620,7 +620,7 @@ class RegisterUserFromOrgInviteForm(StripWhitespaceForm):
     name = GovukTextInputField("Full name", validators=[NotifyDataRequired(thing="your full name")])
 
     mobile_number = InternationalPhoneNumber(
-        "Mobile number", validators=[NotifyDataRequired(thing="your mobile number")]
+        "Mobile number. Expected format: +31621111111", validators=[NotifyDataRequired(thing="your mobile number")]
     )
     password = make_password_field()
     organisation = HiddenField("organisation")
