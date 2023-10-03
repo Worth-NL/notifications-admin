@@ -100,33 +100,33 @@ class Config:
 
 class Development(Config):
     SERVER_NAME = os.getenv("SERVER_NAME")
-    NOTIFY_LOG_PATH = "application.log"
-    DEBUG = True
-    SESSION_COOKIE_SECURE = False
-    SESSION_PROTECTION = None
-    S3_BUCKET_CSV_UPLOAD = "development-notifications-csv-upload-notifynl"
-    S3_BUCKET_CONTACT_LIST_UPLOAD = "development-contact-list-notifynl"
-    S3_BUCKET_LOGO_UPLOAD = "public-logos-tools-notifynl"
-    S3_BUCKET_MOU = "notify.tools-mou-notifynl"
-    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = "development-transient-uploaded-letters-notifynl"
-    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = "development-letters-precompiled-originals-backup-notifynl"
-    S3_BUCKET_LETTER_ATTACHMENTS = "development-letter-attachments-notifynl"
+    NOTIFY_LOG_PATH = os.environ.get("NOTIFY_LOG_PATH", "application.log")
+    DEBUG = os.environ.get("DEBUG", True)
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", False)
+    SESSION_PROTECTION = os.environ.get("SESSION_PROTECTION", None)
+    S3_BUCKET_CSV_UPLOAD = os.environ.get("S3_BUCKET_CSV_UPLOAD", "development-notifications-csv-upload-notifynl")
+    S3_BUCKET_CONTACT_LIST_UPLOAD = os.environ.get("S3_BUCKET_CONTACT_LIST_UPLOAD", "development-contact-list-notifynl")
+    S3_BUCKET_LOGO_UPLOAD = os.environ.get("S3_BUCKET_LOGO_UPLOAD", "public-logos-tools-notifynl")
+    S3_BUCKET_MOU = os.environ.get("S3_BUCKET_MOU", "notify.tools-mou-notifynl")
+    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = os.environ.get("S3_BUCKET_TRANSIENT_UPLOADED_LETTERS", "development-transient-uploaded-letters-notifynl")
+    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = os.environ.get("S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS", "development-letters-precompiled-originals-backup-notifynl")
+    S3_BUCKET_LETTER_ATTACHMENTS = os.environ.get("S3_BUCKET_LETTER_ATTACHMENTS", "development-letter-attachments-notifynl")
 
-    LOGO_CDN_DOMAIN = "d26j1qfpsndp6a.cloudfront.net"
+    LOGO_CDN_DOMAIN = os.environ.get("LOGO_CDN_DOMAIN", "d26j1qfpsndp6a.cloudfront.net")
 
-    ADMIN_CLIENT_SECRET = "dev-notify-secret-key"
-    DANGEROUS_SALT = "dev-notify-salt"
-    SECRET_KEY = "dev-notify-secret-key"
+    ADMIN_CLIENT_SECRET = os.environ.get("ADMIN_CLIENT_SECRET", "dev-notify-secret-key")
+    DANGEROUS_SALT = os.environ.get("DANGEROUS_SALT", "dev-notify-salt")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-notify-secret-key")
     API_HOST_NAME = os.environ.get("API_HOST_NAME", "http://localhost:6011")
     ANTIVIRUS_API_HOST = os.environ.get("ANTIVIRUS_API_HOST", "http://localhost:6016")
-    ANTIVIRUS_API_KEY = "test-key"
+    ANTIVIRUS_API_KEY = os.environ.get("ANTIVIRUS_API_KEY", "test-key")
     ANTIVIRUS_ENABLED = os.getenv("ANTIVIRUS_ENABLED") == "1"
 
-    ASSET_PATH = "/static/"
+    ASSET_PATH = os.getenv("ASSET_PATH", "/static/")
 
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     REDIS_ENABLED = os.environ.get("REDIS_ENABLED") == "1"
-    NOTIFY_RUNTIME_PLATFORM = "local"
+    NOTIFY_RUNTIME_PLATFORM = os.environ.get("NOTIFY_RUNTIME_PLATFORM", "local")
 
 
 class Test(Development):
