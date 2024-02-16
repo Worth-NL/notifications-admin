@@ -104,5 +104,5 @@ environment.sh
 .cf
 
 # Files/folders created by build so not present in .cfignore
-app/version.py
+# app/version.py
 app/static
