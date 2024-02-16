@@ -1,5 +1,4 @@
 from app.performance import init_performance_monitoring
-
 init_performance_monitoring()
 
 from flask import Flask  # noqa
