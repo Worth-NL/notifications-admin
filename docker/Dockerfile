@@ -34,6 +34,10 @@ RUN echo "Installing python dependencies" \
 
 COPY app app
 
+# This should fail if there's no version present
+# run `make generate-version-file` for local dev
+COPY app/version.py app/version.py
+
 COPY application.py gunicorn_config.py ./
 COPY --from=frontend-build /usr/frontend/app/static app/static
 COPY --from=frontend-build /usr/frontend/app/templates app/templates
