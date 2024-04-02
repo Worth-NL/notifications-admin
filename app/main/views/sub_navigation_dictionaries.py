@@ -52,6 +52,10 @@ def pricing_nav():
                 #     "link": "main.guidance_pricing_letters",
                 # },
                 {
+                    "name": "Trial mode",
+                    "link": "main.guidance_trial_mode",
+                },
+                {
                     "name": "How to pay",
                     "link": "main.guidance_how_to_pay",
                 },
@@ -147,10 +151,6 @@ def using_notify_nav():
                 #     "link": "main.guidance_send_files_by_email",
                 # },
                 {
-                    "name": "Sign-in method",
-                    "link": "main.guidance_sign_in_method",
-                },
-                {
                     "name": "Team members and permissions",
                     "link": "main.guidance_team_members_and_permissions",
                 },
@@ -162,18 +162,10 @@ def using_notify_nav():
                     "name": "Text message sender ID",
                     "link": "main.guidance_text_message_sender",
                 },
-                {
-                    "name": "Trial mode",
-                    "link": "main.guidance_trial_mode",
-                },
-                {
-                    "name": "Unsubscribe links",
-                    "link": "main.guidance_unsubscribe_links",
-                },
-                {
-                    "name": "Upload a letter",
-                    "link": "main.guidance_upload_a_letter",
-                },
+                # {
+                #     "name": "Upload a letter",
+                #     "link": "main.guidance_upload_a_letter",
+                # },
             ],
         },
     ]

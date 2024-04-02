@@ -16,13 +16,9 @@ gunicorn.SERVER_SOFTWARE = "None"
 keepalive = 90
 
 
-def on_starting(server):
-    server.log.info("Starting Notifications Admin")
-
-
 def worker_abort(worker):
-    worker.log.info("worker received ABORT %s", worker.pid)
-    for _threadId, stack in sys._current_frames().items():
+    worker.log.info("worker received ABORT")
+    for stack in sys._current_frames().values():
         worker.log.error("".join(traceback.format_stack(stack)))
 
 
@@ -42,11 +38,3 @@ def fix_ssl_monkeypatching():
 
 
 fix_ssl_monkeypatching()
-
-
-def on_exit(server):
-    server.log.info("Stopping Notifications Admin")
-
-
-def worker_int(worker):
-    worker.log.info("worker: received SIGINT %s", worker.pid)

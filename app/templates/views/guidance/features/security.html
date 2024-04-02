@@ -9,9 +9,8 @@
 
 {% block content_column_content %}
 
-  <h1 class="heading-large">Security features</h1>
-  <p class="govuk-body">NotifyNL is built for the security needs of government services.</p>
-  <p class="govuk-body">This page describes our approach to:</p>
+  <h1 class="heading-large">Security</h1>
+  <p class="govuk-body">NotifyNL is built for the needs of government services. It has processes in place to:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li><a class="govuk-link govuk-link--no-visited-state" href="#running-a-secure-service">running a secure service</a></li>
     <li><a class="govuk-link govuk-link--no-visited-state" href="#storing-and-processing-your-data">storing and processing your data</a></li>
@@ -28,13 +27,19 @@
     <!-- <li><a class="govuk-link govuk-link--no-visited-state" href="#suppliers">suppliers</a></li> -->
   </ul>
 
-  <!-- <h2 class="heading-medium" id="running-a-secure-service">Running a secure service</h2>
-  <p class="govuk-body">GOV.UK Notify:</p>
+  <h2 class="heading-medium" id="data">Data</h2>
+  <p class="govuk-body">On NotifyNL, data is encrypted when:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li>follows the principles of the <a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/service-manual/service-standard">Service Standard</a></li>
     <li>has been through a successful <a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/service-manual/service-assessments">live service assessment</a></li>
   </ul>
-  <p class="govuk-body">We regularly assess and review our security in line with:</p>
+  <!--<p class="govuk-body">Any recipient data you upload is only held for 7 days.</p>
+  <p class="govuk-body">If you <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for("main.guidance_send_files_by_email") }}">send a file by email</a>, the file will be available for the recipient to download for up to 78 weeks (18 months).</p>
+  <p class="govuk-body">The Cabinet Office acts as data processor for Notify. Your organisation is the data controller.</p>
+  -->
+  
+  <!--<h3 class="heading-small">Data Protection Act</h3>
+  <p class="govuk-body">Notify complies with data protection law. To make sure it stays compliant, there are regular legal reviews of the service’s:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li>the <a class="govuk-link govuk-link--no-visited-state" href="https://www.security.gov.uk/guidance/govassure/">GovAssure approach</a></li>
     <li><a class="govuk-link govuk-link--no-visited-state" href="https://www.ncsc.gov.uk/collection/caf/caf-principles-and-guidance">UK government cyber security standards</a></li>
@@ -52,8 +57,8 @@
     <li>locations where our sub-processors store and process data (EU)</li>
   </ul>
 
-  <h3 class="heading-small" id="how-long-we-keep-your-data">How long we keep your data</h3>
-  <p class="govuk-body">NotifyNL keeps a temporary record of:</p>
+  <!--<h2 class="heading-medium" id="technical-security">Technical security</h2>
+  <p class="govuk-body">Other technical security controls on Notify include:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li>the content of the emails, text messages and letters you send</li>
     <li>recipient email addresses, mobile numbers and addresses</li>
@@ -135,15 +140,18 @@
   <p class="govuk-body">Some messages include sensitive information like security codes or password reset links.</p>
   <p class="govuk-body">If you’re sending a message with sensitive information, you can choose to hide those details on the NotifyNL dashboard once the message has been sent. This means that only the message recipient will be able to see that information.</p>
 
-  <h2 class="heading-medium" id="finding-and-fixing-security-issues">Finding and fixing security issues</h2>
-  <p class="govuk-body">NotifyNL:</p>
+  <h2 class="heading-medium" id="user-permissions-signing-in">User permissions and signing in</h2>
+  <p class="govuk-body">You can set different user permissions in NotifyNL. This lets you control who in your team has access to certain parts of the service.</p>
+  <h3 class="heading-small">Two-factor authentication</h3>
+  <p class="govuk-body">To sign in to NotifyNL, you’ll need to enter:</p>
   <ul class="govuk-list govuk-list--bullet">
-    <li>follows <a class="govuk-link govuk-link--no-visited-state" href="https://www.ncsc.gov.uk/collection/developers-collection/principles">secure development principles</a></li>
-    <li>tracks third-party dependencies in our code base</li>
-    <li>monitors our logs for attacks, misuse and malfunctions</li>
-    <!-- <li>provides <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">24-hour online support</a></li> -->
+    <li>your email address and password</li>
+    <li>a text message code that NotifyNL sends to your phone</li>
   </ul>
-  <!-- <p class="govuk-body">We use <a class="govuk-link govuk-link--no-visited-state" href="https://www.ncsc.gov.uk/information/web-check">Web Check</a> and other services to:</p>
+  <p class="govuk-body">If signing in with a text message is a problem for your team, <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">contact us</a> to find out about using an email link instead.</p>
+
+  <!--<h2 class="heading-medium" id="information-risk-management">Information risk management</h2>
+  <p class="govuk-body">Our approach to information risk management follows NCSC guidance. It assesses:</p>
   <ul class="govuk-list govuk-list--bullet">
     <li>scan for vulnerabilities</li>
     <li>prioritise which software patches to test and deploy first</li>
@@ -154,47 +162,27 @@
     <li>hardware</li>
     <li>operating system (OS) kernel</li>
   </ul>
+  <p class="govuk-body">This approach also applies to the service providers Notify uses to send messages.</p>
 
-  <h2 class="heading-medium" id="security-incidents">Security incidents</h2>
-  <p class="govuk-body">We provide a 24-hour response in case of an incident.</p>
-  <p class="govuk-body">If there is a data loss event, we will contact you directly.</p>
-  <!-- <p class="govuk-body">If there is another type of incident, we’ll publish details and updates on the <a class="govuk-link govuk-link--no-visited-state" href="https://status.notifications.service.gov.uk">Notify status page</a>.</p> -->
-
-  <h2 class="heading-medium" id="sign-in-and-api-access">Sign in and API access</h2>
-  <h3 class="heading-small">Signing in to NotifyNL</h3>
-  <p class="govuk-body">NotifyNL uses two-factor authentication for sign-in.</p>
-  <p class="govuk-body">Team members can sign in with a text message code or a link that’s sent in an email.</p>
-  <p class="govuk-body">For security, you’ll need to confirm that you still have access to your email address every 3 months.</p>
-  <p class="govuk-body">Find out more about our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_sign_in_method') }}">sign-in methods</a>.</p>
-  <p class="govuk-body">You must keep to our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.terms_of_use') }}">terms of use for signing in to Notify</a>.</p>
-  <h3 class="heading-small">Accessing the NotifyNL API</h3>
-  <p class="govuk-body">Services access the NotifyNL API with an API key, encoded using <a class="govuk-link govuk-link--no-visited-state" href="https://jwt.io/">JSON Web Tokens</a>.</p>
-  <p class="govuk-body">For more information, see our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.guidance_api_documentation') }}">API documentation</a>.</p>
-
-  <!-- <h2 class="heading-medium" id="protecting-our-website-and-api">Protecting our website and API</h2>
-  <p class="govuk-body">The NotifyNL website, API and any files sent by email are protected by:</p>
-  <ul class="govuk-list govuk-list--bullet">
-    <li>AWS <a class="govuk-link govuk-link--no-visited-state" href="https://aws.amazon.com/waf/">Web Application Firewall</a> (WAF)</li>
-    <li>AWS <a class="govuk-link govuk-link--no-visited-state" href="https://aws.amazon.com/shield/">Shield Advanced</a></li>
-    <li>rate limiting</li>
-  </ul>
-  <p class="govuk-body">This approach also applies to the service providers NotifyNL uses to send messages.</p> -->
-
-  <!-- <h2 class="heading-medium" id="how-we-manage-risk">How we manage risks on Notify</h2>
+  <!--<h2 class="heading-medium" id="how-we-manage-risk">How we manage risks on Notify</h2>
   <p class="govuk-body">Things we do to manage risks on Notify include:</p>
   <ul class="govuk-list govuk-list--bullet">
-    <li><a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/publications/email-security-standards/domain-based-message-authentication-reporting-and-conformance-dmarc">Domain-based Message Authentication, Reporting and Conformance (DMARC)</a></li>
-    <li><a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/publications/email-security-standards/domainkeys-identified-mail-dkim">DomainKeys Identified Mail (DKIM)</a></li>
-    <li><a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/publications/email-security-standards/sender-policy-framework-spf">Sender Policy Framework (SPF)</a></li>
-  </ul> -->
+    <li>formal risk assessments based on <a class="govuk-link govuk-link--no-visited-state" href="http://www.iso.org/iso/catalogue_detail?csnumber=56742">ISO 27005:2011</a> and National Cyber Security Centre guidance</li>
+    <li><a class="govuk-link govuk-link--no-visited-state" href="https://www.ncsc.gov.uk/information/check-penetration-testing">CHECK</a>-based testing, both annually and when any major changes are made to Notify</li>
+    <li>residual risk statement preparation and active management of the risk treatment plan</li>
+    <li>regular updates to the Privacy Impact Assessment</li>
+    <li>security impact assessments</li>
+  </ul>
+  -->
 
-  <!-- <h2 class="heading-medium" id="cabinet-office-approval">Cabinet Office approval</h2>
+  <!--<h2 class="heading-medium" id="cabinet-office-approval">Cabinet Office approval</h2>
   <p class="govuk-body">Notify has been assessed and approved by the Cabinet Office Senior Information Risk Officer (SIRO). The SIRO checks this approval once a year.</p>
   <p class="govuk-body">Notify also has approval from the Office of the Government’s SIRO to host data within the EEA.</p>
 
   <h2 class="heading-medium" id="classifications-and-security-vetting">Classifications and security vetting</h2>
   <p class="govuk-body">You can use Notify to send messages classified as ‘OFFICIAL’ or ‘OFFICIAL-SENSITIVE’ under the <a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/publications/government-security-classifications">Government Security Classifications</a> policy.</p>
   <p class="govuk-body">Notify does not process data classified as ‘SECRET’ or ‘TOP SECRET’.</p>
-  <p class="govuk-body">The Notify team has Security Check (SC) level clearance from <a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/organisations/united-kingdom-security-vetting">United Kingdom Security Vetting</a> (UKSV).</p> -->
+  <p class="govuk-body">The Notify team has Security Check (SC) level clearance from <a class="govuk-link govuk-link--no-visited-state" href="https://www.gov.uk/government/organisations/united-kingdom-security-vetting">United Kingdom Security Vetting</a> (UKSV).</p>
+  -->
 
 {% endblock %}

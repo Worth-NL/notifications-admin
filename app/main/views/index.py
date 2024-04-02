@@ -332,14 +332,6 @@ def guidance_schedule_messages():
 #     )
 
 
-@main.route("/using-notify/sign-in-method")
-def guidance_sign_in_method():
-    return render_template(
-        "views/guidance/using-notify/sign-in-method.html",
-        navigation_links=using_notify_nav(),
-    )
-
-
 @main.route("/using-notify/team-members-and-permissions")
 def guidance_team_members_and_permissions():
     return render_template(
@@ -420,7 +412,6 @@ REDIRECTS = {
     "/integration_testing": "main.guidance_api_documentation",
     "/integration-testing": "main.guidance_api_documentation",
     "/performance": "main.performance",
-    "/pricing/trial-mode": "main.guidance_trial_mode",
     # "/roadmap": "main.guidance_roadmap",
     "/terms": "main.terms_of_use",
     "/trial-mode": "main.guidance_trial_mode",

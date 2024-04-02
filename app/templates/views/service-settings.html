@@ -212,168 +212,76 @@
           )}}
         {% endcall %}
 
-        {% call settings_row(if_has_permission='email') %}
-          {{ text_field('Send files by email') }}
-          {{ optional_text_field(current_service.contact_link, default="Not set up", truncate=true) }}
-          {{ edit_field(
-            'Manage',
-            url_for('main.send_files_by_email_contact_details', service_id=current_service.id),
-            permissions=['manage_service'],
-            suffix='sending files by email',
-          )}}
-        {% endcall %}
+        {#{% call mapping_table(
+          caption='Letter settings',
+          field_headings=['Label', 'Value', 'Action'],
+          field_headings_visible=False,
+          caption_visible=True
+        ) %}
 
-      {% endcall %}
-
-      {% call mapping_table(
-        caption='Text message settings',
-        field_headings=['Label', 'Value', 'Action'],
-        field_headings_visible=False,
-        caption_visible=True
-      ) %}
-
-        {% call row() %}
-          {{ text_field('Send text messages') }}
-          {{ boolean_field('sms' in current_service.permissions) }}
-          {{ edit_field(
-            'Change',
-            url_for(
-              '.service_set_channel',
-              service_id=current_service.id,
-              channel='sms'
-            ),
-            permissions=['manage_service'],
-            suffix='your settings for sending text messages',
-          )}}
-        {% endcall %}
-
-        {% call settings_row(if_has_permission='sms') %}
-          {{ text_field('Text message sender IDs') }}
-          {% call field(status='default' if current_service.default_sms_sender == "None" else '') %}
-            {{ current_service.default_sms_sender | nl2br if current_service.default_sms_sender else 'None'}}
-            {% if current_service.count_sms_senders > 1 %}
-              <div class="hint">
-                {{ '…and %d more' | format(current_service.count_sms_senders - 1) }}
-              </div>
-            {% endif %}
+          {% call row() %}
+            {{ text_field('Send letters') }}
+            {{ boolean_field('letter' in current_service.permissions) }}
+            {{ edit_field(
+              'Change',
+              url_for(
+                '.service_set_channel',
+                channel='letter',
+                service_id=current_service.id
+              ),
+              permissions=['manage_service'],
+              suffix='your settings for sending letters',
+            )}}
           {% endcall %}
-          {{ edit_field(
-              'Manage',
-              url_for('main.service_sms_senders', service_id=current_service.id),
-              permissions=['manage_service','manage_api_keys'],
-              suffix='text message sender IDs',
-          )
-          }}
-        {% endcall %}
 
-        {% call settings_row(if_has_permission='sms') %}
-          {{ text_field('Start text messages with service name') }}
-          {{ boolean_field(current_service.prefix_sms) }}
-          {{ edit_field(
+          {% call settings_row(if_has_permission='letter') %}
+            {{ text_field('Send international letters') }}
+            {{ boolean_field(current_service.has_permission('international_letters')) }}
+            {{ edit_field(
               'Change',
-              url_for('main.service_set_sms_prefix', service_id=current_service.id),
-              permissions=['manage_service'],
-              suffix='your settings for starting text messages with service name',
-          )
-          }}
-        {% endcall %}
-
-        {% call settings_row(if_has_permission='sms') %}
-          {{ text_field('Send international text messages') }}
-          {{ boolean_field('international_sms' in current_service.permissions) }}
-          {{ edit_field(
-              'Change',
-              url_for('main.service_set_international_sms', service_id=current_service.id),
-              permissions=['manage_service'],
-              suffix='your settings for sending international text messages',
-          )
-          }}
-        {% endcall %}
-
-        {% call settings_row(if_has_permission='sms') %}
-          {{ text_field('Receive text messages') }}
-          {{ boolean_field('inbound_sms' in current_service.permissions) }}
-          {{ edit_field(
-              'Change',
-              url_for('main.service_receive_text_messages', service_id=current_service.id),
-              permissions=['manage_service'],
-              suffix='your settings for receiving text messages',
-          )
-          }}
-        {% endcall %}
-
-      {% endcall %}
-
-      {#{% call mapping_table(
-        caption='Letter settings',
-        field_headings=['Label', 'Value', 'Action'],
-        field_headings_visible=False,
-        caption_visible=True
-      ) %}
-
-        {% call row() %}
-          {{ text_field('Send letters') }}
-          {{ boolean_field('letter' in current_service.permissions) }}
-          {{ edit_field(
-            'Change',
-            url_for(
-              '.service_set_channel',
-              channel='letter',
-              service_id=current_service.id
-            ),
-            permissions=['manage_service'],
-            suffix='your settings for sending letters',
-          )}}
-        {% endcall %}
-
-        {% call settings_row(if_has_permission='letter') %}
-          {{ text_field('Send international letters') }}
-          {{ boolean_field(current_service.has_permission('international_letters')) }}
-          {{ edit_field(
-            'Change',
-            url_for('main.service_set_international_letters', service_id=current_service.id),
-            permissions=['manage_service'],
-            suffix='your settings for sending international letters',
-          )}}
-        {% endcall %}
-
-        {% call settings_row(if_has_permission='letter') %}
-          {{ text_field('Sender addresses') }}
-          {% call field(status='' if current_service.count_letter_contact_details else 'default') %}
-            {% if current_service.default_letter_contact_block %}
-              {{ current_service.default_letter_contact_block.contact_block | nl2br }}
-            {% elif current_service.count_letter_contact_details %}
-              Blank
-            {% else %}
-              Not set
-            {% endif %}
-            {% if current_service.count_letter_contact_details > 1 %}
-              <div class="hint">
-                {{ '…and %d more' | format(current_service.count_letter_contact_details - 1) }}
-              </div>
-            {% endif %}
+              url_for('main.service_set_international_letters', service_id=current_service.id),
+              permissions=['manage_service']
+            )}}
           {% endcall %}
-          {{ edit_field(
-              'Manage',
-              url_for('main.service_letter_contact_details', service_id=current_service.id),
-              permissions=['manage_service','manage_api_keys'],
-              suffix='sender addresses',
-          )
-          }}
-        {% endcall %}
 
-        {% call settings_row(if_has_permission='letter') %}
-          {{ text_field('Letter branding') }}
-          {{ optional_text_field(current_service.letter_branding.name) }}
-          {{ edit_field(
-            'Change',
-            url_for('main.letter_branding_options', service_id=current_service.id),
-            permissions=['manage_service'],
-            suffix='letter branding',
-          )}}
-        {% endcall %}
+          {% call settings_row(if_has_permission='letter') %}
+            {{ text_field('Sender addresses') }}
+            {% call field(status='' if current_service.count_letter_contact_details else 'default') %}
+              {% if current_service.default_letter_contact_block %}
+                {{ current_service.default_letter_contact_block.contact_block | nl2br }}
+              {% elif current_service.count_letter_contact_details %}
+                Blank
+              {% else %}
+                Not set
+              {% endif %}
+              {% if current_service.count_letter_contact_details > 1 %}
+                <div class="hint">
+                  {{ '…and %d more' | format(current_service.count_letter_contact_details - 1) }}
+                </div>
+              {% endif %}
+            {% endcall %}
+            {{ edit_field(
+                'Manage',
+                url_for('main.service_letter_contact_details', service_id=current_service.id),
+                permissions=['manage_service','manage_api_keys'],
+                suffix='sender addresses',
+            )
+            }}
+          {% endcall %}
 
-      {% endcall %}#}
+          {% call settings_row(if_has_permission='letter') %}
+            {{ text_field('Letter branding') }}
+            {{ optional_text_field(current_service.letter_branding.name) }}
+            {{ edit_field(
+              'Change',
+              url_for('main.letter_branding_options', service_id=current_service.id),
+              permissions=['manage_service'],
+              suffix='letter branding',
+            )}}
+          {% endcall %}
+
+        {% endcall %}#}
+      {% endif %}
     </div>
 
     {% if current_service.trial_mode %}

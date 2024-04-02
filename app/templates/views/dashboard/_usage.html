@@ -16,7 +16,7 @@
           sms_cost,
           'spent on text messages',
           currency="€",
-          **big_number_kwargs
+          smaller=True
         ) }}
       {% else %}
         {{ big_number(sms_allowance_remaining, 'free text messages left', **big_number_kwargs) }}
@@ -29,7 +29,7 @@
         letter_cost,
         'spent on letters',
         currency="€",
-        **big_number_kwargs
+        smaller=True
       ) }}
     </div>
   </div>-->
