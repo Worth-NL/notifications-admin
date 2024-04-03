@@ -45,22 +45,12 @@ RUN echo "Installing python requirements" && \
     /opt/venv/bin/pip install -r requirements.txt
 
 COPY . .
-RUN make generate-version-file  # This file gets copied across
 
-RUN echo "Installing python dependencies" \
-    && pip install -r requirements.txt
+# This file gets copied across
+RUN make generate-version-file
 
-COPY app app
-
-# This should fail if there's no version present
-# run `make generate-version-file` for local dev
-COPY app/version.py app/version.py
-
-COPY application.py gunicorn_config.py ./
-COPY --from=frontend-build /usr/frontend/app/static app/static
-COPY --from=frontend-build /usr/frontend/app/templates app/templates
-
-RUN chown -R notify:notify /home/vcap/app
+##### Production Image #######################################################
+FROM base AS production
 
 RUN groupadd -r notify && useradd -r -g notify -d /home/vcap notify && chown -R notify:notify /home/vcap
 USER notify
