@@ -53,7 +53,12 @@ def test_email_branding_options_page_shows_branding_if_set(
     )
 
     page = client_request.get(".email_branding_options", service_id=SERVICE_ONE_ID)
-    assert page.select_one("iframe")["src"] == url_for("main.email_template", branding_style="some-random-branding")
+    assert page.select_one("iframe")["src"] == url_for(
+        "main.email_template",
+        branding_style="some-random-branding",
+        title="Preview of current email branding",
+        email_branding_preview=True,
+    )
 
 
 def test_email_branding_options_page_when_no_branding_is_set(
@@ -79,7 +84,12 @@ def test_email_branding_options_page_when_no_branding_is_set(
     )
 
     assert mock_get_email_branding.called is False
-    assert page.select_one("iframe")["src"] == url_for("main.email_template", branding_style="__NONE__")
+    assert page.select_one("iframe")["src"] == url_for(
+        "main.email_template",
+        branding_style="__NONE__",
+        title="Preview of current email branding",
+        email_branding_preview=True,
+    )
     assert mock_get_letter_branding_by_id.called is False
 
     button_text = normalize_spaces(page.select_one(".page-footer button").text)
@@ -134,7 +144,6 @@ def test_email_branding_options_page_shows_branding_pool_options_if_branding_poo
     organisation_type,
     expected_options,
 ):
-
     service_one["organisation_type"] = organisation_type
     organisation_one["organisation_type"] = organisation_type
     service_one["organisation"] = organisation_one
@@ -477,7 +486,12 @@ def test_email_branding_option_preview_page_displays_preview_of_chosen_branding(
         branding_type="email",
     )
 
-    assert page.select_one("iframe")["src"] == url_for("main.email_template", branding_style="email-branding-1-id")
+    assert page.select_one("iframe")["src"] == url_for(
+        "main.email_template",
+        branding_style="email-branding-1-id",
+        title="Preview of new email branding",
+        email_branding_preview=True,
+    )
 
 
 def test_email_branding_option_preview_page_redirects_to_branding_request_page_if_branding_option_not_found(
@@ -510,6 +524,7 @@ def test_email_branding_option_preview_changes_email_branding_when_user_confirms
     single_sms_sender,
     mock_get_email_branding_pool,
     mock_update_service,
+    mock_get_service_data_retention,
 ):
     organisation_one["organisation_type"] = "central"
     service_one["organisation"] = organisation_one
@@ -536,10 +551,16 @@ def test_email_branding_option_preview_changes_email_branding_when_user_confirms
 
 
 @pytest.mark.parametrize(
-    "endpoint, service_org_type, branding_preview_id, extra_args",
+    "endpoint, service_org_type, branding_preview_id, extra_args, iframe_title",
     [
-        ("main.email_branding_govuk", "central", "__NONE__", {}),
-        ("main.branding_nhs", "nhs_local", EmailBranding.NHS_ID, {"branding_type": "email"}),
+        ("main.email_branding_govuk", "central", "__NONE__", {}, "Preview of new email branding"),
+        (
+            "main.branding_nhs",
+            "nhs_local",
+            EmailBranding.NHS_ID,
+            {"branding_type": "email"},
+            "Preview of new email branding",
+        ),
     ],
 )
 def test_email_branding_govuk_and_nhs_pages(
@@ -552,6 +573,7 @@ def test_email_branding_govuk_and_nhs_pages(
     endpoint,
     service_org_type,
     branding_preview_id,
+    iframe_title,
     extra_args,
 ):
     organisation_one["organisation_type"] = service_org_type
@@ -568,10 +590,12 @@ def test_email_branding_govuk_and_nhs_pages(
         service_id=SERVICE_ONE_ID,
         **extra_args,
     )
-    assert page.select_one("h1").text == "Check your new branding"
+    assert page.select_one("h1").text.strip() == "Confirm email branding"
     assert "Emails from service one will look like this" in normalize_spaces(page.text)
-    assert page.select_one("iframe")["src"] == url_for("main.email_template", branding_style=branding_preview_id)
-    assert normalize_spaces(page.select_one(".page-footer button").text) == "Use this branding"
+    assert page.select_one("iframe")["src"] == url_for(
+        "main.email_template", branding_style=branding_preview_id, title=iframe_title, email_branding_preview=True
+    )
+    assert normalize_spaces(page.select_one(".page-footer button").text.strip()) == "Confirm email branding"
 
 
 @pytest.mark.parametrize(
@@ -599,6 +623,7 @@ def test_email_branding_govuk_submit(
     mock_get_email_branding,
     single_sms_sender,
     mock_update_service,
+    mock_get_service_data_retention,
 ):
     mocker.patch(
         "app.organisations_client.get_organisation",
@@ -635,6 +660,7 @@ def test_email_branding_nhs_submit(
     mock_get_email_branding,
     single_sms_sender,
     mock_update_service,
+    mock_get_service_data_retention,
 ):
     service_one["email_branding"] = sample_uuid()
     service_one["organisation_type"] = "nhs_local"
@@ -736,6 +762,7 @@ def test_email_branding_request_submit(
     mock_get_empty_email_branding_pool,
     mock_get_email_branding,
     single_sms_sender,
+    mock_get_service_data_retention,
 ):
     service_one["email_branding"] = sample_uuid()
     service_one["organisation_type"] = "nhs_local"
@@ -779,7 +806,7 @@ def test_email_branding_request_submit(
     )
     mock_send_ticket_to_zendesk.assert_called_once()
     assert normalize_spaces(page.select_one(".banner-default").text) == (
-        "Thanks for your branding request. We’ll get back to you within one working day."
+        "Thanks for your branding request. We’ll get back to you by the end of the next working day."
     )
 
 
@@ -855,7 +882,12 @@ def test_email_branding_create_government_identity_logo(
     assert "Continue" in continue_button.text
     assert "Back" in back_button.text
     if expected_branding_id_in_iframe:
-        assert iframe["src"] == url_for("main.email_template", branding_style=expected_branding_id_in_iframe)
+        assert iframe["src"] == url_for(
+            "main.email_template",
+            branding_style=expected_branding_id_in_iframe,
+            title="Example of an email with a government identity logo",
+            email_branding_preview=True,
+        )
     else:
         assert not iframe
 
@@ -1317,6 +1349,7 @@ def test_GET_email_branding_set_alt_text_shows_form(client_request, service_one)
         "brand_type": ["org_banner"],
         "logo": ["example.png"],
         "colour": ["#abcdef"],
+        "title": ["Preview of new email branding"],
     }
 
     assert normalize_spaces(page.select_one("h1").text) == "Preview your email branding"

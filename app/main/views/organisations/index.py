@@ -67,13 +67,13 @@ def add_organisation():
                 )
             )
         except HTTPError as e:
-            msg = "Organisation name already exists"
-            if e.status_code == 400 and msg in e.message:
-                form.name.errors.append("This organisation name is already in use")
+            org_name_exists_message = "Organisation name already exists"
+            if e.status_code == 400 and org_name_exists_message in e.message:
+                form.name.errors.append("This organisation name is already in use.")
             else:
                 raise e
 
-    return render_template("views/organisations/add-organisation.html", form=form)
+    return render_template("views/organisations/add-organisation.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/services/<uuid:service_id>/add-gp-organisation", methods=["GET", "POST"])
@@ -85,20 +85,24 @@ def add_organisation_from_gp_service(service_id):
     form = AddGPOrganisationForm(service_name=current_service.name)
 
     if form.validate_on_submit():
-        Organisation.create(
-            form.get_organisation_name(),
-            crown=False,
-            organisation_type="nhs_gp",
-            agreement_signed=False,
-        ).associate_service(service_id)
-        return redirect(
-            url_for(
-                ".service_agreement",
-                service_id=service_id,
-            )
-        )
+        try:
+            Organisation.create(
+                form.get_organisation_name(),
+                crown=False,
+                organisation_type="nhs_gp",
+                agreement_signed=False,
+            ).associate_service(service_id)
+        except HTTPError as e:
+            org_name_exists_message = "Organisation name already exists"
+            if e.status_code == 400 and org_name_exists_message in e.message:
+                flash("This organisation name is already in use.")
+            else:
+                raise e
 
-    return render_template("views/organisations/add-gp-organisation.html", form=form)
+        else:
+            return redirect(url_for(".service_agreement", service_id=service_id))
+
+    return render_template("views/organisations/add-gp-organisation.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/services/<uuid:service_id>/add-nhs-local-organisation", methods=["GET", "POST"])
@@ -298,7 +302,6 @@ def edit_organisation_name(org_id):
     form = RenameOrganisationForm(name=current_organisation.name)
 
     if form.validate_on_submit():
-
         try:
             current_organisation.update(name=form.name.data)
         except HTTPError as http_error:
@@ -311,15 +314,13 @@ def edit_organisation_name(org_id):
             return redirect(url_for(".organisation_settings", org_id=org_id))
 
     return render_template(
-        "views/organisations/organisation/settings/edit-name.html",
-        form=form,
+        "views/organisations/organisation/settings/edit-name.html", form=form, error_summary_enabled=True
     )
 
 
 @main.route("/organisations/<uuid:org_id>/settings/edit-type", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_type(org_id):
-
     form = OrganisationOrganisationTypeForm(organisation_type=current_organisation.organisation_type)
 
     if form.validate_on_submit():
@@ -338,7 +339,6 @@ def edit_organisation_type(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-crown-status", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_crown_status(org_id):
-
     form = OrganisationCrownStatusForm(
         crown_status={
             True: "crown",
@@ -366,7 +366,6 @@ def edit_organisation_crown_status(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-agreement", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_agreement(org_id):
-
     form = OrganisationAgreementSignedForm(
         agreement_signed={
             True: "yes",
@@ -395,7 +394,6 @@ def edit_organisation_agreement(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-organisation-domains", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_domains(org_id):
-
     form = AdminOrganisationDomainsForm()
 
     if form.validate_on_submit():
@@ -428,7 +426,6 @@ def edit_organisation_domains(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-go-live-notes", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_go_live_notes(org_id):
-
     form = AdminOrganisationGoLiveNotesForm()
 
     if form.validate_on_submit():
@@ -447,7 +444,6 @@ def edit_organisation_go_live_notes(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-can-approve-own-go-live-requests", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_can_approve_own_go_live_requests(org_id):
-
     form = YesNoSettingForm(
         name="Can this organisation approve its own go live requests?",
         enabled=current_organisation.can_approve_own_go_live_requests,
@@ -466,7 +462,6 @@ def edit_organisation_can_approve_own_go_live_requests(org_id):
 @main.route("/organisations/<uuid:org_id>/settings/edit-can-ask-to-join-a-service", methods=["GET", "POST"])
 @user_is_platform_admin
 def edit_organisation_can_ask_to_join_a_service(org_id):
-
     form = YesNoSettingForm(
         name="Can people ask to join services in this organisation?",
         enabled=current_organisation.can_ask_to_join_a_service,
@@ -496,7 +491,6 @@ def edit_organisation_notes(org_id):
     form = AdminNotesForm(notes=current_organisation.notes)
 
     if form.validate_on_submit():
-
         if form.notes.data == current_organisation.notes:
             return redirect(url_for(".organisation_settings", org_id=org_id))
 

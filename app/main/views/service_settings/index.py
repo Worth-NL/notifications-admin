@@ -11,6 +11,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
+from markupsafe import Markup
 from notifications_python_client.errors import HTTPError
 from notifications_utils.clients.zendesk.zendesk_client import NotifySupportTicket, NotifyTicketType
 from notifications_utils.timezones import utc_string_to_aware_gmt_datetime
@@ -25,11 +26,9 @@ from app import (
 )
 from app.event_handlers import (
     create_archive_service_event,
-    create_broadcast_account_type_change_event,
     create_set_inbound_sms_on_event,
 )
 from app.extensions import zendesk_client
-from app.formatters import email_safe
 from app.main import json_updates, main
 from app.main.forms import (
     AdminBillingDetailsForm,
@@ -49,17 +48,16 @@ from app.main.forms import (
     OnOffSettingForm,
     RenameServiceForm,
     SearchByNameForm,
-    ServiceBroadcastAccountTypeForm,
-    ServiceBroadcastChannelForm,
-    ServiceBroadcastNetworkForm,
     ServiceContactDetailsForm,
     ServiceEditInboundNumberForm,
+    ServiceEmailSenderForm,
     ServiceLetterContactBlockForm,
     ServiceReplyToEmailForm,
     ServiceSmsSenderForm,
     ServiceSwitchChannelForm,
     SetAuthTypeForm,
     SetEmailAuthForUsersForm,
+    SetServiceDataRetentionForm,
     SMSPrefixForm,
     YesNoSettingForm,
 )
@@ -70,8 +68,10 @@ from app.models.branding import (
     EmailBranding,
     LetterBranding,
 )
+from app.models.letter_rates import LetterRates
 from app.utils import DELIVERED_STATUSES, FAILURE_STATUSES, SENDING_STATUSES
 from app.utils.constants import SIGN_IN_METHOD_TEXT_OR_EMAIL
+from app.utils.services import service_has_or_is_expected_to_send_x_or_more_notifications
 from app.utils.user import (
     user_has_permissions,
     user_is_gov_user,
@@ -85,7 +85,9 @@ PLATFORM_ADMIN_SERVICE_PERMISSIONS = {
     "extra_letter_formatting": {"title": "Extra letter formatting options", "requires": "letter"},
 }
 
-THANKS_FOR_BRANDING_REQUEST_MESSAGE = "Thanks for your branding request. We’ll get back to you within one working day."
+THANKS_FOR_BRANDING_REQUEST_MESSAGE = (
+    "Thanks for your branding request. We’ll get back to you by the end of the next working day."
+)
 
 
 @main.route("/services/<uuid:service_id>/service-settings")
@@ -103,20 +105,15 @@ def service_name_change(service_id):
     form = RenameServiceForm(name=current_service.name)
 
     if form.validate_on_submit():
-
         try:
-            current_service.update(
-                name=form.name.data,
-                email_from=email_safe(form.name.data),
-            )
+            current_service.update(name=form.name.data)
         except HTTPError as http_error:
-            if http_error.status_code == 400:
-                error_message = service_api_client.parse_edit_service_http_error(http_error)
-                if not error_message:
-                    raise http_error
-
+            if http_error.status_code == 400 and (
+                error_message := service_api_client.parse_edit_service_http_error(http_error)
+            ):
                 form.name.errors.append(error_message)
-
+            else:
+                raise http_error
         else:
             return redirect(url_for(".service_settings", service_id=service_id))
 
@@ -124,13 +121,74 @@ def service_name_change(service_id):
         "views/service-settings/name.html",
         form=form,
         organisation_type=current_service.organisation_type,
+        error_summary_enabled=True,
+    )
+
+
+@main.route("/services/<uuid:service_id>/service-settings/email-sender", methods=["GET", "POST"])
+@user_has_permissions("manage_service")
+def service_email_sender_change(service_id):
+    form = ServiceEmailSenderForm(
+        use_custom_email_sender_name=current_service.custom_email_sender_name is not None,
+        custom_email_sender_name=current_service.custom_email_sender_name,
+    )
+
+    if form.validate_on_submit():
+        new_sender = form.custom_email_sender_name.data if form.use_custom_email_sender_name.data else None
+
+        current_service.update(custom_email_sender_name=new_sender)
+
+        return redirect(url_for(".service_settings", service_id=service_id))
+
+    return render_template(
+        "views/service-settings/custom-email-sender-name.html",
+        form=form,
+        organisation_type=current_service.organisation_type,
+        error_summary_enabled=True,
+    )
+
+
+@main.post("/services/<uuid:service_id>/service-settings/email-sender/preview-address")
+@user_has_permissions("manage_service")
+def service_email_sender_preview(service_id):
+    return jsonify(
+        {
+            "html": render_template(
+                "partials/preview-email-sender-name.html",
+                email_sender_name=request.form.get("custom_email_sender_name"),
+            )
+        }
+    )
+
+
+@main.route("/services/<uuid:service_id>/service-settings/set-data-retention", methods=["GET", "POST"])
+@user_has_permissions("manage_service")
+def service_data_retention(service_id):
+    high_volume_service = service_has_or_is_expected_to_send_x_or_more_notifications(
+        current_service, num_notifications=1_000_000
+    )
+    single_retention_period = current_service.get_consistent_data_retention_period()
+    form_kwargs = dict(days_of_retention=single_retention_period) if single_retention_period else dict()
+    form = SetServiceDataRetentionForm(**form_kwargs)
+    if not current_service.trial_mode and not high_volume_service and form.validate_on_submit():
+        service_api_client.set_service_data_retention(
+            service_id=service_id, days_of_retention=form.days_of_retention.data
+        )
+        flash(f"You’ve changed the data retention period to {form.days_of_retention.data} days", "default")
+        return redirect(url_for(".service_settings", service_id=service_id))
+
+    return render_template(
+        "views/service-settings/service-data-retention.html",
+        form=form,
+        high_volume_service=high_volume_service,
+        single_retention_period=single_retention_period,
+        error_summary_enabled=True,
     )
 
 
 @main.route("/services/<uuid:service_id>/service-settings/request-to-go-live/estimate-usage", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
 def estimate_usage(service_id):
-
     form = EstimateUsageForm(
         volume_email=current_service.volume_email,
         volume_sms=current_service.volume_sms,
@@ -171,8 +229,13 @@ def request_to_go_live(service_id):
 def submit_request_to_go_live(service_id):
     ticket_message = render_template("support-tickets/go-live-request.txt") + "\n"
 
+    if current_service.organisation.can_approve_own_go_live_requests:
+        subject = f"Self approve go live request - {current_service.name}"
+    else:
+        subject = f"Request to go live - {current_service.name}"
+
     ticket = NotifySupportTicket(
-        subject=f"Request to go live - {current_service.name}",
+        subject=subject,
         message=ticket_message,
         ticket_type=NotifySupportTicket.TYPE_QUESTION,
         notify_ticket_type=NotifyTicketType.NON_TECHNICAL,
@@ -200,6 +263,11 @@ def submit_request_to_go_live(service_id):
 @main.route("/services/<uuid:service_id>/service-settings/switch-live", methods=["GET", "POST"])
 @user_is_platform_admin
 def service_switch_live(service_id):
+    if current_service.trial_mode and (
+        not current_service.organisation or current_service.organisation.agreement_signed is False
+    ):
+        abort(403)
+
     form = OnOffSettingForm(name="Make service live", enabled=not current_service.trial_mode)
 
     if form.validate_on_submit():
@@ -216,7 +284,6 @@ def service_switch_live(service_id):
 @main.route("/services/<uuid:service_id>/service-settings/switch-count-as-live", methods=["GET", "POST"])
 @user_is_platform_admin
 def service_switch_count_as_live(service_id):
-
     form = YesNoSettingForm(
         name="Count in list of live services",
         enabled=current_service.count_as_live,
@@ -254,106 +321,6 @@ def service_set_permission(service_id, permission):
     )
 
 
-@main.route("/services/<uuid:service_id>/service-settings/broadcasts", methods=["GET", "POST"])
-@user_is_platform_admin
-def service_set_broadcast_channel(service_id):
-    if current_service.has_permission("broadcast"):
-        if current_service.live:
-            channel = current_service.broadcast_channel
-        else:
-            channel = "training"
-    else:
-        channel = None
-
-    form = ServiceBroadcastChannelForm(channel=channel)
-
-    if form.validate_on_submit():
-        if form.channel.data == "training":
-            return redirect(
-                url_for(
-                    ".service_confirm_broadcast_account_type",
-                    service_id=current_service.id,
-                    account_type="training-test-all",
-                )
-            )
-        return redirect(
-            url_for(
-                ".service_set_broadcast_network",
-                service_id=current_service.id,
-                broadcast_channel=form.channel.data,
-            )
-        )
-
-    return render_template(
-        "views/service-settings/service-set-broadcast-channel.html",
-        form=form,
-    )
-
-
-@main.route("/services/<uuid:service_id>/service-settings/broadcasts/<broadcast_channel>", methods=["GET", "POST"])
-@user_is_platform_admin
-def service_set_broadcast_network(service_id, broadcast_channel):
-    # only populate old settings when the channel is unchanged
-    if current_service.broadcast_channel == broadcast_channel:
-        provider = current_service.allowed_broadcast_provider
-
-        form = ServiceBroadcastNetworkForm(
-            broadcast_channel=broadcast_channel,
-            all_networks=provider == "all",
-            network=provider if provider != "all" else None,
-        )
-    else:
-        form = ServiceBroadcastNetworkForm(broadcast_channel=broadcast_channel)
-
-    if form.validate_on_submit():
-        return redirect(
-            url_for(
-                ".service_confirm_broadcast_account_type",
-                service_id=current_service.id,
-                account_type=form.account_type,
-            )
-        )
-
-    return render_template(
-        "views/service-settings/service-set-broadcast-network.html",
-        form=form,
-    )
-
-
-@main.route("/services/<uuid:service_id>/service-settings/broadcasts/<account_type>/confirm", methods=["GET", "POST"])
-@user_is_platform_admin
-def service_confirm_broadcast_account_type(service_id, account_type):
-    form = ServiceBroadcastAccountTypeForm(account_type=account_type)
-    form.validate()
-
-    if form.account_type.errors:
-        abort(404)
-
-    if form.validate_on_submit():
-        cached_service_user_ids = [user.id for user in current_service.active_users]
-
-        service_api_client.set_service_broadcast_settings(
-            current_service.id,
-            service_mode=form.account_type.service_mode,
-            broadcast_channel=form.account_type.broadcast_channel,
-            provider_restriction=form.account_type.provider_restriction,
-            cached_service_user_ids=cached_service_user_ids,
-        )
-        create_broadcast_account_type_change_event(
-            service_id=current_service.id,
-            changed_by_id=current_user.id,
-            service_mode=form.account_type.service_mode,
-            broadcast_channel=form.account_type.broadcast_channel,
-            provider_restriction=form.account_type.provider_restriction,
-        )
-        return redirect(url_for(".service_settings", service_id=service_id))
-
-    return render_template(
-        "views/service-settings/service-confirm-broadcast-account-type.html",
-        form=form,
-    )
-
-
 @main.route("/services/<uuid:service_id>/service-settings/archive", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
 def archive_service(service_id):
@@ -374,9 +341,16 @@ def archive_service(service_id):
         return redirect(url_for(".choose_account"))
     else:
         flash(
-            f"Are you sure you want to delete ‘{current_service.name}’? There’s no way to undo this.",
+            Markup(
+                render_template(
+                    "partials/flash_messages/archive_service_confirmation_message.html",
+                    service_name=current_service.name,
+                    platform_admin=current_user.platform_admin,
+                )
+            ),
             "delete",
         )
+
         return service_settings(service_id)
 
 
@@ -402,7 +376,10 @@ def send_files_by_email_contact_details(service_id):
         return redirect(url_for(".service_settings", service_id=current_service.id))
 
     return render_template(
-        "views/service-settings/send-files-by-email.html", form=form, contact_details=contact_details
+        "views/service-settings/send-files-by-email.html",
+        form=form,
+        contact_details=contact_details,
+        error_summary_enabled=True,
     )
 
 
@@ -424,34 +401,43 @@ def service_add_email_reply_to(service_id):
     form = ServiceReplyToEmailForm()
     first_email_address = current_service.count_email_reply_to_addresses == 0
     is_default = first_email_address if first_email_address else form.is_default.data
+
     if form.validate_on_submit():
         if current_user.platform_admin:
-            service_api_client.add_reply_to_email_address(
-                service_id, email_address=form.email_address.data, is_default=is_default
-            )
-            return redirect(url_for(".service_email_reply_to", service_id=service_id))
+            try:
+                service_api_client.add_reply_to_email_address(
+                    service_id, email_address=form.email_address.data, is_default=is_default
+                )
+
+            except HTTPError as e:
+                handle_reply_to_email_address_http_error(e, form)
+
+            else:
+                return redirect(url_for(".service_email_reply_to", service_id=service_id))
+
         else:
             try:
                 notification_id = service_api_client.verify_reply_to_email_address(service_id, form.email_address.data)[
                     "data"
                 ]["id"]
             except HTTPError as e:
-                if e.status_code == 409:
-                    flash(e.message, "error")
-                    return redirect(url_for(".service_email_reply_to", service_id=service_id))
-                else:
-                    raise e
-            return redirect(
-                url_for(
-                    ".service_verify_reply_to_address",
-                    service_id=service_id,
-                    notification_id=notification_id,
-                    is_default=is_default,
+                handle_reply_to_email_address_http_error(e, form)
+
+            else:
+                return redirect(
+                    url_for(
+                        ".service_verify_reply_to_address",
+                        service_id=service_id,
+                        notification_id=notification_id,
+                        is_default=is_default,
+                    )
                 )
-            )
 
     return render_template(
-        "views/service-settings/email-reply-to/add.html", form=form, first_email_address=first_email_address
+        "views/service-settings/email-reply-to/add.html",
+        form=form,
+        first_email_address=first_email_address,
+        error_summary_enabled=True,
     )
 
 
@@ -544,7 +530,6 @@ def get_service_verify_reply_to_address_partials(service_id, notification_id):
 def service_edit_email_reply_to(service_id, reply_to_email_id):
     form = ServiceReplyToEmailForm()
     reply_to_email_address = current_service.get_email_reply_to_address(reply_to_email_id)
-
     if request.method == "GET":
         form.email_address.data = reply_to_email_address["email_address"]
         form.is_default.data = reply_to_email_address["is_default"]
@@ -564,21 +549,20 @@ def service_edit_email_reply_to(service_id, reply_to_email_id):
             notification_id = service_api_client.verify_reply_to_email_address(service_id, form.email_address.data)[
                 "data"
             ]["id"]
+
         except HTTPError as e:
-            if e.status_code == 409:
-                flash(e.message, "error")
-                return redirect(url_for(".service_email_reply_to", service_id=service_id))
-            else:
-                raise e
-        return redirect(
-            url_for(
-                ".service_verify_reply_to_address",
-                service_id=service_id,
-                notification_id=notification_id,
-                is_default=True if reply_to_email_address["is_default"] else form.is_default.data,
-                replace=reply_to_email_id,
+            handle_reply_to_email_address_http_error(e, form)
+
+        else:
+            return redirect(
+                url_for(
+                    ".service_verify_reply_to_address",
+                    service_id=service_id,
+                    notification_id=notification_id,
+                    is_default=True if reply_to_email_address["is_default"] else form.is_default.data,
+                    replace=reply_to_email_id,
+                )
             )
-        )
 
     if request.endpoint == "main.service_confirm_delete_email_reply_to":
         flash("Are you sure you want to delete this reply-to email address?", "delete")
@@ -587,6 +571,7 @@ def service_edit_email_reply_to(service_id, reply_to_email_id):
         form=form,
         reply_to_email_address_id=reply_to_email_id,
         show_choice_of_default_checkbox=show_choice_of_default_checkbox,
+        error_summary_enabled=True,
     )
 
 
@@ -628,7 +613,6 @@ def service_set_inbound_number(service_id):
 @main.route("/services/<uuid:service_id>/service-settings/sms-prefix", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
 def service_set_sms_prefix(service_id):
-
     form = SMSPrefixForm(enabled=current_service.prefix_sms)
 
     form.enabled.label.text = f"Start all text messages with ‘{current_service.name}:’"
@@ -727,16 +711,9 @@ def service_set_letters(service_id):
     )
 
 
-@main.route("/services/<uuid:service_id>/service-settings/set-<channel>", methods=["GET", "POST"])
+@main.route("/services/<uuid:service_id>/service-settings/set-<template_type:channel>", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
 def service_set_channel(service_id, channel):
-
-    if channel not in {"email", "sms", "letter"}:
-        abort(404)
-
-    if current_service.has_permission("broadcast"):
-        abort(403)
-
     form = ServiceSwitchChannelForm(channel=channel, enabled=current_service.has_permission(channel))
 
     if form.validate_on_submit():
@@ -750,6 +727,7 @@ def service_set_channel(service_id, channel):
         f"views/service-settings/set-{channel}.html",
         form=form,
         sms_rate=CURRENT_SMS_RATE,
+        letter_rates=LetterRates().rates,
     )
 
 
@@ -881,6 +859,7 @@ def service_add_letter_contact(service_id):
             if from_template
             else url_for(".service_letter_contact_details", service_id=current_service.id)
         ),
+        error_summary_enabled=True,
     )
 
 
@@ -911,7 +890,10 @@ def service_edit_letter_contact(service_id, letter_contact_id):
     if request.endpoint == "main.service_confirm_delete_letter_contact":
         flash("Are you sure you want to delete this contact block?", "delete")
     return render_template(
-        "views/service-settings/letter-contact/edit.html", form=form, letter_contact_id=letter_contact_block["id"]
+        "views/service-settings/letter-contact/edit.html",
+        form=form,
+        letter_contact_id=letter_contact_block["id"],
+        error_summary_enabled=True,
     )
 
 
@@ -955,7 +937,12 @@ def service_add_sms_sender(service_id):
             is_default=first_sms_sender if first_sms_sender else form.is_default.data,
         )
         return redirect(url_for(".service_sms_senders", service_id=service_id))
-    return render_template("views/service-settings/sms-sender/add.html", form=form, first_sms_sender=first_sms_sender)
+    return render_template(
+        "views/service-settings/sms-sender/add.html",
+        form=form,
+        first_sms_sender=first_sms_sender,
+        error_summary_enabled=True,
+    )
 
 
 @main.route(
@@ -988,13 +975,14 @@ def service_edit_sms_sender(service_id, sms_sender_id):
 
     form.is_default.data = sms_sender["is_default"]
     if request.endpoint == "main.service_confirm_delete_sms_sender":
-        flash("Are you sure you want to delete this text message sender?", "delete")
+        flash("Are you sure you want to delete this text message sender ID?", "delete")
     return render_template(
         "views/service-settings/sms-sender/edit.html",
         form=form,
         sms_sender=sms_sender,
         inbound_number=is_inbound_number,
         sms_sender_id=sms_sender_id,
+        error_summary_enabled=True,
     )
 
 
@@ -1021,10 +1009,7 @@ def set_free_sms_allowance(service_id):
 
         return redirect(url_for(".service_settings", service_id=service_id))
 
-    return render_template(
-        "views/service-settings/set-free-sms-allowance.html",
-        form=form,
-    )
+    return render_template("views/service-settings/set-free-sms-allowance.html", form=form, error_summary_enabled=True)
 
 
 @main.route(
@@ -1043,16 +1028,12 @@ def set_per_day_message_limit(service_id, notification_type):
 
         return redirect(url_for(".service_settings", service_id=service_id))
 
-    return render_template(
-        "views/service-settings/set-message-limit.html",
-        form=form,
-    )
+    return render_template("views/service-settings/set-message-limit.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/services/<uuid:service_id>/service-settings/set-rate-limit", methods=["GET", "POST"])
 @user_is_platform_admin
 def set_per_minute_rate_limit(service_id):
-
     form = AdminServiceRateLimitForm(rate_limit=current_service.rate_limit)
 
     if form.validate_on_submit():
@@ -1060,10 +1041,7 @@ def set_per_minute_rate_limit(service_id):
 
         return redirect(url_for(".service_settings", service_id=service_id))
 
-    return render_template(
-        "views/service-settings/set-rate-limit.html",
-        form=form,
-    )
+    return render_template("views/service-settings/set-rate-limit.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/services/<uuid:service_id>/service-settings/set-<notification_type>-branding", methods=["GET", "POST"])
@@ -1209,7 +1187,6 @@ def service_preview_branding(service_id, notification_type):
 @main.route("/services/<uuid:service_id>/service-settings/link-service-to-organisation", methods=["GET", "POST"])
 @user_is_platform_admin
 def link_service_to_organisation(service_id):
-
     all_organisations = organisations_client.get_organisations()
 
     form = AdminSetOrganisationForm(
@@ -1247,7 +1224,11 @@ def add_data_retention(service_id):
             service_id, form.notification_type.data, form.days_of_retention.data
         )
         return redirect(url_for(".data_retention", service_id=service_id))
-    return render_template("views/service-settings/data-retention/add.html", form=form)
+    return render_template(
+        "views/service-settings/data-retention/add.html",
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/services/<uuid:service_id>/data-retention/<uuid:data_retention_id>/edit", methods=["GET", "POST"])
@@ -1263,6 +1244,7 @@ def edit_data_retention(service_id, data_retention_id):
         form=form,
         data_retention_id=data_retention_id,
         notification_type=data_retention_item["notification_type"],
+        error_summary_enabled=True,
     )
 
 
@@ -1272,7 +1254,6 @@ def edit_service_notes(service_id):
     form = AdminNotesForm(notes=current_service.notes)
 
     if form.validate_on_submit():
-
         if form.notes.data == current_service.notes:
             return redirect(url_for(".service_settings", service_id=service_id))
 
@@ -1323,3 +1304,12 @@ def check_contact_details_type(contact_details):
         return "email_address"
     else:
         return "phone_number"
+
+
+def handle_reply_to_email_address_http_error(raised_exception, form):
+    if raised_exception.status_code == 409:
+        error_message = raised_exception.message
+        form.email_address.errors.append(error_message)
+
+    else:
+        raise raised_exception

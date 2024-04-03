@@ -1,7 +1,5 @@
 {% extends "withnav_template.html" %}
-{% from "components/table.html" import mapping_table, row, settings_row, text_field, optional_text_field, edit_field, field, boolean_field with context %}
-{% from "service_navigation.html" import broadcast_service_name_tag %}
-
+{% from "components/table.html" import mapping_table, row, settings_row, text_field, callable_text_field, optional_text_field, edit_field, field, boolean_field with context %}
 {% block service_page_title %}
   Settings
 {% endblock %}
@@ -46,75 +44,84 @@
             )
           }}
         {% endcall %}
-      {% endcall %}
-
-      {% if not current_service.has_permission('broadcast') %}
-
-        {% call mapping_table(
-          caption='Email settings',
-          field_headings=['Label', 'Value', 'Action'],
-          field_headings_visible=False,
-          caption_visible=True
-        ) %}
-
           {% call row() %}
-            {{ text_field('Send emails') }}
-            {{ boolean_field('email' in current_service.permissions) }}
+            {{ text_field('Data retention period') }}
+            {% if current_service.get_consistent_data_retention_period() %}
+              {{ text_field(current_service.get_consistent_data_retention_period()|string + ' days') }}
+            {% else %}
+              {% call field() %}
+                  <ul>
+                    {% for channel in ['email', 'sms', 'letter'] %}
+                    <li>{{ channel|format_notification_type }} – {{ current_service.get_days_of_retention(channel) }} days</li>
+                    {% endfor %}
+                  </ul>
+              {% endcall %}
+            {% endif %}
             {{ edit_field(
               'Change',
-              url_for(
-                '.service_set_channel',
-                channel='email',
-                service_id=current_service.id
-              ),
+              url_for('main.service_data_retention', service_id=current_service.id),
               permissions=['manage_service'],
-              suffix='your settings for sending emails',
-            )}}
-          {% endcall %}
-
-          {% call settings_row(if_has_permission='email') %}
-            {{ text_field('Reply-to email addresses') }}
-            {% call field(status='default' if current_service.count_email_reply_to_addresses == 0 else '') %}
-              {{ current_service.default_email_reply_to_address or 'Not set' }}
-              {% if current_service.count_email_reply_to_addresses > 1 %}
-                <div class="hint">
-                  {{ '…and %d more' | format(current_service.count_email_reply_to_addresses - 1) }}
-                </div>
-              {% endif %}
-            {% endcall %}
-            {{ edit_field(
-                'Manage',
-                url_for('main.service_email_reply_to', service_id=current_service.id),
-                permissions=['manage_service','manage_api_keys'],
-                suffix='reply-to email addresses',
+              suffix='data retention'
               )
             }}
           {% endcall %}
+      {% endcall %}
 
-          {% set email_options_url = url_for('main.email_branding_options', service_id=current_service.id) %}
+      {% call mapping_table(
+        caption='Email settings',
+        field_headings=['Label', 'Value', 'Action'],
+        field_headings_visible=False,
+        caption_visible=True
+      ) %}
 
-          {% call settings_row(if_has_permission='email') %}
-            {{ text_field('Email branding') }}
-            {{ text_field(current_service.email_branding.name) }}
-            {{ edit_field(
+        {% call row() %}
+          {{ text_field('Send emails') }}
+          {{ boolean_field('email' in current_service.permissions) }}
+          {{ edit_field(
+            'Change',
+            url_for(
+              '.service_set_channel',
+              channel='email',
+              service_id=current_service.id
+            ),
+            permissions=['manage_service'],
+            suffix='your settings for sending emails',
+          )}}
+        {% endcall %}
+
+        {% call settings_row(if_has_permission='email') %}
+          {{ text_field('Email sender name') }}
+          {% call callable_text_field() %}
+            {% with email_sender_name = current_service.custom_email_sender_name or current_service.name %}
+              {% include "partials/preview-email-sender-name.html" %}
+            {% endwith %}
+          {% endcall %}
+          {{ edit_field(
               'Change',
-              email_options_url,
+              url_for('main.service_email_sender_change', service_id=current_service.id),
               permissions=['manage_service'],
-              suffix='email branding',
-            )}}
-          {% endcall %}
+              suffix='email sender name',
+            )
+          }}
+        {% endcall %}
 
-          {% call settings_row(if_has_permission='email') %}
-            {{ text_field('Send files by email') }}
-            {{ optional_text_field(current_service.contact_link, default="Not set up", truncate=true) }}
-            {{ edit_field(
+        {% call settings_row(if_has_permission='email') %}
+          {{ text_field('Reply-to email addresses') }}
+          {% call field(status='default' if current_service.count_email_reply_to_addresses == 0 else '') %}
+            {{ current_service.default_email_reply_to_address or 'Not set' }}
+            {% if current_service.count_email_reply_to_addresses > 1 %}
+              <div class="hint">
+                {{ '…and %d more' | format(current_service.count_email_reply_to_addresses - 1) }}
+              </div>
+            {% endif %}
+          {% endcall %}
+          {{ edit_field(
               'Manage',
-              url_for('main.send_files_by_email_contact_details', service_id=current_service.id),
-              permissions=['manage_service'],
-              suffix='sending files by email',
-            )}}
-          {% endcall %}
-
+              url_for('main.service_email_reply_to', service_id=current_service.id),
+              permissions=['manage_service','manage_api_keys'],
+              suffix='reply-to email addresses',
+            )
+          }}
         {% endcall %}
 
         {% call mapping_table(
@@ -194,6 +201,15 @@
             }}
           {% endcall %}#}
 
+        {% call settings_row(if_has_permission='email') %}
+          {{ text_field('Email branding') }}
+          {{ text_field(current_service.email_branding.name) }}
+          {{ edit_field(
+            'Change',
+            email_options_url,
+            permissions=['manage_service'],
+            suffix='email branding',
+          )}}
         {% endcall %}
 
         {#{% call mapping_table(
@@ -268,11 +284,10 @@
       {% endif %}
     </div>
 
-    {% if not current_service.has_permission('broadcast')%}
-      {% if current_service.trial_mode %}
-        <h2 class="heading-medium top-gutter-0">Your service is in trial mode</h2>
+    {% if current_service.trial_mode %}
+      <h2 class="heading-medium top-gutter-0">Your service is in trial mode</h2>
 
-          <p class="govuk-body">You can only:</p>
+        <p class="govuk-body">You can only:</p>
 
           <ul class="govuk-list govuk-list--bullet">
             <li>send messages to yourself and other people in your team</li>
@@ -300,13 +315,33 @@
           <li>{{ current_service.sms_message_limit | message_count('sms') }} per day</li>
           {#<li>{{ current_service.letter_message_limit | message_count('letter') }} per day</li>#}
         </ul>
-        <p class="govuk-body">
-          If you need to discuss these limits,
-          <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">contact us</a>.
-        </p>
 
-      {% endif %}
+      <p class="govuk-body">
+        {% if current_user.has_permissions('manage_service') %}
+          To remove these restrictions, you can send us a
+          <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.request_to_go_live', service_id=current_service.id) }}">request to go live</a>.
+        {% else %}
+          Your service manager can ask to have these restrictions removed.
+        {% endif %}
+      </p>
+
+    {% else %}
+      <h2 class="heading-medium top-gutter-0">Your service is live</h2>
+      <p class="govuk-body">
+        You can send up to:
+      </p>
+      <ul class="govuk-list govuk-list--bullet">
+        <li>{{ current_service.email_message_limit | message_count('email') }} per day</li>
+        <li>{{ current_service.sms_message_limit | message_count('sms') }} per day</li>
+        <li>{{ current_service.letter_message_limit | message_count('letter') }} per day</li>
+      </ul>
+      <p class="govuk-body">
+        If you need to discuss these limits,
+        <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.support') }}">contact us</a>.
+      </p>
+
     {% endif %}
+
 
     {% if current_user.platform_admin %}
 
@@ -321,11 +356,19 @@
           caption_visible=False
         ) %}
 
-          {% if not current_service.has_permission('broadcast') %}
           {% call row() %}
             {{ text_field('Live')}}
             {% if current_service.trial_mode and not current_service.organisation_id %}
-              {{ text_field('No (organisation must be set first)') }}
+              {% call field() %}
+                No
+                <div class="hint">Organisation must be set first</div>
+              {% endcall %}
+              {{ text_field('') }}
+            {% elif current_service.trial_mode and current_service.organisation.agreement_signed is false %}
+              {% call field(wrap=True) %}
+                No
+                <div class="hint">Organisation must accept the data sharing and financial agreement first</div>
+              {% endcall %}
               {{ text_field('') }}
             {% else %}
               {{ boolean_field(not current_service.trial_mode) }}
@@ -343,7 +386,6 @@
             {{ optional_text_field(current_service.billing_details, default="None", wrap=True) }}
             {{ edit_field('Change', url_for('main.edit_service_billing_details', service_id=current_service.id), suffix='billing details for service') }}
           {% endcall %}
-          {% endif %}
 
           {% call row() %}
             {{ text_field('Notes')}}
@@ -351,7 +393,6 @@
             {{ edit_field('Change', url_for('main.edit_service_notes', service_id=current_service.id), suffix='the notes for the service') }}
           {% endcall %}
 
-          {% if not current_service.has_permission('broadcast') %}
           {% call row() %}
             {{ text_field('Organisation')}}
             {% call field() %}
@@ -415,7 +456,6 @@
             {% endcall %}
             {{ edit_field('Change', url_for('main.data_retention', service_id=current_service.id), suffix='data retention') }}
           {% endcall %}
-          {% endif %}
 
           {% for permission in service_permissions %}
             {% if not service_permissions[permission].requires or current_service.has_permission(service_permissions[permission].requires) %}
@@ -435,50 +475,33 @@
             {% endif %}
           {% endfor %}
 
-          {% call row() %}
-            {{ text_field('Emergency alerts')}}
-            {% call field(wrap=True) %}
-              {% if not current_service.broadcast_channel %}
-              Off
-              {% else %}
-              {{ broadcast_service_name_tag(current_service.trial_mode, current_service.broadcast_channel, current_service.allowed_broadcast_provider, left_margin=False) }}
-              {% endif %}
-            {% endcall %}
-            {{ edit_field(
-                'Change',
-                url_for('main.service_set_broadcast_channel', service_id=current_service.id),
-                suffix='your settings for emergency alerts'
-              )
-            }}
-          {% endcall %}
-
         {% endcall %}
 
       </div>
 
     {% endif %}
 
-      <p class="top-gutter-1-2">
-        {% if current_service.active and (current_service.trial_mode or current_user.platform_admin) %}
-        <span class="page-footer-link page-footer-delete-link-without-button">
+    <p class="top-gutter-1-2">
+      {% if current_service.active and (current_service.trial_mode or current_user.platform_admin) %}
+      <span class="page-footer-link page-footer-delete-link-without-button">
+        <a
+          class="govuk-link govuk-link--destructive"
+          href="{{ url_for('main.archive_service', service_id=current_service.id) }}"
+        >
+          Delete this service
+        </a>
+      </span>
+      {% endif %}
+      {% if current_user.platform_admin %}
+        <span class="page-footer-link">
           <a
-            class="govuk-link govuk-link--destructive"
-            href="{{ url_for('main.archive_service', service_id=current_service.id) }}"
+            class="govuk-link govuk-link--no-visited-state"
+            href="{{ url_for('main.history', service_id=current_service.id) }}"
           >
-            Delete this service
+            Service history
           </a>
         </span>
-        {% endif %}
-        {% if current_user.platform_admin %}
-          <span class="page-footer-link">
-            <a
-              class="govuk-link govuk-link--no-visited-state"
-              href="{{ url_for('main.history', service_id=current_service.id) }}"
-            >
-              Service history
-            </a>
-          </span>
-        {% endif %}
-      </p>
+      {% endif %}
+    </p>
 {% endblock %}
-}
+

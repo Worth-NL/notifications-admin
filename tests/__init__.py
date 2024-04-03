@@ -14,7 +14,7 @@ from app.models.user import User
 
 
 class TestClient(FlaskClient):
-    def login(self, user, mocker=None, service=None):
+    def login(self, user, mocker=None, service=None, request=None):
         # Skipping authentication here and just log them in
         model_user = User(user)
         with self.session_transaction() as session:
@@ -25,7 +25,13 @@ class TestClient(FlaskClient):
         if mocker and service:
             with self.session_transaction() as session:
                 session["service_id"] = service["id"]
-            mocker.patch("app.service_api_client.get_service", return_value={"data": service})
+
+        # Add the service to the services available via the mock on `service_api_client.get_service` so that requests
+        # for it will return the correct JSON.
+        if request and service:
+            request.getfixturevalue("mock_get_service")  # make sure fixture is loaded
+            mocked_get_service_data = request.getfixturevalue("mocked_get_service_data")
+            mocked_get_service_data[service["id"]] = service
 
         with patch("app.events_api_client.create_event"):
             login_user(model_user)
@@ -160,8 +166,9 @@ def service_json(
     sms_message_limit=1000,
     active=True,
     restricted=True,
-    email_from=None,
     reply_to_email_address=None,
+    custom_email_sender_name=None,
+    email_sender_local_part="test.service",
     sms_sender="GOVUK",
     email_branding=None,
     branding="govuk",
@@ -180,8 +187,6 @@ def service_json(
     billing_contact_names=None,
     billing_reference=None,
     purchase_order_number=None,
-    broadcast_channel=None,
-    allowed_broadcast_provider=None,
     has_active_go_live_request=False,
     go_live_user=None,
 ):
@@ -203,8 +208,9 @@ def service_json(
         "rate_limit": rate_limit,
         "active": active,
         "restricted": restricted,
-        "email_from": email_from,
         "reply_to_email_address": reply_to_email_address,
+        "custom_email_sender_name": custom_email_sender_name,
+        "email_sender_local_part": email_sender_local_part,
         "sms_sender": sms_sender,
         "organisation_type": organisation_type,
         "email_branding": email_branding,
@@ -228,8 +234,6 @@ def service_json(
         "billing_contact_names": billing_contact_names,
         "billing_reference": billing_reference,
         "purchase_order_number": purchase_order_number,
-        "broadcast_channel": broadcast_channel,
-        "allowed_broadcast_provider": allowed_broadcast_provider,
         "has_active_go_live_request": has_active_go_live_request,
         "go_live_user": go_live_user,
     }
@@ -266,6 +270,10 @@ def organisation_json(
         users = []
     if services is None:
         services = []
+    if permissions is None:
+        permissions = []
+    if can_ask_to_join_a_service:
+        permissions.extend(["can_ask_to_join_a_service"])
     return {
         "id": id_,
         "name": "Test Organisation" if name is False else name,
@@ -314,6 +322,10 @@ def template_json(
     postage=None,
     folder=None,
     letter_attachment=None,
+    letter_languages=None,
+    letter_welsh_subject=None,
+    letter_welsh_content=None,
+    updated_at=None,
 ):
     template = {
         "id": id_,
@@ -322,7 +334,7 @@ def template_json(
         "content": content,
         "service": service_id,
         "version": version,
-        "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"),
+        "updated_at": updated_at or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"),
         "archived": archived,
         "process_type": "normal",
         "service_letter_contact": service_letter_contact,
@@ -332,6 +344,9 @@ def template_json(
         "folder": folder,
         "postage": postage,
         "letter_attachment": letter_attachment,
+        "letter_languages": letter_languages or "english" if type_ == "letter" else None,
+        "letter_welsh_subject": letter_welsh_subject,
+        "letter_welsh_content": letter_welsh_content,
     }
     if content is None:
         template["content"] = "template content"
@@ -689,55 +704,6 @@ def assert_url_expected(actual, expected):
 
 def find_element_by_tag_and_partial_text(page, tag, string):
     return [e for e in page.select(tag) if string in e.text][0]
-
-
-def broadcast_message_json(
-    *,
-    id_=None,
-    service_id=None,
-    template_id=None,
-    status="draft",
-    created_by_id=None,
-    starts_at=None,
-    finishes_at=None,
-    cancelled_at=None,
-    updated_at=None,
-    approved_by_id=None,
-    cancelled_by_id=None,
-    areas=None,
-    area_ids=None,
-    simple_polygons=None,
-    content=None,
-    reference=None,
-    cap_event=None,
-    template_name="Example template",
-):
-    return {
-        "id": id_,
-        "service_id": service_id,
-        "template_id": template_id,
-        "template_version": 123,
-        "template_name": template_name,
-        "content": content or "This is a test",
-        "reference": reference,
-        "cap_event": cap_event,
-        "personalisation": {},
-        "areas": areas
-        or {
-            "ids": area_ids or ["ctry19-E92000001", "ctry19-S92000003"],
-            "simple_polygons": simple_polygons or [],
-        },
-        "status": status,
-        "starts_at": starts_at,
-        "finishes_at": finishes_at,
-        "created_at": None,
-        "approved_at": None,
-        "cancelled_at": cancelled_at,
-        "updated_at": updated_at,
-        "created_by_id": created_by_id,
-        "approved_by_id": approved_by_id,
-        "cancelled_by_id": cancelled_by_id,
-    }
 
 
 def contact_list_json(

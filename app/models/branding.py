@@ -2,9 +2,9 @@ from pathlib import Path
 
 from flask import current_app
 from flask_login import current_user
+from notifications_utils.safe_string import make_string_safe
 
 from app import asset_fingerprinter
-from app.formatters import email_safe
 from app.models import JSONModel, ModelList
 from app.notify_client.email_branding_client import email_branding_client
 from app.notify_client.letter_branding_client import letter_branding_client
@@ -24,7 +24,7 @@ class Branding(JSONModel):
         return cls({key: None for key in cls.ALLOWED_PROPERTIES} | kwargs)
 
     def name_like(self, name):
-        return email_safe(name, whitespace="") == email_safe(self.name, whitespace="")
+        return make_string_safe(name, whitespace="") == make_string_safe(self.name, whitespace="")
 
     def serialize(self):
         return self._dict.copy()
@@ -240,12 +240,12 @@ GOVERNMENT_IDENTITY_SYSTEM_COLOURS = {
     "Attorney General’s Office": "#9f1888",
     "Cabinet Office": "#005abb",
     "Civil Service": "#af292e",
+    "Department for Business & Trade": "#cf102d",
     "Department for Business Innovation & Skills": "#003479",
     "Department for Digital, Culture, Media & Sport": "#d40072",
     "Department for Education": "#003a69",
     "Department for Environment Food & Rural Affairs": "#00a33b",
     "Department for International Development": "#002878",
-    "Department for International Trade": "#cf102d",
     "Department for Levelling Up, Housing & Communities": "#012169",
     "Department for Transport": "#006c56",
     "Department for Work & Pensions": "#00beb7",

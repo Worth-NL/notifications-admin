@@ -4,7 +4,6 @@ from flask import request, url_for
 
 
 class Navigation:
-
     mapping = {}
     selected_class = "selected"
 
@@ -33,7 +32,6 @@ class Navigation:
 
 
 class HeaderNavigation(Navigation):
-
     mapping = {
         # "support": {
         #     "bat_phone",
@@ -63,14 +61,16 @@ class HeaderNavigation(Navigation):
             "guidance_api_documentation",
             # "guidance_attach_pages",
             "guidance_bulk_sending",
-            "guidance_message_status",
+            "guidance_data_retention_period",
             "guidance_delivery_times",
             "guidance_email_branding",
             "guidance_formatting",
             # "guidance_letter_branding",
             "guidance_links_and_URLs",
+            "guidance_message_status",
             "guidance_optional_content",
             "guidance_personalisation",
+            "guidance_qr_codes",
             "guidance_receive_text_messages",
             "guidance_reply_to_email_address",
             "guidance_schedule_messages",
@@ -178,17 +178,16 @@ class HeaderNavigation(Navigation):
             )
         else:
             nav_items.append(
-                {"href": url_for("main.sign_in"), "text": "Sign in", "active": self.is_selected("sign-in")}
+                {"href": url_for("main.sign_in"), "text": "Sign in",
+                 "active": self.is_selected("sign-in")}
             )
 
         return nav_items
 
 
 class MainNavigation(Navigation):
-
     mapping = {
         "dashboard": {
-            "broadcast_tour",
             "conversation",
             "inbox",
             "monthly",
@@ -198,20 +197,6 @@ class MainNavigation(Navigation):
             "template_usage",
             "view_notification",
             "view_notifications",
-        },
-        "current-broadcasts": {
-            "broadcast_dashboard",
-            "view_current_broadcast",
-            "new_broadcast",
-            "write_new_broadcast",
-        },
-        "previous-broadcasts": {
-            "broadcast_dashboard_previous",
-            "view_previous_broadcast",
-        },
-        "rejected-broadcasts": {
-            "broadcast_dashboard_rejected",
-            "view_rejected_broadcast",
         },
         "templates": {
             "action_blocked",
@@ -228,6 +213,8 @@ class MainNavigation(Navigation):
             "edit_service_template",
             "edit_template_postage",
             "letter_template_attach_pages",
+            "letter_template_change_language",
+            "letter_template_confirm_remove_welsh",
             "manage_template_folder",
             "send_messages",
             "send_one_off",
@@ -310,6 +297,7 @@ class MainNavigation(Navigation):
             "service_edit_letter_contact",
             "service_edit_sms_sender",
             "service_email_reply_to",
+            "service_email_sender_change",
             "service_letter_contact_details",
             "service_make_blank_default_letter_contact",
             "service_name_change",
@@ -320,10 +308,7 @@ class MainNavigation(Navigation):
             "service_set_auth_type",
             "service_set_channel",
             "send_files_by_email_contact_details",
-            "service_confirm_broadcast_account_type",
             "service_set_branding",
-            "service_set_broadcast_channel",
-            "service_set_broadcast_network",
             "service_set_inbound_number",
             "service_set_international_letters",
             "service_set_international_sms",
@@ -351,19 +336,16 @@ class MainNavigation(Navigation):
             "old_guest_list",
         },
         "make-service-live": {
-            "make_service_live",
+            "org_member_make_service_live_start",
+            "org_member_make_service_live_service_name",
+            "org_member_make_service_live_check_unique",
+            "org_member_make_service_live_contact_user",
         },
     }
 
 
 class CaseworkNavigation(Navigation):
-
     mapping = {
-        "dashboard": {
-            "broadcast_tour",
-            "broadcast_dashboard",
-            "broadcast_dashboard_previous",
-        },
         "send-one-off": {
             "choose_from_contact_list",
             "choose_template",
@@ -393,7 +375,6 @@ class CaseworkNavigation(Navigation):
 
 
 class OrgNavigation(Navigation):
-
     mapping = {
         "dashboard": {
             "organisation_dashboard",
@@ -426,5 +407,64 @@ class OrgNavigation(Navigation):
         },
         "billing": {
             "organisation_billing",
+        },
+    }
+
+
+class PlatformAdminNavigation(Navigation):
+    mapping = {
+        "search": {
+            "platform_admin_search",
+        },
+        "summary": {
+            "platform_admin",
+        },
+        "live-services": {
+            "live_services",
+        },
+        "trial-mode-services": {
+            "trial_services",
+        },
+        "organisations": {
+            "organisations",
+        },
+        "providers": {
+            "view_providers",
+            "edit_sms_provider_ratio",
+        },
+        "reports": {
+            "platform_admin_reports",
+            "notifications_sent_by_service",
+            "get_billing_report",
+            "get_dvla_billing_report",
+            "get_volumes_by_service",
+            "get_daily_volumes",
+            "get_daily_sms_provider_volumes",
+        },
+        "email-branding": {
+            "email_branding",
+            "platform_admin_view_email_branding",
+            "platform_admin_update_email_branding",
+            "platform_admin_create_email_branding",
+            "create_email_branding_government_identity_logo",
+            "create_email_branding_government_identity_colour",
+        },
+        "letter-branding": {
+            "letter_branding",
+            "platform_admin_view_letter_branding",
+            "create_letter_branding",
+            "update_letter_branding",
+        },
+        "inbound-sms-numbers": {
+            "inbound_sms_admin",
+        },
+        "email-complaints": {
+            "platform_admin_list_complaints",
+        },
+        "returned-letters": {
+            "platform_admin_returned_letters",
+        },
+        "clear-cache": {
+            "clear_cache",
         },
     }

@@ -111,7 +111,7 @@ def test_process_register_returns_200_when_mobile_number_is_invalid(
         _expected_status=200,
     )
 
-    assert "Must not contain letters or symbols" in page.text
+    assert "Mobile numbers can only include: 0 1 2 3 4 5 6 7 8 9 ( ) + -" in page.text
 
 
 def test_should_return_200_when_email_is_not_gov_uk(
@@ -254,7 +254,6 @@ def test_shows_hidden_email_address_on_registration_page_from_invite(
     sample_invite,
     mock_get_invited_user_by_id,
 ):
-
     with client_request.session_transaction() as session:
         session["invited_user_id"] = sample_invite
 
@@ -482,7 +481,7 @@ def test_cannot_register_with_sms_auth_and_missing_mobile_number(
     )
 
     err = page.select_one(".govuk-error-message")
-    assert err.text.strip() == "Error: Cannot be empty"
+    assert err.text.strip() == "Error: Enter a mobile number"
     assert err.attrs["data-error-label"] == "mobile_number"
 
 

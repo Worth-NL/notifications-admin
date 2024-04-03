@@ -12,7 +12,7 @@ from app.models.feedback import (
     PROBLEM_TICKET_TYPE,
     QUESTION_TICKET_TYPE,
 )
-from tests.conftest import SERVICE_ONE_ID, normalize_spaces
+from tests.conftest import SERVICE_ONE_ID, normalize_spaces, set_config
 
 
 def no_redirect():
@@ -120,15 +120,7 @@ def test_get_feedback_page(client_request, ticket_type, expected_status_code):
 
 
 @freeze_time("2016-12-12 12:00:00.000000")
-@pytest.mark.parametrize(
-    "ticket_type, zendesk_ticket_type",
-    [
-        (PROBLEM_TICKET_TYPE, "incident"),
-        (QUESTION_TICKET_TYPE, "question"),
-        (GENERAL_TICKET_TYPE, "question"),
-    ],
-)
-def test_passed_non_logged_in_user_details_through_flow(client_request, mocker, ticket_type, zendesk_ticket_type):
+def test_passed_non_logged_in_user_details_through_flow(client_request, mocker):
     client_request.logout()
     mock_create_ticket = mocker.spy(NotifySupportTicket, "__init__")
     mock_send_ticket_to_zendesk = mocker.patch(
@@ -140,20 +132,19 @@ def test_passed_non_logged_in_user_details_through_flow(client_request, mocker, 
 
     client_request.post(
         "main.feedback",
-        ticket_type=ticket_type,
+        ticket_type=GENERAL_TICKET_TYPE,
         _data=data,
         _expected_redirect=url_for(
             "main.thanks",
             out_of_hours_emergency=False,
-            email_address_provided=True,
         ),
     )
 
     mock_create_ticket.assert_called_once_with(
         ANY,
-        subject="Notify feedback",
+        subject="[env: test] General Notify Support",
         message="blah\n",
-        ticket_type=zendesk_ticket_type,
+        ticket_type="question",
         p1=False,
         user_name="Anne Example",
         user_email="anne@example.com",
@@ -170,11 +161,10 @@ def test_passed_non_logged_in_user_details_through_flow(client_request, mocker, 
     "data", [{"feedback": "blah"}, {"feedback": "blah", "name": "Ignored", "email_address": "ignored@email.com"}]
 )
 @pytest.mark.parametrize(
-    "ticket_type, zendesk_ticket_type",
+    "ticket_type, zendesk_ticket_type, expected_subject",
     [
-        (PROBLEM_TICKET_TYPE, "incident"),
-        (QUESTION_TICKET_TYPE, "question"),
-        (GENERAL_TICKET_TYPE, "question"),
+        (PROBLEM_TICKET_TYPE, "incident", "[env: test] Reported Problem"),
+        (QUESTION_TICKET_TYPE, "question", "[env: test] Question/Feedback"),
     ],
 )
 def test_passes_user_details_through_flow(
@@ -183,6 +173,7 @@ def test_passes_user_details_through_flow(
     mocker,
     ticket_type,
     zendesk_ticket_type,
+    expected_subject,
     data,
 ):
     mock_create_ticket = mocker.spy(NotifySupportTicket, "__init__")
@@ -198,13 +189,12 @@ def test_passes_user_details_through_flow(
         _expected_status=302,
         _expected_redirect=url_for(
             "main.thanks",
-            email_address_provided=True,
             out_of_hours_emergency=False,
         ),
     )
     mock_create_ticket.assert_called_once_with(
         ANY,
-        subject="Notify feedback",
+        subject=expected_subject,
         message=ANY,
         ticket_type=zendesk_ticket_type,
         p1=False,
@@ -231,6 +221,46 @@ def test_passes_user_details_through_flow(
     mock_send_ticket_to_zendesk.assert_called_once()
 
 
+@pytest.mark.freeze_time("2016-12-12 12:00:00.000000")
+def test_zendesk_subject_doesnt_show_env_flag_on_prod(
+    notify_admin,
+    client_request,
+    mock_get_non_empty_organisations_and_services_for_user,
+    mocker,
+):
+    mock_create_ticket = mocker.spy(NotifySupportTicket, "__init__")
+    mocker.patch(
+        "app.main.views.feedback.zendesk_client.send_ticket_to_zendesk",
+        autospec=True,
+    )
+
+    with set_config(notify_admin, "NOTIFY_ENVIRONMENT", "production"):
+        client_request.post(
+            "main.feedback",
+            ticket_type=GENERAL_TICKET_TYPE,
+            _data={"feedback": "blah"},
+            _expected_status=302,
+            _expected_redirect=url_for(
+                "main.thanks",
+                out_of_hours_emergency=False,
+            ),
+        )
+
+    mock_create_ticket.assert_called_once_with(
+        ANY,
+        subject="General Notify Support",
+        message=ANY,
+        ticket_type="question",
+        p1=False,
+        user_name="Test User",
+        user_email="test@user.gov.uk",
+        notify_ticket_type=None,
+        org_id=None,
+        org_type="central",
+        service_id=SERVICE_ONE_ID,
+    )
+
+
 @freeze_time("2016-12-12 12:00:00.000000")
 @pytest.mark.parametrize(
     "data",
@@ -255,7 +285,7 @@ def test_email_address_required_for_problems_and_questions(
     mocker.patch("app.main.views.feedback.zendesk_client")
     client_request.logout()
     page = client_request.post("main.feedback", ticket_type=ticket_type, _data=data, _expected_status=200)
-    assert normalize_spaces(page.select_one(".govuk-error-message").text) == "Error: Cannot be empty"
+    assert normalize_spaces(page.select_one(".govuk-error-message").text) == "Error: Enter your email address"
 
 
 @freeze_time("2016-12-12 12:00:00.000000")
@@ -276,7 +306,10 @@ def test_email_address_must_be_valid_if_provided_to_support_form(
         _expected_status=200,
     )
 
-    assert normalize_spaces(page.select_one(".govuk-error-message").text) == "Error: Enter a valid email address"
+    assert (
+        normalize_spaces(page.select_one(".govuk-error-message").text)
+        == "Error: Enter your email address in the correct format, like name@example.gov.uk"
+    )
 
 
 @pytest.mark.parametrize(
@@ -321,7 +354,6 @@ def test_urgency(
         _expected_redirect=url_for(
             "main.thanks",
             out_of_hours_emergency=is_out_of_hours_emergency,
-            email_address_provided=True,
         ),
     )
     assert mock_ticket.call_args[1]["p1"] == is_out_of_hours_emergency
@@ -359,7 +391,8 @@ ids, params = zip(
                 partial(url_for, "main.triage", ticket_type=PROBLEM_TICKET_TYPE),
             ),
         ),
-    ]
+    ],
+    strict=True
 )
 
 
@@ -418,7 +451,6 @@ def test_doesnt_lose_message_if_post_across_closing(
     client_request,
     mocker,
 ):
-
     mocker.patch("app.models.user.User.live_services", return_value=True)
     mocker.patch("app.main.views.feedback.in_business_hours", return_value=False)
 
@@ -581,7 +613,6 @@ def test_should_be_shown_the_bat_email(
     expected_status_code_when_logged_in,
     expected_redirect_when_logged_in,
 ):
-
     mocker.patch("app.main.views.feedback.in_business_hours", return_value=is_in_business_hours)
 
     feedback_page = url_for("main.feedback", ticket_type=PROBLEM_TICKET_TYPE, severe=severe)
@@ -639,7 +670,6 @@ def test_should_be_shown_the_bat_email_for_general_questions(
     expected_status_code_when_logged_in,
     expected_redirect_when_logged_in,
 ):
-
     mocker.patch("app.main.views.feedback.in_business_hours", return_value=False)
 
     feedback_page = url_for("main.feedback", ticket_type=GENERAL_TICKET_TYPE, severe=severe)
@@ -688,43 +718,27 @@ def test_bat_email_page(
 
 
 @pytest.mark.parametrize(
-    "out_of_hours_emergency, email_address_provided, out_of_hours, message",
+    "out_of_hours_emergency, out_of_hours, message",
     (
         # Out of hours emergencies trump everything else
         (
             True,
             True,
-            True,
-            "We’ll reply in the next 30 minutes and update you every hour until we fix the problem.",
+            "We’ll reply in the next 30 minutes.",
         ),
         (
             True,
-            False,
             False,  # Not a real scenario
-            "We’ll reply in the next 30 minutes and update you every hour until we fix the problem.",
-        ),
-        # Anonymous tickets don’t promise a reply
-        (
-            False,
-            False,
-            False,
-            "We’ll aim to read your message in the next 30 minutes.",
-        ),
-        (
-            False,
-            False,
-            True,
-            "We’ll read your message when we’re back in the office.",
+            "We’ll reply in the next 30 minutes.",
         ),
         # When we look at your ticket depends on whether we’re in normal
         # business hours
         (
             False,
-            True,
             False,
-            "We’ll aim to read your message in the next 30 minutes and we’ll reply within one working day.",
+            "We’ll reply by the end of the next working day.",
         ),
-        (False, True, True, "We’ll reply within one working day."),
+        (False, True, "We’ll reply by the end of the next working day."),
     ),
 )
 def test_thanks(
@@ -733,7 +747,6 @@ def test_thanks(
     api_user_active,
     mock_get_user,
     out_of_hours_emergency,
-    email_address_provided,
     out_of_hours,
     message,
 ):
@@ -741,6 +754,5 @@ def test_thanks(
     page = client_request.get(
         "main.thanks",
         out_of_hours_emergency=out_of_hours_emergency,
-        email_address_provided=email_address_provided,
     )
     assert normalize_spaces(page.select_one("main").find("p").text) == message

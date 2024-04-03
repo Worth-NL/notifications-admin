@@ -1,9 +1,21 @@
 from datetime import datetime
+from typing import Optional
 
 from notifications_utils.clients.redis import daily_limit_cache_key
 
+from app.constants import LetterLanguageOptions
 from app.extensions import redis_client
 from app.notify_client import NotifyAdminAPIClient, _attach_current_user, cache
+
+ALLOWED_TEMPLATE_ATTRIBUTES = {
+    "content",
+    "letter_languages",
+    "name",
+    "postage",
+    "subject",
+    "letter_welsh_subject",
+    "letter_welsh_content",
+}
 
 
 class ServiceAPIClient(NotifyAdminAPIClient):
@@ -17,7 +29,6 @@ class ServiceAPIClient(NotifyAdminAPIClient):
         letter_message_limit,
         restricted,
         user_id,
-        email_from,
     ):
         """
         Create a service and return the json.
@@ -31,7 +42,6 @@ class ServiceAPIClient(NotifyAdminAPIClient):
             "letter_message_limit": letter_message_limit,
             "user_id": user_id,
             "restricted": restricted,
-            "email_from": email_from,
         }
         data = _attach_current_user(data)
         return self.post("/service", data)["data"]["id"]
@@ -82,8 +92,8 @@ class ServiceAPIClient(NotifyAdminAPIClient):
             "contact_link",
             "created_by",
             "count_as_live",
+            "custom_email_sender_name",
             "email_branding",
-            "email_from",
             "free_sms_fragment_limit",
             "go_live_at",
             "go_live_user",
@@ -161,7 +171,18 @@ class ServiceAPIClient(NotifyAdminAPIClient):
         return self.delete(endpoint, data)
 
     @cache.delete("service-{service_id}-templates")
-    def create_service_template(self, name, type_, content, service_id, subject=None, parent_folder_id=None):
+    def create_service_template(
+        self,
+        name,
+        type_,
+        content,
+        service_id,
+        subject=None,
+        parent_folder_id=None,
+        letter_languages: Optional[LetterLanguageOptions] = None,
+        letter_welsh_subject: str = None,
+        letter_welsh_content: str = None,
+    ):
         """
         Create a service template.
         """
@@ -176,24 +197,26 @@ class ServiceAPIClient(NotifyAdminAPIClient):
             data.update({"subject": subject})
         if parent_folder_id:
             data.update({"parent_folder_id": parent_folder_id})
+        if letter_languages is not None:
+            data |= {
+                "letter_languages": letter_languages,
+                "letter_welsh_subject": letter_welsh_subject,
+                "letter_welsh_content": letter_welsh_content,
+            }
         data = _attach_current_user(data)
         endpoint = f"/service/{service_id}/template"
         return self.post(endpoint, data)
 
     @cache.delete("service-{service_id}-templates")
     @cache.delete_by_pattern("service-{service_id}-template-{template_id}*")
-    def update_service_template(self, *, service_id, template_id, name=None, content=None, subject=None):
+    def update_service_template(self, service_id, template_id, **kwargs):
         """
         Update a service template.
         """
-        data = {}
-        if content:
-            data["content"] = content
-        if name:
-            data["name"] = name
-        if subject:
-            data["subject"] = subject
-        data = _attach_current_user(data)
+        disallowed_attributes = set(kwargs.keys()) - ALLOWED_TEMPLATE_ATTRIBUTES
+        if disallowed_attributes:
+            raise TypeError(f"Not allowed to update template attributes: {', '.join(disallowed_attributes)}")
+        data = _attach_current_user(kwargs)
         endpoint = f"/service/{service_id}/template/{template_id}"
         return self.post(endpoint, data)
 
@@ -213,11 +236,6 @@ class ServiceAPIClient(NotifyAdminAPIClient):
         }
         data = _attach_current_user(data)
         return self.post(f"/service/{service_id}/template/{template_id}", data)
-
-    @cache.delete("service-{service_id}-templates")
-    @cache.delete_by_pattern("service-{service_id}-template-{template_id}*")
-    def update_service_template_postage(self, service_id, template_id, postage):
-        return self.post(f"/service/{service_id}/template/{template_id}", _attach_current_user({"postage": postage}))
 
     @cache.set("service-{service_id}-template-{template_id}-version-{version}")
     def get_service_template(self, service_id, template_id, version=None):
@@ -448,6 +466,21 @@ class ServiceAPIClient(NotifyAdminAPIClient):
     def get_service_data_retention(self, service_id):
         return self.get(f"/service/{service_id}/data-retention")
 
+    @cache.delete("service-{service_id}-data-retention")
+    def set_service_data_retention(self, service_id, days_of_retention):
+        current_retention = self.get_service_data_retention(service_id)
+
+        for notification_type in ["email", "sms", "letter"]:
+            retention = next(
+                filter(lambda retention: retention["notification_type"] == notification_type, current_retention), None
+            )
+            if retention:
+                self.update_service_data_retention(service_id, retention["id"], days_of_retention=days_of_retention)
+            else:
+                self.create_service_data_retention(
+                    service_id, notification_type=notification_type, days_of_retention=days_of_retention
+                )
+
     @cache.set("service-{service_id}-returned-letters-statistics")
     def get_returned_letter_statistics(self, service_id):
         return self.get(f"service/{service_id}/returned-letter-statistics")
@@ -459,26 +492,6 @@ class ServiceAPIClient(NotifyAdminAPIClient):
     def get_returned_letters(self, service_id, reported_at):
         return self.get(f"service/{service_id}/returned-letters?reported_at={reported_at}")
 
-    @cache.delete("service-{service_id}")
-    def set_service_broadcast_settings(
-        self, service_id, service_mode, broadcast_channel, provider_restriction, cached_service_user_ids
-    ):
-        """
-        service_mode is one of "training" or "live"
-        broadcast channel is one of "operator", "test", "severe", "government"
-        provider_restriction is one of "all", "three", "o2", "vodafone", "ee"
-        """
-        if cached_service_user_ids:
-            redis_client.delete(*map("user-{}".format, cached_service_user_ids))
-
-        data = {
-            "service_mode": service_mode,
-            "broadcast_channel": broadcast_channel,
-            "provider_restriction": provider_restriction,
-        }
-
-        return self.post(f"/service/{service_id}/set-as-broadcast-service", data)
-
     def get_notification_count(self, service_id, notification_type):
         # if cache is not set return 0
         count = redis_client.get(daily_limit_cache_key(service_id, notification_type=notification_type)) or 0
@@ -487,11 +500,19 @@ class ServiceAPIClient(NotifyAdminAPIClient):
     @classmethod
     def parse_edit_service_http_error(cls, http_error):
         """Inspect the HTTPError from a create_service/update_service call and return a human-friendly error message"""
-        if http_error.message.get("email_from"):
-            return "Service name must not include characters from a non-Latin alphabet"
+        if http_error.message.get("normalised_service_name"):
+            return "Service name cannot include characters from a non-Latin alphabet"
 
         elif http_error.message.get("name"):
-            return "This service name is already in use"
+            return "This service name is already in use - enter a unique name"
+
+        return None
+
+    @classmethod
+    def parse_custom_email_sender_name_http_error(cls, http_error):
+        """Inspect the HTTPError from a update_service call and return a human-friendly error message"""
+        if http_error.message.get("email_sender_local_part"):
+            return "Sender name cannot include characters from a non-Latin alphabet"
 
         return None
 

@@ -112,7 +112,9 @@ def test_invite_org_user_errors_when_same_email_as_inviter(
     )
 
     assert mock_invite_org_user.called is False
-    assert "You cannot send an invitation to yourself" in normalize_spaces(page.select_one(".govuk-error-message").text)
+    assert "Enter an email address that is not your own" in normalize_spaces(
+        page.select_one(".govuk-error-message").text
+    )
 
 
 def test_cancel_invited_org_user_cancels_user_invitations(
@@ -289,7 +291,7 @@ def test_registration_from_org_invite_404s_if_user_not_in_session(
     [
         [
             {"name": "Bad Mobile", "mobile_number": "not good", "password": "validPassword!"},
-            "Must not contain letters or symbols",
+            "Mobile numbers can only include: 0 1 2 3 4 5 6 7 8 9 ( ) + -",
         ],
         [
             {"name": "Bad Password", "mobile_number": "+44123412345", "password": "password"},

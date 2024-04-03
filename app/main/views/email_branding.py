@@ -80,7 +80,8 @@ def platform_admin_update_email_branding(branding_id, logo=None):
                 logo_type="email",
             )
             return redirect(
-                url_for(".platform_admin_update_email_branding", branding_id=branding_id, logo_key=temporary_logo_key)
+                url_for(".platform_admin_update_email_branding",
+                        branding_id=branding_id, logo_key=temporary_logo_key)
             )
 
         permanent_logo_key = email_branding.logo
@@ -107,7 +108,8 @@ def platform_admin_update_email_branding(branding_id, logo=None):
             )
         except HTTPError as e:
             if e.status_code == 400 and "name" in e.response.json().get("message", {}):
-                form.name.errors.append(e.response.json()["message"]["name"][0])
+                form.name.errors.append(
+                    e.response.json()["message"]["name"][0])
             else:
                 raise e
 
@@ -121,7 +123,8 @@ def platform_admin_update_email_branding(branding_id, logo=None):
             email_branding=email_branding,
             cdn_url=current_app.config["LOGO_CDN_DOMAIN"],
             logo=logo_key,
-            back_link=url_for("main.platform_admin_view_email_branding", branding_id=email_branding.id),
+            back_link=url_for(
+                "main.platform_admin_view_email_branding", branding_id=email_branding.id),
             error_summary_enabled=True,
         ),
         400 if form.errors else 200,
@@ -251,7 +254,8 @@ def platform_admin_create_email_branding(logo=None):
             )
         except HTTPError as e:
             if e.status_code == 400 and "name" in e.response.json().get("message", {}):
-                form.name.errors.append(e.response.json()["message"]["name"][0])
+                form.name.errors.append(
+                    e.response.json()["message"]["name"][0])
             else:
                 raise e
 

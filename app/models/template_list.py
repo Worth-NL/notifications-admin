@@ -49,7 +49,6 @@ class TemplateList:
         return self.service.all_templates
 
     def _get_templates_and_folders(self, template_type, template_folder_id, ancestors):
-
         for item in self._get_template_folders(
             template_type,
             template_folder_id,
@@ -99,7 +98,6 @@ class TemplateList:
         ]
 
     def _is_folder_visible(self, template_folder_id, template_type):
-
         if template_type == "all":
             return True
 
@@ -270,7 +268,6 @@ class UserTemplateLists:
 
 
 class TemplateListItem:
-
     is_service = False
 
     def __init__(
@@ -284,7 +281,6 @@ class TemplateListItem:
 
 
 class TemplateListTemplate(TemplateListItem):
-
     is_folder = False
 
     def __init__(
@@ -300,16 +296,10 @@ class TemplateListTemplate(TemplateListItem):
 
     @property
     def hint(self):
-        if self.template_type == "broadcast":
-            max_length_in_chars = 40
-            if len(self.content) > (max_length_in_chars + 2):
-                return self.content[:max_length_in_chars].strip() + "…"
-            return self.content
         return format_notification_type(self.template_type) + " template"
 
 
 class TemplateListFolder(TemplateListItem):
-
     is_folder = True
 
     def __init__(
@@ -327,7 +317,6 @@ class TemplateListFolder(TemplateListItem):
 
     @property
     def _hint_parts(self):
-
         if self.number_of_folders == self.number_of_templates == 0:
             yield "Empty"
 

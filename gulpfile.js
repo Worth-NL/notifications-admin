@@ -53,12 +53,6 @@ const copy = {
       return src(paths.govuk_frontend + 'govuk/assets/fonts/**/*')
         .pipe(dest(paths.dist + 'fonts/'));
     },
-  },
-  leaflet: {
-    js: () => {
-      return src(paths.npm + 'leaflet/dist/leaflet.js')
-        .pipe(dest(paths.dist + 'javascripts/'))
-    }
   }
 };
 
@@ -132,6 +126,7 @@ const javascripts = () => {
     paths.src + 'javascripts/updateStatus.js',
     paths.src + 'javascripts/errorBanner.js',
     paths.src + 'javascripts/homepage.js',
+    paths.src + 'javascripts/removeInPresenceOf.js',
     paths.src + 'javascripts/main.js',
   ])
   .pipe(plugins.prettyerror())
@@ -245,7 +240,6 @@ const defaultTask = series(
   clean.everything,
   parallel(
     copy.govuk_frontend.fonts,
-    copy.leaflet.js,
     copy.error_pages,
     images,
     javascripts,

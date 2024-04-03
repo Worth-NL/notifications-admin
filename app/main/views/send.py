@@ -48,7 +48,6 @@ from app.s3_client.s3_csv_client import (
 from app.template_previews import TemplatePreview
 from app.utils import PermanentRedirect, should_skip_template_page, unicode_truncate
 from app.utils.csv import Spreadsheet, get_errors_for_csv
-from app.utils.templates import get_template
 from app.utils.user import user_has_permissions
 
 letter_address_columns = [column.replace("_", " ") for column in address_lines_1_to_7_keys]
@@ -174,10 +173,7 @@ def send_messages(service_id, template_id):
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>.csv", methods=["GET"])
 @user_has_permissions("send_messages", "manage_templates")
 def get_example_csv(service_id, template_id):
-    template = get_template(
-        service_api_client.get_service_template(service_id, template_id)["data"],
-        current_service,
-    )
+    template = current_service.get_template(template_id)
     return (
         Spreadsheet.from_rows(
             [get_spreadsheet_column_headings_from_template(template), get_example_csv_rows(template)]
@@ -385,6 +381,7 @@ def send_one_off_letter_address(service_id, template_id):
         form=form,
         back_link=get_back_link(service_id, template, 0),
         link_to_upload=True,
+        error_summary_enabled=True,
     )
 
 
@@ -464,6 +461,9 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
         template_type=template.template_type,
         allow_international_phone_numbers=current_service.has_permission("international_sms"),
     )
+
+    template.values = template_values
+
     if form.validate_on_submit():
         # if it's the first input (phone/email), we store against `recipient` as well, for easier extraction.
         # Only if it's not a letter.
@@ -473,21 +473,26 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
 
         session["placeholders"][current_placeholder] = form.placeholder_value.data
 
-        if all_placeholders_in_session(placeholders):
-            return get_notification_check_endpoint(service_id, template)
-
-        return redirect(
-            url_for(
-                request.endpoint,
-                service_id=service_id,
-                template_id=template_id,
-                step_index=step_index + 1,
+        template.values[current_placeholder] = form.placeholder_value.data
+        if template.template_type == "letter" and template.has_qr_code_with_too_much_data():
+            form.placeholder_value.errors.append(
+                "Cannot create a usable QR code - the text you entered makes the link too long"
             )
-        )
+
+        else:
+            if all_placeholders_in_session(placeholders):
+                return get_notification_check_endpoint(service_id, template)
+
+            return redirect(
+                url_for(
+                    request.endpoint,
+                    service_id=service_id,
+                    template_id=template_id,
+                    step_index=step_index + 1,
+                )
+            )
 
     back_link = get_back_link(service_id, template, step_index, placeholders)
-
-    template.values = template_values
     template.values[current_placeholder] = None
 
     return render_template(
@@ -502,13 +507,13 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
         skip_link=get_skip_link(step_index, template),
         back_link=back_link,
         link_to_upload=(request.endpoint == "main.send_one_off_step" and step_index == 0),
+        error_summary_enabled=True,
     )
 
 
 @no_cookie.route("/services/<uuid:service_id>/send/<uuid:template_id>/test.<filetype>", methods=["GET"])
 @user_has_permissions("send_messages")
 def send_test_preview(service_id, template_id, filetype):
-
     if filetype not in ("pdf", "png"):
         abort(404)
 
@@ -523,9 +528,12 @@ def send_test_preview(service_id, template_id, filetype):
         ),
     )
 
-    template.values = get_normalised_placeholders_from_session()
-
-    return TemplatePreview.from_utils_template(template, filetype, page=request.args.get("page"))
+    return TemplatePreview.get_preview_for_templated_letter(
+        db_template=template._template,
+        filetype=filetype,
+        values=get_normalised_placeholders_from_session(),
+        page=request.args.get("page"),
+    )
 
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>" "/from-contact-list")
@@ -561,7 +569,6 @@ def send_from_contact_list(service_id, template_id, contact_list_id):
 
 
 def _check_messages(service_id, template_id, upload_id, preview_row):
-
     try:
         # The happy path is that the job doesn’t already exist, so the
         # API will return a 404 and the client will raise HTTPError.
@@ -669,7 +676,6 @@ def _check_messages(service_id, template_id, upload_id, preview_row):
 )
 @user_has_permissions("send_messages", restrict_admin_usage=True)
 def check_messages(service_id, template_id, upload_id, row_index=2):
-
     data = _check_messages(service_id, template_id, upload_id, row_index)
     data["allowed_file_extensions"] = Spreadsheet.ALLOWED_FILE_EXTENSIONS
 
@@ -723,7 +729,9 @@ def check_messages_preview(service_id, template_id, upload_id, filetype, row_ind
         abort(404)
 
     template = _check_messages(service_id, template_id, upload_id, row_index)["template"]
-    return TemplatePreview.from_utils_template(template, filetype, page=page)
+    return TemplatePreview.get_preview_for_templated_letter(
+        db_template=template._template, filetype=filetype, values=template.values, page=page
+    )
 
 
 @no_cookie.route(
@@ -743,13 +751,14 @@ def check_notification_preview(service_id, template_id, filetype):
         service_id,
         template_id,
     )["template"]
-    return TemplatePreview.from_utils_template(template, filetype, page=page)
+    return TemplatePreview.get_preview_for_templated_letter(
+        db_template=template._template, filetype=filetype, values=template.values, page=page
+    )
 
 
 @main.route("/services/<uuid:service_id>/start-job/<uuid:upload_id>", methods=["POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
 def start_job(service_id, upload_id):
-
     job_api_client.create_job(
         upload_id,
         service_id,
@@ -770,7 +779,6 @@ def start_job(service_id, upload_id):
 
 
 def fields_to_fill_in(template, prefill_current_user=False):
-
     if "letter" == template.template_type:
         return letter_address_columns + list(template.placeholders)
 

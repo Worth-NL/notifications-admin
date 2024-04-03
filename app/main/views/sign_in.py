@@ -1,7 +1,7 @@
 from http import HTTPStatus
+from urllib.parse import urlparse, urlunparse
 
 from flask import (
-    Markup,
     abort,
     flash,
     redirect,
@@ -11,6 +11,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
+from markupsafe import Markup
 
 from app import login_manager
 from app.main import main
@@ -34,7 +35,6 @@ def sign_in():  # noqa: C901
     password_reset_url = url_for(".forgot_password", next=request.args.get("next"))
 
     if form.validate_on_submit():
-
         user = User.from_email_address_and_password_or_none(form.email_address.data, form.password.data)
 
         if user:
@@ -89,4 +89,9 @@ def sign_in_again():
     if request.blueprint == JSON_UPDATES_BLUEPRINT_NAME:
         return abort(HTTPStatus.UNAUTHORIZED)
 
-    return redirect(url_for("main.sign_in", next=request.path))
+    return redirect(url_for("main.sign_in", next=_get_next_url(request)))
+
+
+def _get_next_url(request):
+    next_url = urlparse(request.url)
+    return urlunparse(("", "", next_url.path, next_url.params, next_url.query, ""))

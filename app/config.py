@@ -1,13 +1,6 @@
 import json
 import os
 
-if os.environ.get("VCAP_APPLICATION"):
-    # on cloudfoundry, config is a json blob in VCAP_APPLICATION - unpack it, and populate
-    # standard environment variables from it
-    from app.cloudfoundry_config import extract_cloudfoundry_config
-
-    extract_cloudfoundry_config()
-
 
 class Config:
     ADMIN_CLIENT_SECRET = os.environ.get("ADMIN_CLIENT_SECRET")
@@ -85,9 +78,6 @@ class Config:
 
     ASSET_DOMAIN = ""
     ASSET_PATH = "/static/"
-
-    # as defined in api db migration 0331_add_broadcast_org.py
-    BROADCAST_ORGANISATION_ID = "38e4bf69-93b0-445d-acee-53ea53fe02df"
 
     NOTIFY_SERVICE_ID = "d6aa2c68-a2d9-4437-ab19-3ae8eb202553"
 

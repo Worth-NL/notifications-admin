@@ -6,7 +6,7 @@ from requests import RequestException
 
 from app.formatters import normalize_spaces
 from app.s3_client.s3_letter_upload_client import LetterMetadata, LetterNotFoundError
-from tests.conftest import SERVICE_ONE_ID, sample_uuid
+from tests.conftest import SERVICE_ONE_ID, do_mock_get_page_counts_for_letter, sample_uuid
 
 
 def test_get_upload_letter(client_request):
@@ -38,7 +38,7 @@ def test_post_upload_letter_redirects_for_valid_file(
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     antivirus_mock = mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mock_sanitise = mocker.patch(
-        "app.main.views.uploads.sanitise_letter",
+        "app.template_previews.TemplatePreview.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -112,6 +112,7 @@ def test_post_upload_letter_shows_letter_preview_for_valid_file(
     fake_uuid,
 ):
     letter_template = {
+        "service": SERVICE_ONE_ID,
         "template_type": "letter",
         "reply_to_text": "",
         "postage": "second",
@@ -123,7 +124,7 @@ def test_post_upload_letter_shows_letter_preview_for_valid_file(
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mocker.patch(
-        "app.main.views.uploads.sanitise_letter",
+        "app.template_previews.TemplatePreview.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -132,6 +133,7 @@ def test_post_upload_letter_shows_letter_preview_for_valid_file(
     mocker.patch("app.main.views.uploads.upload_letter_to_s3")
     mocker.patch("app.main.views.uploads.backup_original_letter_to_s3")
     mocker.patch("app.main.views.uploads.pdf_page_count", return_value=3)
+    do_mock_get_page_counts_for_letter(mocker, count=3)
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
         return_value=LetterMetadata(
@@ -179,6 +181,7 @@ def test_upload_international_letter_shows_preview_with_no_choice_of_postage(
     fake_uuid,
 ):
     letter_template = {
+        "service": SERVICE_ONE_ID,
         "template_type": "letter",
         "reply_to_text": "",
         "postage": "second",
@@ -189,7 +192,7 @@ def test_upload_international_letter_shows_preview_with_no_choice_of_postage(
 
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch(
-        "app.main.views.uploads.sanitise_letter",
+        "app.template_previews.TemplatePreview.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -198,6 +201,7 @@ def test_upload_international_letter_shows_preview_with_no_choice_of_postage(
     mocker.patch("app.main.views.uploads.upload_letter_to_s3")
     mocker.patch("app.main.views.uploads.backup_original_letter_to_s3")
     mocker.patch("app.main.views.uploads.pdf_page_count", return_value=3)
+    do_mock_get_page_counts_for_letter(mocker, count=3)
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
         return_value=LetterMetadata(
@@ -358,7 +362,7 @@ def test_post_upload_letter_with_invalid_file(mocker, client_request, fake_uuid)
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "content-outside-printable-area", "invalid_pages": [1]}
-    mocker.patch("app.main.views.uploads.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
     mocker.patch("app.models.service.service_api_client.get_precompiled_template")
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
@@ -399,6 +403,7 @@ def test_post_upload_letter_with_invalid_file(mocker, client_request, fake_uuid)
 
 def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client_request, fake_uuid):
     letter_template = {
+        "service": SERVICE_ONE_ID,
         "template_type": "letter",
         "reply_to_text": "",
         "postage": "first",
@@ -413,7 +418,7 @@ def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "template preview error", "recipient_address": "The Queen"}
-    mocker.patch("app.main.views.uploads.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
     mocker.patch("app.models.service.service_api_client.get_precompiled_template", return_value=letter_template)
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
@@ -426,6 +431,7 @@ def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client
             }
         ),
     )
+    do_mock_get_page_counts_for_letter(mocker, count=1)
 
     with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
         page = client_request.post(
@@ -457,7 +463,7 @@ def test_post_upload_letter_does_not_upload_to_s3_if_template_preview_raises_unk
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mock_s3 = mocker.patch("app.main.views.uploads.upload_letter_to_s3")
 
-    mocker.patch("app.main.views.uploads.sanitise_letter", side_effect=RequestException())
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", side_effect=RequestException())
 
     with pytest.raises(RequestException):
         with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
@@ -581,10 +587,12 @@ def test_uploaded_letter_preview_image_shows_overlay_when_content_outside_printa
         ),
     )
     template_preview_mock_valid = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.from_valid_pdf_file", return_value=make_response("page.html", 200)
+        "app.main.views.uploads.TemplatePreview.get_png_for_valid_pdf_page",
+        return_value=make_response("page.html", 200),
     )
     template_preview_mock_invalid = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.from_invalid_pdf_file", return_value=make_response("page.html", 200)
+        "app.main.views.uploads.TemplatePreview.get_png_for_invalid_pdf_page",
+        return_value=make_response("page.html", 200),
     )
 
     client_request.get_response(
@@ -619,7 +627,8 @@ def test_uploaded_letter_preview_image_does_not_show_overlay_if_no_content_outsi
 ):
     mocker.patch("app.main.views.uploads.get_letter_pdf_and_metadata", return_value=("pdf_file", metadata))
     template_preview_mock = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.from_valid_pdf_file", return_value=make_response("page.html", 200)
+        "app.main.views.uploads.TemplatePreview.get_png_for_valid_pdf_page",
+        return_value=make_response("page.html", 200),
     )
 
     client_request.get_response(

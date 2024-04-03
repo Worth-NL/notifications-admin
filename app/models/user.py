@@ -43,7 +43,6 @@ class BaseUser(JSONModel):
 
 
 class User(BaseUser, UserMixin):
-
     MAX_FAILED_LOGIN_COUNT = 10
 
     ALLOWED_PROPERTIES = {
@@ -461,18 +460,20 @@ class User(BaseUser, UserMixin):
         return False
 
     def can_make_service_live(self, service):
+        if not service.has_active_go_live_request:
+            return False
+        if not service.organisation_id:
+            return False
+        if self.platform_admin:
+            return True
         return (
-            self.platform_admin
-            or (
-                self.belongs_to_organisation(service.organisation_id)
-                and service.organisation.can_approve_own_go_live_requests
-                and self.has_permission_for_organisation(service.organisation_id, PERMISSION_CAN_MAKE_SERVICES_LIVE)
-            )
-        ) and service.has_active_go_live_request
+            self.belongs_to_organisation(service.organisation_id)
+            and service.organisation.can_approve_own_go_live_requests
+            and self.has_permission_for_organisation(service.organisation_id, PERMISSION_CAN_MAKE_SERVICES_LIVE)
+        )
 
 
 class InvitedUser(BaseUser):
-
     ALLOWED_PROPERTIES = {
         "id",
         "service",
@@ -601,7 +602,6 @@ class InvitedUser(BaseUser):
 
 
 class InvitedOrgUser(BaseUser):
-
     ALLOWED_PROPERTIES = {
         "id",
         "organisation",
@@ -692,7 +692,6 @@ class AnonymousUser(AnonymousUserMixin):
 
 
 class Users(ModelList):
-
     client_method = user_api_client.get_users_for_service
     model = User
 
@@ -714,7 +713,6 @@ class OrganisationUsers(Users):
 
 
 class InvitedUsers(Users):
-
     client_method = invite_api_client.get_invites_for_service
     model = InvitedUser
 

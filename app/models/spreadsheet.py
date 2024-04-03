@@ -7,11 +7,9 @@ import pyexcel_xlsx
 
 
 class Spreadsheet:
-
     ALLOWED_FILE_EXTENSIONS = ("csv", "xlsx", "xls", "ods", "xlsm", "tsv")
 
     def __init__(self, csv_data=None, rows=None, filename=""):
-
         self.filename = filename
 
         if csv_data and rows:
@@ -53,7 +51,7 @@ class Spreadsheet:
     @classmethod
     def from_dict(cls, dictionary, filename=""):
         return cls.from_rows(
-            zip(*sorted(dictionary.items(), key=lambda pair: pair[0])),
+            zip(*sorted(dictionary.items(), key=lambda pair: pair[0]), strict=True),
             filename=filename,
         )
 

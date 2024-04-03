@@ -10,7 +10,7 @@ from flask import (
 )
 from flask_login import current_user
 from notifications_utils.recipients import RecipientCSV
-from notifications_utils.template import HTMLEmailTemplate, LetterImageTemplate
+from notifications_utils.template import HTMLEmailTemplate
 
 from app import letter_branding_client, status_api_client
 from app.formatters import message_count
@@ -19,6 +19,8 @@ from app.main.forms import FieldWithNoneOption
 from app.main.views.pricing import CURRENT_SMS_RATE
 from app.main.views.sub_navigation_dictionaries import features_nav, using_notify_nav
 from app.models.branding import EmailBranding
+from app.models.letter_rates import LetterRates
+from app.utils.templates import TemplatedLetterImageTemplate
 
 redirects = Blueprint("redirects", __name__)
 main.register_blueprint(redirects)
@@ -26,7 +28,6 @@ main.register_blueprint(redirects)
 
 @main.route("/")
 def index():
-
     if current_user and current_user.is_authenticated:
         return redirect(url_for("main.choose_account"))
 
@@ -34,6 +35,8 @@ def index():
         "views/signedout.html",
         sms_rate=CURRENT_SMS_RATE,
         counts=status_api_client.get_count_of_live_services_and_organisations(),
+        one_page_second_class_letter_cost=LetterRates().get(
+            sheet_count=1, post_class="second"),
     )
 
 
@@ -67,6 +70,8 @@ def design_content():
 @main.route("/_email")
 def email_template():
     branding_style = request.args.get("branding_style")
+    subject = request.args.get("title", default="Preview of email branding")
+    email_branding_preview = request.args.get("email_branding_preview", False)
 
     if not branding_style or branding_style in {"govuk", FieldWithNoneOption.NONE_OPTION_VALUE}:
         branding = EmailBranding.govuk_branding()
@@ -79,8 +84,10 @@ def email_template():
 
     template = {
         "template_type": "email",
-        "subject": "Email branding preview",
-        "content": render_template("example-email.md"),
+        "subject": subject,
+        "content": render_template(
+            "example-email.md" if not email_branding_preview else "email-branding-preview-example-email.md"
+        ),
     }
 
     resp = make_response(
@@ -104,6 +111,7 @@ def email_template():
 @main.route("/_letter")
 def letter_template():
     branding_style = request.args.get("branding_style")
+    subject = request.args.get("title", default="Preview of letter branding")
     filename = request.args.get("filename")
 
     if branding_style == FieldWithNoneOption.NONE_OPTION_VALUE:
@@ -114,22 +122,27 @@ def letter_template():
     if branding_style:
         if filename:
             abort(400, "Cannot provide both branding_style and filename")
-        filename = letter_branding_client.get_letter_branding(branding_style)["filename"]
+        filename = letter_branding_client.get_letter_branding(branding_style)[
+            "filename"]
     elif not filename:
         filename = "no-branding"
-
-    template = {"subject": "", "content": "", "template_type": "letter"}
-    image_url = url_for("no_cookie.letter_branding_preview_image", filename=filename)
+    template = {"subject": subject, "content": "", "template_type": "letter"}
+    image_url = url_for(
+        "no_cookie.letter_branding_preview_image", filename=filename)
 
     template_image = str(
-        LetterImageTemplate(
+        TemplatedLetterImageTemplate(
             template,
             image_url=image_url,
-            page_count=1,
+            page_counts={"count": 1, "welsh_page_count": 0,
+                         "attachment_page_count": 0},
         )
     )
 
-    resp = make_response(render_template("views/service-settings/letter-preview.html", template=template_image))
+    resp = make_response(
+        render_template("views/service-settings/letter-preview.html",
+                        template=template_image, subject=subject)
+    )
 
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
@@ -215,6 +228,14 @@ def guidance_message_status(notification_type=None):
     )
 
 
+@main.route("/using-notify/data-retention-period")
+def guidance_data_retention_period():
+    return render_template(
+        "views/guidance/using-notify/data-retention-period.html",
+        navigation_links=using_notify_nav(),
+    )
+
+
 @main.route("/using-notify/delivery-times")
 def guidance_delivery_times():
     return render_template(
@@ -267,6 +288,14 @@ def guidance_optional_content():
 def guidance_personalisation():
     return render_template(
         "views/guidance/using-notify/personalisation.html",
+        navigation_links=using_notify_nav(),
+    )
+
+
+@main.route("/using-notify/qr-codes")
+def guidance_qr_codes():
+    return render_template(
+        "views/guidance/using-notify/qr-codes.html",
         navigation_links=using_notify_nav(),
     )
 
@@ -327,10 +356,27 @@ def guidance_text_message_sender():
     )
 
 
+@main.route("/using-notify/trial-mode")
+def guidance_trial_mode():
+    return render_template(
+        "views/guidance/using-notify/trial-mode.html",
+        navigation_links=using_notify_nav(),
+        email_and_sms_daily_limit=current_app.config["DEFAULT_SERVICE_LIMIT"],
+    )
+
+
 @main.route("/using-notify/upload-a-letter")
 def guidance_upload_a_letter():
     return render_template(
         "views/guidance/using-notify/upload-a-letter.html",
+        navigation_links=using_notify_nav(),
+    )
+
+
+@main.route("/using-notify/unsubscribe-links")
+def guidance_unsubscribe_links():
+    return render_template(
+        "views/guidance/using-notify/unsubscribe-links.html",
         navigation_links=using_notify_nav(),
     )
 
@@ -398,4 +444,5 @@ REDIRECTS = {
 }
 
 for old_url, new_endpoint in REDIRECTS.items():
-    redirects.add_url_rule(old_url, defaults={"new_endpoint": new_endpoint}, view_func=historical_redirects)
+    redirects.add_url_rule(old_url, defaults={
+                           "new_endpoint": new_endpoint}, view_func=historical_redirects)

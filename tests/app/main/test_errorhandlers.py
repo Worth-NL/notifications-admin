@@ -1,5 +1,9 @@
+import logging
+from io import BytesIO
+
 import pytest
-from flask import Response, url_for
+import requests
+from flask import Response, g, url_for
 from flask_wtf.csrf import CSRFError
 from notifications_python_client.errors import HTTPError
 
@@ -24,6 +28,41 @@ def test_load_service_before_request_handles_404(client_request, mocker):
     )
 
     get_service.assert_called_once_with("00000000-0000-0000-0000-000000000000")
+
+
+def test_load_service_before_request_ignores_static_appropriately(notify_admin, client_request, mock_get_service):
+    with notify_admin.test_client() as test_client:
+        test_client.get("/static/something")
+        assert g.current_service is None
+
+    with notify_admin.test_client() as test_client:
+        test_client.get("/services/00000000-0000-0000-0000-000000000000")
+        assert g.current_service is not None
+
+    # We should only ignore loading service if `/static/` appears at the start of the URL
+    with notify_admin.test_client() as test_client:
+        test_client.get(
+            "/services/00000000-0000-0000-0000-000000000000"
+            "/service-settings/letter-branding/set-name?temp-filename=letters/static/images/letter-template/my-logo.svg"
+        )
+        assert g.current_service is not None
+
+
+def test_load_organisation_before_request_ignores_static_appropriately(
+    notify_admin, client_request, mock_get_organisation
+):
+    with notify_admin.test_client() as test_client:
+        test_client.get("/static/something")
+        assert g.current_organisation is None
+
+    with notify_admin.test_client() as test_client:
+        test_client.get("/organisations/00000000-0000-0000-0000-000000000000")
+        assert g.current_organisation is not None
+
+    # We should only ignore loading org if `/static/` appears at the start of the URL
+    with notify_admin.test_client() as test_client:
+        test_client.get("/organisations/00000000-0000-0000-0000-000000000000?something=/bad/static/fragment")
+        assert g.current_organisation is not None
 
 
 @pytest.mark.parametrize(
@@ -85,3 +124,31 @@ def test_405_returns_something_went_wrong_page(client_request, mocker):
 
     assert page.select_one("h1").string.strip() == "Sorry, there’s a problem with GOV.UK Notify"
     assert page.select_one("title").string.strip() == "Sorry, there’s a problem with the service – GOV.UK Notify"
+
+
+def test_api_error_response_logging(
+    mocker,
+    fake_uuid,
+    requests_mock,
+    client_request,
+    caplog,
+):
+    response = requests.Response()
+    response.status_code = 400
+    response.headers["content-type"] = "application/json"
+    response.raw = BytesIO(b'{"message": "not found"}')
+    response.url = "http://localhost:6012/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services"
+    requests_mock.get(
+        "http://you-forgot-to-mock-an-api-call-to/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services",
+        exc=requests.HTTPError(response=response),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        client_request.get(
+            ".choose_account", _expected_status=500, _test_page_title=False, _test_for_elements_without_class=False
+        )
+
+    assert (
+        "API http://localhost:6012/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services "
+        "failed with status=400, message='not found'"
+    ) in caplog.messages

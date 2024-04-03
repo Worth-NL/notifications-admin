@@ -6,7 +6,6 @@ from app.utils.templates import get_sample_template
 
 
 def get_errors_for_csv(recipients, template_type):
-
     errors = []
 
     if any(recipients.rows_with_bad_recipients):
@@ -34,6 +33,13 @@ def get_errors_for_csv(recipients, template_type):
         else:
             errors.append(f"check you have content for the empty messages in {number_of_rows_with_empty_message} rows")
 
+    if any(recipients.rows_with_bad_qr_codes):
+        number_of_rows_with_bad_qr_codes = len(list(recipients.rows_with_bad_qr_codes))
+        if 1 == number_of_rows_with_bad_qr_codes:
+            errors.append("enter fewer characters for the QR code links in 1 row")
+        else:
+            errors.append(f"enter fewer characters for the QR code links in {number_of_rows_with_bad_qr_codes} rows")
+
     return errors
 
 
@@ -53,12 +59,24 @@ def generate_notifications_csv(**kwargs):
         original_column_headers = original_upload.column_headers
         fieldnames = ["Row number"] + original_column_headers + ["Template", "Type", "Job", "Status", "Time"]
     else:
-        fieldnames = ["Recipient", "Reference", "Template", "Type", "Sent by", "Sent by email", "Job", "Status", "Time"]
+        fieldnames = [
+            "Recipient",
+            "Reference",
+            "Template",
+            "Type",
+            "Sent by",
+            "Sent by email",
+            "Job",
+            "Status",
+            "Time",
+            "API key name",
+        ]
 
     yield ",".join(fieldnames) + "\n"
 
     while kwargs["page"]:
         notifications_resp = notification_api_client.get_notifications_for_service(**kwargs)
+
         for notification in notifications_resp["notifications"]:
             if kwargs.get("job_id"):
                 values = (
@@ -89,6 +107,7 @@ def generate_notifications_csv(**kwargs):
                     notification["job_name"] or "",
                     notification["status"],
                     notification["created_at"],
+                    notification["api_key_name"] or "",
                 ]
             yield Spreadsheet.from_rows([map(str, values)]).as_csv_data
 

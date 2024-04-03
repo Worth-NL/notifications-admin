@@ -8,6 +8,7 @@ from app.navigation import (
     MainNavigation,
     Navigation,
     OrgNavigation,
+    PlatformAdminNavigation,
 )
 from tests.conftest import ORGANISATION_ID, SERVICE_ONE_ID, normalize_spaces
 
@@ -25,13 +26,13 @@ EXCLUDED_ENDPOINTS = set(
             "add_organisation_from_nhs_local_service",
             "add_organisation_letter_branding_options",
             "add_organisation",
+            "add_or_join_service",
             "add_service_template",
             "add_service",
             "api_callbacks",
             "api_documentation",
             "api_integration",
             "api_keys",
-            "approve_broadcast_message",
             "archive_organisation",
             "archive_service",
             "archive_user",
@@ -39,13 +40,6 @@ EXCLUDED_ENDPOINTS = set(
             "begin_tour",
             "branding_option_preview",
             "branding_nhs",
-            "broadcast_dashboard_previous",
-            "broadcast_dashboard_rejected",
-            "broadcast_dashboard",
-            "broadcast_tour_live",
-            "broadcast_tour",
-            "broadcast",
-            "cancel_broadcast_message",
             "cancel_invited_org_user",
             "cancel_invited_user",
             "cancel_job",
@@ -59,11 +53,9 @@ EXCLUDED_ENDPOINTS = set(
             "check_notification",
             "check_tour_notification",
             "choose_account",
-            "choose_broadcast_area",
-            "choose_broadcast_library",
-            "choose_broadcast_sub_area",
             "choose_from_contact_list",
             "choose_service",
+            "choose_service_to_join",
             "choose_template_to_copy",
             "choose_template",
             "clear_cache",
@@ -139,6 +131,7 @@ EXCLUDED_ENDPOINTS = set(
             "guidance_attach_pages",
             "guidance_billing_details",
             "guidance_bulk_sending",
+            "guidance_data_retention_period",
             "guidance_delivery_times",
             "guidance_email_branding",
             "guidance_features",
@@ -152,16 +145,19 @@ EXCLUDED_ENDPOINTS = set(
             "guidance_pricing_letters",
             "guidance_pricing_text_messages",
             "guidance_pricing",
+            "guidance_qr_codes",
             "guidance_receive_text_messages",
             "guidance_reply_to_email_address",
             "guidance_roadmap",
             "guidance_schedule_messages",
             "guidance_security",
             "guidance_send_files_by_email",
+            "guidance_sign_in_method",
             "guidance_team_members_and_permissions",
             "guidance_templates",
             "guidance_text_message_sender",
             "guidance_trial_mode",
+            "guidance_unsubscribe_links",
             "guidance_upload_a_letter",
             "guidance_using_notify",
             "guidance_who_can_use_notify",
@@ -172,7 +168,6 @@ EXCLUDED_ENDPOINTS = set(
             "index",
             "invite_org_user",
             "invite_user",
-            "json_updates.broadcast_dashboard_updates",
             "json_updates.conversation_updates",
             "json_updates.get_notifications_page_partials_as_json",
             "json_updates.inbox_updates",
@@ -180,6 +175,8 @@ EXCLUDED_ENDPOINTS = set(
             "json_updates.service_verify_reply_to_address_updates",
             "json_updates.view_job_updates",
             "json_updates.view_notification_updates",
+            "join_service",
+            "join_service_requested",
             "letter_branding_options",
             "letter_branding_request",
             "letter_branding_set_name",
@@ -188,17 +185,17 @@ EXCLUDED_ENDPOINTS = set(
             "letter_spec",
             "letter_template",
             "letter_template_attach_pages",
+            "letter_template_change_language",
+            "letter_template_confirm_remove_welsh",
             "letter_template_edit_pages",
             "link_service_to_organisation",
             "live_services_csv",
             "live_services",
             "main.redirects.historical_redirects",
-            "make_service_live",
             "manage_org_users",
             "manage_template_folder",
             "manage_users",
             "monthly",
-            "new_broadcast",
             "new_password",
             "no_cookie.check_messages_preview",
             "no_cookie.check_notification_preview",
@@ -207,10 +204,9 @@ EXCLUDED_ENDPOINTS = set(
             "no_cookie.view_invalid_letter_attachment_as_preview",
             "no_cookie.view_letter_attachment_preview",
             "no_cookie.view_letter_template_preview",
-            "no_cookie.view_template_version_preview",
+            "no_cookie.view_letter_template_version_preview",
             "notifications_sent_by_service",
             "old_guest_list",
-            "old_letter_branding_option_preview",
             "old_service_dashboard",
             "organisation_billing",
             "organisation_dashboard",
@@ -220,6 +216,11 @@ EXCLUDED_ENDPOINTS = set(
             "organisation_settings",
             "organisation_trial_mode_services",
             "organisations",
+            "org_member_make_service_live_start",
+            "org_member_make_service_live_service_name",
+            "org_member_make_service_live_check_unique",
+            "org_member_make_service_live_contact_user",
+            "org_member_make_service_live_decision",
             "performance",
             "platform_admin_archive_email_branding",
             "platform_admin_confirm_archive_email_branding",
@@ -232,8 +233,6 @@ EXCLUDED_ENDPOINTS = set(
             "platform_admin_view_email_branding",
             "platform_admin_view_letter_branding",
             "platform_admin",
-            "preview_broadcast_areas",
-            "preview_broadcast_message",
             "privacy",
             "public_agreement",
             "public_download_agreement",
@@ -244,10 +243,9 @@ EXCLUDED_ENDPOINTS = set(
             "register_from_org_invite",
             "register",
             "registration_continue",
-            "reject_broadcast_message",
-            "remove_broadcast_area",
             "remove_user_from_organisation",
             "remove_user_from_service",
+            "rename_template",
             "request_to_go_live",
             "resend_email_link",
             "resend_email_verification",
@@ -273,12 +271,12 @@ EXCLUDED_ENDPOINTS = set(
             "service_add_sms_sender",
             "service_agreement",
             "service_confirm_agreement",
-            "service_confirm_broadcast_account_type",
             "service_confirm_delete_email_reply_to",
             "service_confirm_delete_letter_contact",
             "service_confirm_delete_sms_sender",
             "service_confirm_disable_email_auth",
             "service_dashboard",
+            "service_data_retention",
             "service_delete_email_reply_to",
             "service_delete_letter_contact",
             "service_delete_sms_sender",
@@ -287,6 +285,8 @@ EXCLUDED_ENDPOINTS = set(
             "service_edit_letter_contact",
             "service_edit_sms_sender",
             "service_email_reply_to",
+            "service_email_sender_change",
+            "service_email_sender_preview",
             "service_letter_contact_details",
             "service_make_blank_default_letter_contact",
             "service_name_change",
@@ -298,8 +298,6 @@ EXCLUDED_ENDPOINTS = set(
             "service_set_auth_type",
             "service_set_branding_add_to_branding_pool_step",
             "service_set_branding",
-            "service_set_broadcast_channel",
-            "service_set_broadcast_network",
             "service_set_channel",
             "service_set_inbound_number",
             "service_set_international_letters",
@@ -365,18 +363,16 @@ EXCLUDED_ENDPOINTS = set(
             "user_profile_take_part_in_user_research",
             "verify_email",
             "verify",
-            "view_current_broadcast",
             "view_job_csv",
             "view_job",
+            "view_job_original_file_csv",
             "view_jobs",
             "view_letter_notification_as_preview",
             "view_letter_upload_as_preview",
             "view_notification",
             "view_notifications",
-            "view_previous_broadcast",
             "view_provider",
             "view_providers",
-            "view_rejected_broadcast",
             "view_template_version",
             "view_template_versions",
             "view_template",
@@ -384,7 +380,6 @@ EXCLUDED_ENDPOINTS = set(
             "webauthn_begin_register",
             "webauthn_complete_authentication",
             "webauthn_complete_register",
-            "write_new_broadcast",
         },
     )
 )
@@ -407,6 +402,7 @@ navigation_instances = (
     HeaderNavigation(),
     OrgNavigation(),
     CaseworkNavigation(),
+    PlatformAdminNavigation(),
 )
 
 
@@ -513,6 +509,27 @@ def test_a_page_should_nave_selected_org_navigation_item(
     assert selected_nav_items[0].text.strip() == selected_nav_item
 
 
+@pytest.mark.parametrize(
+    "endpoint, selected_nav_item",
+    [
+        ("main.platform_admin_search", "Search"),
+        ("main.email_branding", "Email branding"),
+    ],
+)
+def test_a_page_should_nave_selected_platform_admin_navigation_item(
+    client_request,
+    platform_admin_user,
+    mock_get_all_email_branding,
+    endpoint,
+    selected_nav_item,
+):
+    client_request.login(platform_admin_user)
+    page = client_request.get(endpoint)
+    selected_nav_items = page.select(".navigation a.selected")
+    assert len(selected_nav_items) == 1
+    assert selected_nav_items[0].text.strip() == selected_nav_item
+
+
 def test_navigation_urls(
     client_request,
     mock_get_service_templates,
@@ -528,50 +545,6 @@ def test_navigation_urls(
         f"/services/{SERVICE_ONE_ID}/usage",
         f"/services/{SERVICE_ONE_ID}/service-settings",
         f"/services/{SERVICE_ONE_ID}/api",
-    ]
-
-
-def test_navigation_for_services_with_broadcast_permission(
-    client_request,
-    service_one,
-    mock_get_service_templates,
-    mock_get_template_folders,
-    mock_get_api_keys,
-    active_user_create_broadcasts_permission,
-):
-    service_one["permissions"] += ["broadcast"]
-    client_request.login(active_user_create_broadcasts_permission)
-
-    page = client_request.get("main.choose_template", service_id=SERVICE_ONE_ID)
-    assert [a["href"] for a in page.select(".navigation a")] == [
-        f"/services/{SERVICE_ONE_ID}/current-alerts",
-        f"/services/{SERVICE_ONE_ID}/past-alerts",
-        f"/services/{SERVICE_ONE_ID}/rejected-alerts",
-        f"/services/{SERVICE_ONE_ID}/templates",
-        f"/services/{SERVICE_ONE_ID}/users",
-    ]
-
-
-def test_navigation_for_services_with_broadcast_permission_platform_admin(
-    client_request,
-    service_one,
-    mock_get_service_templates,
-    mock_get_template_folders,
-    mock_get_api_keys,
-    platform_admin_user,
-):
-    service_one["permissions"] += ["broadcast"]
-
-    client_request.login(platform_admin_user)
-    page = client_request.get("main.choose_template", service_id=SERVICE_ONE_ID)
-    assert [a["href"] for a in page.select(".navigation a")] == [
-        f"/services/{SERVICE_ONE_ID}/current-alerts",
-        f"/services/{SERVICE_ONE_ID}/past-alerts",
-        f"/services/{SERVICE_ONE_ID}/rejected-alerts",
-        f"/services/{SERVICE_ONE_ID}/templates",
-        f"/services/{SERVICE_ONE_ID}/users",
-        f"/services/{SERVICE_ONE_ID}/service-settings",
-        f"/services/{SERVICE_ONE_ID}/api/keys",
     ]
 
 
@@ -627,6 +600,6 @@ def test_make_service_live_link_is_shown_in_limited_circumstances(
     assert last_navigation_item["class"] == ["navigation__item", "navigation__item--with-separator"]
     assert normalize_spaces(last_navigation_item.text) == "Make service live"
     assert last_navigation_item.select_one("a")["href"] == url_for(
-        "main.make_service_live",
+        "main.org_member_make_service_live_start",
         service_id=SERVICE_ONE_ID,
     )

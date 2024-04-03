@@ -5,11 +5,10 @@ from flask import url_for
 from freezegun import freeze_time
 
 from app.formatters import (
-    email_safe,
     format_datetime_relative,
     format_notification_status_as_url,
-    format_number_in_pounds_as_currency,
-    round_to_significant_figures,
+    format_pennies_as_currency,
+    format_pounds_as_currency,
     sentence_case,
 )
 
@@ -59,8 +58,33 @@ def test_format_notification_status_as_url(
         (144820, "£144,820.00"),
     ],
 )
-def test_format_number_in_pounds_as_currency(input_number, formatted_number):
-    assert format_number_in_pounds_as_currency(input_number) == formatted_number
+def test_format_pounds_as_currency(input_number, formatted_number):
+    assert format_pounds_as_currency(input_number) == formatted_number
+
+
+@pytest.mark.parametrize(
+    "input_number, long, formatted_number",
+    [
+        (0, False, "0p"),
+        (0, True, "0 pence"),
+        (1, False, "1p"),
+        (1.97, False, "1.97p"),
+        (1.97, True, "1.97 pence"),
+        (50, False, "50p"),
+        (50, True, "50 pence"),
+        (100, False, "£1.00"),
+        (100, True, "£1.00"),
+        (101, False, "£1.01"),
+        (100.6, False, "£1.01"),
+        (100.6, True, "£1.01"),
+        (525, False, "£5.25"),
+        (570, False, "£5.70"),
+        (38100, False, "£381.00"),
+        (14482000, False, "£144,820.00"),
+    ],
+)
+def test_format_pennies_as_currency(input_number, long, formatted_number):
+    assert format_pennies_as_currency(input_number, long=long) == formatted_number
 
 
 @pytest.mark.parametrize(
@@ -97,43 +121,6 @@ def test_format_number_in_pounds_as_currency(input_number, formatted_number):
 def test_format_datetime_relative(time, human_readable_datetime):
     with freeze_time("2018-03-21 12:00"):
         assert format_datetime_relative(time) == human_readable_datetime
-
-
-@pytest.mark.parametrize(
-    "value, significant_figures, expected_result",
-    (
-        (0, 1, 0),
-        (0, 2, 0),
-        (12_345, 1, 10_000),
-        (12_345, 2, 12_000),
-        (12_345, 3, 12_300),
-        (12_345, 9, 12_345),
-        (12_345.6789, 1, 10_000),
-        (12_345.6789, 9, 12_345),
-        (-12_345, 1, -10_000),
-    ),
-)
-def test_round_to_significant_figures(value, significant_figures, expected_result):
-    assert round_to_significant_figures(value, significant_figures) == expected_result
-
-
-@pytest.mark.parametrize(
-    "service_name, safe_email",
-    [
-        ("name with spaces", "name.with.spaces"),
-        ("singleword", "singleword"),
-        ("UPPER CASE", "upper.case"),
-        ("Service - with dash", "service.with.dash"),
-        ("lots      of spaces", "lots.of.spaces"),
-        ("name.with.dots", "name.with.dots"),
-        ("name-with-other-delimiters", "namewithotherdelimiters"),
-        (".leading", "leading"),
-        ("trailing.", "trailing"),
-        ("üńïçödë wördś", "unicode.words"),
-    ],
-)
-def test_email_safe_return_dot_separated_email_domain(service_name, safe_email):
-    assert email_safe(service_name) == safe_email
 
 
 @pytest.mark.parametrize(

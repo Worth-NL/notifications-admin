@@ -1,15 +1,15 @@
+import decimal
 import re
-import unicodedata
 import urllib
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
-from math import floor, log10
 from numbers import Number
+from typing import Union
 
 import ago
 import dateutil
 import humanize
-from flask import Markup, url_for
+from flask import url_for
+from markupsafe import Markup
 from notifications_utils.field import Field
 from notifications_utils.formatters import make_quotes_smart
 from notifications_utils.formatters import nl2br as utils_nl2br
@@ -30,10 +30,6 @@ def convert_to_boolean(value):
 
 def format_datetime(date):
     return f"{format_date(date)} at {format_time(date)}"
-
-
-def format_datetime_24h(date):
-    return f"{format_date(date)} at {format_time_24h(date)}"
 
 
 def format_datetime_normal(date):
@@ -61,7 +57,6 @@ def format_time_24h(date):
 
 
 def get_human_day(time, date_prefix=""):
-
     #  Add 1 minute to transform 00:00 into ‘midnight today’ instead of ‘midnight tomorrow’
     date = (utc_string_to_aware_gmt_datetime(time) - timedelta(minutes=1)).date()
     now = datetime.utcnow()
@@ -273,11 +268,20 @@ def nl2br(value):
     return ""
 
 
-def format_number_in_pounds_as_currency(number):
-    if number >= 1:
-        return f"£{number:,.2f}"
+def format_pounds_as_currency(number: float):
+    return format_pennies_as_currency(round(number * 100), long=False)
 
-    return f"{number * 100:.0f}p"
+
+def format_pennies_as_currency(pennies: Union[int, float], long: bool) -> str:
+    # \/ Avoid floating point precision errors with fractional pennies, eg for SMS rates \/
+    pennies = decimal.Decimal(str(pennies))
+    if pennies >= 100:
+        pennies = round(pennies)
+        return f"£{pennies//100:,}.{pennies%100:02}"
+    elif long:
+        return f"{pennies} pence"
+
+    return f"{pennies}p"
 
 
 def format_list_items(items, format_string, *args, **kwargs):
@@ -299,28 +303,6 @@ def format_thousands(value):
     if value is None:
         return ""
     return value
-
-
-@lru_cache(maxsize=4)
-def email_safe(string, whitespace="."):
-    # strips accents, diacritics etc
-    string = "".join(c for c in unicodedata.normalize("NFD", string) if unicodedata.category(c) != "Mn")
-    string = "".join(
-        word.lower() if word.isalnum() or word == whitespace else ""
-        for word in re.sub(r"\s+", whitespace, string.strip())
-    )
-    string = re.sub(r"\.{2,}", ".", string)
-    return string.strip(".")
-
-
-def id_safe(string):
-    return email_safe(string, whitespace="-")
-
-
-def round_to_significant_figures(value, number_of_significant_figures):
-    if value == 0:
-        return value
-    return int(round(value, number_of_significant_figures - int(floor(log10(abs(value)))) - 1))
 
 
 def redact_mobile_number(mobile_number, spacing=""):
@@ -362,7 +344,6 @@ def normalize_spaces(name):
 
 
 def guess_name_from_email_address(email_address):
-
     possible_name = re.split(r"[\@\+]", email_address)[0]
 
     if "." not in possible_name or starts_with_initial(possible_name):
@@ -396,9 +377,6 @@ def message_count_noun(count, template_type):
 
     if template_type == "letter":
         return "letter" if singular else "letters"
-
-    if template_type == "broadcast":
-        return "broadcast" if singular else "broadcasts"
 
     return "message" if singular else "messages"
 
@@ -440,12 +418,6 @@ def character_count(count):
     return f"{format_thousands(count)} characters"
 
 
-def format_mobile_network(network):
-    if network in ("three", "vodafone", "o2"):
-        return network.capitalize()
-    return "EE"
-
-
 def format_billions(count):
     return humanize.intword(count)
 
@@ -454,10 +426,6 @@ def format_yes_no(value, yes="Yes", no="No", none="No"):
     if value is None:
         return none
     return yes if value else no
-
-
-def square_metres_to_square_miles(area):
-    return area * 3.86e-7
 
 
 def format_auth_type(auth_type, with_indefinite_article=False):

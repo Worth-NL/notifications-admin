@@ -1,6 +1,7 @@
 import json
 import uuid
 from functools import partial
+from io import BytesIO
 from unittest.mock import ANY, Mock
 
 import pytest
@@ -34,6 +35,7 @@ from tests.conftest import (
     create_active_user_view_permissions,
     create_letter_contact_block,
     create_template,
+    do_mock_get_page_counts_for_letter,
     normalize_spaces,
 )
 
@@ -45,7 +47,6 @@ from tests.conftest import (
         (["sms"], "You need a template before you can send emails, text messages or letters."),
         (["letter"], "You need a template before you can send emails, text messages or letters."),
         (["email", "sms", "letter"], "You need a template before you can send emails, text messages or letters."),
-        (["broadcast"], "You haven’t added any templates yet."),
     ),
 )
 def test_should_show_empty_page_when_no_templates(
@@ -57,7 +58,6 @@ def test_should_show_empty_page_when_no_templates(
     permissions,
     expected_message,
 ):
-
     service_one["permissions"] = permissions
 
     page = client_request.get(
@@ -194,82 +194,6 @@ def test_should_show_page_for_choosing_a_template(
     mock_get_template_folders.assert_called_once_with(SERVICE_ONE_ID)
 
 
-def test_should_show_page_of_broadcast_templates(
-    mocker,
-    client_request,
-    service_one,
-    fake_uuid,
-    mock_get_template_folders,
-    mock_get_no_api_keys,
-):
-    service_one["permissions"] += ["broadcast"]
-    mocker.patch(
-        "app.service_api_client.get_service_templates",
-        return_value={
-            "data": [
-                template_json(
-                    service_id=SERVICE_ONE_ID,
-                    id_=fake_uuid,
-                    type_="broadcast",
-                    name="A",
-                    content="a" * 40,
-                ),
-                template_json(
-                    service_id=SERVICE_ONE_ID,
-                    id_=fake_uuid,
-                    type_="broadcast",
-                    name="B",
-                    content="b" * 42,
-                ),
-                template_json(
-                    service_id=SERVICE_ONE_ID,
-                    id_=fake_uuid,
-                    type_="broadcast",
-                    name="C",
-                    content="c" * 43,
-                ),
-                template_json(
-                    service_id=SERVICE_ONE_ID,
-                    id_=fake_uuid,
-                    type_="broadcast",
-                    name="D",
-                    # This should be truncated at 40 chars, then have the
-                    # trailing space stripped
-                    content=("d" * 39) + " " + ("d" * 40),
-                ),
-            ]
-        },
-    )
-    page = client_request.get(
-        "main.choose_template",
-        service_id=SERVICE_ONE_ID,
-    )
-    assert [
-        (
-            normalize_spaces(template.select_one(".govuk-link").text),
-            normalize_spaces(template.select_one(".govuk-hint").text),
-        )
-        for template in page.select(".template-list-item")
-    ] == [
-        (
-            "A",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        ),
-        (
-            "B",
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        ),
-        (
-            "C",
-            "cccccccccccccccccccccccccccccccccccccccc…",
-        ),
-        (
-            "D",
-            "ddddddddddddddddddddddddddddddddddddddd…",
-        ),
-    ]
-
-
 def test_choose_template_can_pass_through_an_initial_state_to_templates_and_folders_selection_form(
     client_request,
     mock_get_template_folders,
@@ -288,7 +212,6 @@ def test_should_not_show_template_nav_if_only_one_type_of_template(
     mock_get_service_templates_with_only_one_template,
     mock_get_no_api_keys,
 ):
-
     page = client_request.get(
         "main.choose_template",
         service_id=SERVICE_ONE_ID,
@@ -303,7 +226,6 @@ def test_should_not_show_live_search_if_list_of_templates_fits_onscreen(
     mock_get_service_templates,
     mock_get_no_api_keys,
 ):
-
     page = client_request.get(
         "main.choose_template",
         service_id=SERVICE_ONE_ID,
@@ -318,7 +240,6 @@ def test_should_show_live_search_if_list_of_templates_taller_than_screen(
     mock_get_more_service_templates_than_can_fit_onscreen,
     mock_get_no_api_keys,
 ):
-
     page = client_request.get(
         "main.choose_template",
         service_id=SERVICE_ONE_ID,
@@ -351,7 +272,6 @@ def test_should_show_live_search_if_service_has_lots_of_folders(
     mock_get_service_templates,  # returns 4 templates
     mock_get_no_api_keys,
 ):
-
     mock_get_template_folders.return_value = [
         _folder("one", PARENT_FOLDER_ID),
         _folder("two", None, parent=PARENT_FOLDER_ID),
@@ -387,15 +307,6 @@ def test_should_show_live_search_if_service_has_lots_of_folders(
                 "Email",
                 "Text message",
                 "Copy an existing template",
-            ],
-        ),
-        pytest.param(
-            ["broadcast"],
-            [
-                "broadcast",
-            ],
-            [
-                "Broadcast",
             ],
         ),
         pytest.param(
@@ -446,7 +357,6 @@ def test_should_show_new_template_choices_if_service_has_folder_permission(
         (["sms"], True),
         (["email"], True),
         (["letter"], True),
-        (["broadcast"], True),
         (["sms", "email"], False),
     ],
 )
@@ -475,6 +385,100 @@ def test_should_add_data_attributes_for_services_that_only_allow_one_type_of_not
     else:
         assert page.select_one("#add_new_template_form").attrs.get("data-channel") is None
         assert page.select_one("#add_new_template_form").attrs.get("data-service") is None
+
+
+@pytest.mark.parametrize(
+    "custom_email_sender_name, expected_email_from",
+    (
+        (None, "service one"),
+        ("custom", "custom"),
+    ),
+)
+def test_should_show_page_for_email_template(
+    client_request,
+    mock_get_service_email_template,
+    service_one,
+    fake_uuid,
+    custom_email_sender_name,
+    expected_email_from,
+):
+    service_one["custom_email_sender_name"] = custom_email_sender_name
+    page = client_request.get(
+        ".view_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _test_page_title=False,
+    )
+
+    assert [
+        (normalize_spaces(row.select_one("th").text), normalize_spaces(row.select_one("td").text))
+        for row in page.select("table.email-message-meta tr")
+    ] == [
+        ("From", expected_email_from),
+        ("To", "email address"),
+        ("Subject", "Your ((thing)) is due soon"),
+    ]
+    assert normalize_spaces(page.select_one(".email-message-body").text) == "Your vehicle tax expires on ((date))"
+
+
+@pytest.mark.parametrize(
+    "permissions, template_content, expected_hint_text",
+    (
+        (
+            {},
+            "Hello world",
+            "",
+        ),
+        (
+            {"view_activity"},
+            "Hello ((name)) today is ((day of week))",
+            "",
+        ),
+        (
+            {"manage_templates"},
+            "Hello world",
+            "Will be charged as 1 text message",
+        ),
+        (
+            {"manage_service"},
+            "Hello ((name)) today is ((day of week))",
+            "Will be charged as 1 text message (not including personalisation)",
+        ),
+        (
+            {"manage_api_keys"},
+            "a" * 919,
+            # This is one character more than our max (918) but we don’t want to show an error here
+            "Will be charged as 7 text messages",
+        ),
+    ),
+)
+def test_should_show_page_for_sms_template(
+    mocker,
+    client_request,
+    mock_get_service_template,
+    service_one,
+    fake_uuid,
+    active_user_with_permissions,
+    permissions,
+    template_content,
+    expected_hint_text,
+):
+    mocker.patch(
+        "app.service_api_client.get_service_template",
+        return_value={"data": create_template(template_id=fake_uuid, template_type="sms", content=template_content)},
+    )
+    active_user_with_permissions["permissions"][SERVICE_ONE_ID] = permissions
+    client_request.login(active_user_with_permissions)
+    page = client_request.get(
+        ".view_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _test_page_title=False,
+    )
+
+    assert normalize_spaces(page.select_one(".sms-message-recipient").text) == "To: phone number"
+    assert normalize_spaces(page.select_one(".sms-message-wrapper").text) == f"service one: {template_content}"
+    assert normalize_spaces(getattr(page.select_one(".govuk-hint"), "text", "")) == expected_hint_text
 
 
 def test_should_show_page_for_one_template(
@@ -518,34 +522,32 @@ def test_should_show_page_for_one_template(
     mock_get_service_template.assert_called_with(SERVICE_ONE_ID, template_id, None)
 
 
-def test_broadcast_template_doesnt_highlight_placeholders_but_does_count_characters(
-    client_request,
-    service_one,
-    mock_get_broadcast_template,
-    fake_uuid,
+def test_editing_letter_template_should_have_hidden_name_field(
+    client_request, mock_get_service_letter_template, fake_uuid, service_one
 ):
-    service_one["permissions"] += ["broadcast"]
+    service_one["permissions"].append("letter")
+    template_id = fake_uuid
+    page = client_request.get(".edit_service_template", service_id=SERVICE_ONE_ID, template_id=template_id)
+
+    name_input = page.select_one("input[name=name]")
+    assert name_input["value"] == "Two week reminder"
+    assert name_input["type"] == "hidden"
+
+
+def test_GET_edit_service_template_for_welsh_letter(
+    client_request, mock_get_service_letter_template_welsh_language, fake_uuid, service_one
+):
+    service_one["permissions"].append("letter")
+    template_id = fake_uuid
     page = client_request.get(
-        ".edit_service_template",
-        service_id=SERVICE_ONE_ID,
-        template_id=fake_uuid,
-    )
-    assert page.select_one("textarea")["data-notify-module"] == "enhanced-textbox"
-    assert page.select_one("textarea")["data-highlight-placeholders"] == "false"
-
-    assert (
-        (page.select_one("[data-notify-module=update-status]")["data-target"])
-        == (page.select_one("textarea")["id"])
-        == "template_content"
+        ".edit_service_template", service_id=SERVICE_ONE_ID, template_id=template_id, language="welsh"
     )
 
-    assert (page.select_one("[data-notify-module=update-status]")["data-updates-url"]) == url_for(
-        ".count_content_length",
-        service_id=SERVICE_ONE_ID,
-        template_type="broadcast",
-    )
+    subject_label = page.select_one("label[for=subject]")
+    assert subject_label.text.strip() == "Heading (Welsh)"
 
-    assert (page.select_one("[data-notify-module=update-status]")["aria-live"]) == "polite"
+    content_label = page.select_one("label[for=template_content]")
+    assert content_label.text.strip() == "Body text (Welsh)"
 
 
 def test_caseworker_redirected_to_set_sender_for_one_off(
@@ -577,7 +579,6 @@ def test_caseworker_sees_template_page_if_template_is_deleted(
     mocker,
     active_caseworking_user,
 ):
-
     mocker.patch("app.user_api_client.get_user", return_value=active_caseworking_user)
 
     template_id = fake_uuid
@@ -624,6 +625,60 @@ def test_user_with_only_send_and_view_redirected_to_set_sender_for_one_off(
 @pytest.mark.parametrize(
     "permissions",
     (
+        pytest.param({"manage_templates"}),
+        pytest.param({"send_messages", "view_activity", "manage_settings"}, marks=pytest.mark.xfail),
+    ),
+)
+@pytest.mark.parametrize(
+    "template_type",
+    (
+        pytest.param("letter"),
+        pytest.param("email", marks=pytest.mark.xfail),
+        pytest.param("sms", marks=pytest.mark.xfail),
+    ),
+)
+def test_letter_page_has_rename_link(
+    client_request,
+    mock_get_service_templates,
+    mock_get_template_folders,
+    mock_get_service_letter_template,
+    single_letter_contact_block,
+    active_user_with_permissions,
+    mocker,
+    fake_uuid,
+    permissions,
+    template_type,
+    mock_get_page_counts_for_letter,
+):
+    mocker.patch(
+        "app.service_api_client.get_service_template",
+        return_value={"data": create_template(template_id=fake_uuid, template_type=template_type)},
+    )
+    active_user_with_permissions["permissions"][SERVICE_ONE_ID] = permissions
+    client_request.login(active_user_with_permissions)
+    page = client_request.get(
+        "main.view_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _test_page_title=False,
+    )
+    first_row = page.select_one("main > .govuk-grid-row")
+    folder_nav = first_row.select_one(".govuk-grid-column-five-sixths")
+    link = first_row.select_one(".govuk-grid-column-one-sixth a.govuk-link.folder-heading-manage-link")
+
+    assert normalize_spaces(folder_nav.text) == "Templates sample template"
+
+    assert normalize_spaces(link.text) == "Rename this template"
+    assert link["href"] == url_for(
+        "main.rename_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+    )
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    (
         {"send_messages", "view_activity"},
         {"send_messages"},
         {"view_activity"},
@@ -641,8 +696,8 @@ def test_user_with_only_send_and_view_sees_letter_page(
     mocker,
     fake_uuid,
     permissions,
+    mock_get_page_counts_for_letter,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
     active_user_with_permissions["permissions"][SERVICE_ONE_ID] = permissions
     client_request.login(active_user_with_permissions)
     page = client_request.get(
@@ -672,6 +727,10 @@ def test_user_with_only_send_and_view_sees_letter_page(
         ),
     ),
 )
+@pytest.mark.parametrize(
+    "user_has_manage_settings_permission",
+    (True, pytest.mark.xfail(False)),
+)
 def test_letter_with_default_branding_has_add_logo_button(
     mocker,
     fake_uuid,
@@ -683,10 +742,15 @@ def test_letter_with_default_branding_has_add_logo_button(
     letter_branding,
     expected_link,
     expected_link_text,
+    mock_get_page_counts_for_letter,
+    user_has_manage_settings_permission,
+    active_user_with_permissions,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
     service_one["permissions"] += ["letter"]
     service_one["letter_branding"] = letter_branding
+
+    if not user_has_manage_settings_permission:
+        active_user_with_permissions["permissions"].remove("manage_settings")
 
     page = client_request.get(
         "main.view_template",
@@ -719,8 +783,8 @@ def test_view_letter_template_displays_postage(
     fake_uuid,
     template_postage,
     expected_result,
+    mock_get_page_counts_for_letter,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
     client_request.login(active_user_with_permissions)
     mocker.patch(
         "app.service_api_client.get_service_template",
@@ -763,7 +827,7 @@ def test_view_letter_template_does_not_display_send_button_if_template_over_10_p
     mocker,
     fake_uuid,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=11)
+    do_mock_get_page_counts_for_letter(mocker, count=11)
     client_request.login(active_user_with_permissions)
     mocker.patch(
         "app.service_api_client.get_service_template",
@@ -781,9 +845,314 @@ def test_view_letter_template_does_not_display_send_button_if_template_over_10_p
     assert page.select_one("h1", {"data-error-type": "letter-too-long"})
 
 
-def test_GET_letter_template_attach_pages(
-    client_request, service_one, fake_uuid, mocker, mock_get_service_letter_template
+def test_view_letter_template_displays_change_language_button(
+    client_request,
+    service_one,
+    mock_get_service_templates,
+    mock_get_template_folders,
+    single_letter_contact_block,
+    mock_has_jobs,
+    active_user_with_permissions,
+    mocker,
+    fake_uuid,
+    mock_get_page_counts_for_letter,
 ):
+    client_request.login(active_user_with_permissions)
+    template_id = fake_uuid
+    mocker.patch(
+        "app.service_api_client.get_service_template",
+        return_value={"data": create_template(template_type="letter", template_id=template_id)},
+    )
+    page = client_request.get(
+        "main.view_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=template_id,
+        _test_page_title=False,
+    )
+
+    change_language_button = page.select_one(".change-language")
+
+    assert normalize_spaces(change_language_button.text) == "Change language"
+    assert change_language_button["href"] == url_for(
+        "main.letter_template_change_language", service_id=SERVICE_ONE_ID, template_id=template_id
+    )
+
+
+def test_GET_letter_template_change_language(
+    client_request, service_one, fake_uuid, mocker, mock_get_service_letter_template, active_user_with_permissions
+):
+    client_request.login(active_user_with_permissions)
+    page = client_request.get(
+        "main.letter_template_change_language",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+    )
+
+    assert page.select_one("h1").text.strip() == "Change language"
+
+    assert [label.text.strip() for label in page.select(".govuk-radios__item label")] == [
+        "English only",
+        "Welsh followed by English",
+    ]
+    assert [radio["value"] for radio in page.select(".govuk-radios__item input")] == [
+        "english",
+        "welsh_then_english",
+    ]
+
+    assert page.select("form button")
+
+    mock_get_service_letter_template.assert_called_once_with(SERVICE_ONE_ID, fake_uuid, None)
+
+    assert (
+        page.select_one("a[class='govuk-back-link']").get("href") == f"/services/{SERVICE_ONE_ID}/templates/{fake_uuid}"
+    )
+
+
+def test_GET_letter_template_change_language_404s_if_template_is_not_a_letter(
+    client_request,
+    service_one,
+    mock_get_service_template,
+    active_user_with_permissions,
+    fake_uuid,
+):
+    client_request.login(active_user_with_permissions)
+    page = client_request.get(
+        "main.letter_template_change_language", service_id=SERVICE_ONE_ID, template_id=fake_uuid, _expected_status=404
+    )
+
+    assert page.select_one("h1").text.strip() != "Change language"
+
+
+def test_POST_letter_template_change_to_welsh_and_english_sets_subject_and_content(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    mock_get_service_letter_template,
+):
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    client_request.post(
+        "main.letter_template_change_language",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={"languages": "welsh_then_english"},
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_template_change_language.assert_called_with(
+        SERVICE_ONE_ID,
+        fake_uuid,
+        letter_languages="welsh_then_english",
+        letter_welsh_subject="Welsh heading",
+        letter_welsh_content="Welsh body text",
+    )
+
+
+@pytest.mark.parametrize(
+    "subject, content, extra_kwargs",
+    (
+        ("Heading", "Body text", {"subject": "English heading", "content": "English body text"}),
+        ("Some custom heading", "Body text", {"content": "English body text"}),
+        ("Heading", "Some custom body", {"subject": "English heading"}),
+        ("Some custom heading", "Some custom body", {}),
+    ),
+)
+def test_POST_letter_template_change_to_welsh_and_english_resets_english_subject_and_content(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    subject,
+    content,
+    extra_kwargs,
+):
+    mocker.patch(
+        "app.service_api_client.get_service_template",
+        return_value={
+            "data": template_json(
+                service_id=SERVICE_ONE_ID,
+                id_=fake_uuid,
+                name="Two week reminder",
+                type_="letter",
+                content=content,
+                subject=subject,
+                postage="second",
+            )
+        },
+    )
+
+    service_one["permissions"].append("extra_letter_formatting")
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    client_request.post(
+        "main.letter_template_change_language",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={"languages": "welsh_then_english"},
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_template_change_language.assert_called_with(
+        SERVICE_ONE_ID,
+        fake_uuid,
+        letter_languages="welsh_then_english",
+        letter_welsh_subject="Welsh heading",
+        letter_welsh_content="Welsh body text",
+        **extra_kwargs,
+    )
+
+
+def test_POST_letter_template_change_to_english_redirects_to_confirmation_page(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    mock_get_service_letter_template_welsh_language,
+):
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    client_request.post(
+        "main.letter_template_change_language",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={"languages": "english"},
+        _expected_redirect=url_for(
+            "main.letter_template_confirm_remove_welsh", service_id=SERVICE_ONE_ID, template_id=fake_uuid
+        ),
+    )
+    assert mock_template_change_language.call_args_list == []
+
+
+def test_GET_letter_template_confirm_remove_welsh(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    mock_get_service_letter_template,
+):
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    page = client_request.get(
+        "main.letter_template_confirm_remove_welsh",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+    )
+    form = page.select_one("form[method=post]")
+    assert form.select_one("button")
+    assert mock_template_change_language.call_args_list == []
+
+
+def test_POST_letter_template_confirm_remove_welsh(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    mock_get_service_letter_template,
+):
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    client_request.post(
+        "main.letter_template_confirm_remove_welsh",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={"confirm": "true"},
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_template_change_language.assert_called_with(
+        SERVICE_ONE_ID,
+        fake_uuid,
+        letter_languages="english",
+        letter_welsh_subject=None,
+        letter_welsh_content=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "subject, content, extra_kwargs",
+    (
+        ("English heading", "English body text", {"subject": "Heading", "content": "Body text"}),
+        ("Some custom heading", "English body text", {"content": "Body text"}),
+        ("English heading", "Some custom body", {"subject": "Heading"}),
+        ("Some custom heading", "Some custom body", {}),
+    ),
+)
+def test_POST_letter_template_confirm_remove_welsh_resets_english_subject_and_content(
+    client_request,
+    service_one,
+    mocker,
+    fake_uuid,
+    active_user_with_permissions,
+    subject,
+    content,
+    extra_kwargs,
+):
+    def _get(service_id, template_id, version=None, postage="second"):
+        template = template_json(
+            service_id=service_id,
+            id_=template_id,
+            name="Two week reminder",
+            type_="letter",
+            content=content,
+            subject=subject,
+            postage=postage,
+        )
+        return {"data": template}
+
+    mocker.patch("app.service_api_client.get_service_template", side_effect=_get)
+
+    service_one["permissions"].append("extra_letter_formatting")
+    client_request.login(active_user_with_permissions)
+
+    mock_template_change_language = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
+
+    client_request.post(
+        "main.letter_template_confirm_remove_welsh",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={"confirm": "true"},
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_template_change_language.assert_called_with(
+        SERVICE_ONE_ID,
+        fake_uuid,
+        letter_languages="english",
+        letter_welsh_subject=None,
+        letter_welsh_content=None,
+        **extra_kwargs,
+    )
+
+
+def test_GET_letter_template_attach_pages(client_request, service_one, fake_uuid, mock_get_service_letter_template):
     page = client_request.get(
         "main.letter_template_attach_pages",
         service_id=SERVICE_ONE_ID,
@@ -822,7 +1191,7 @@ def test_post_attach_pages_errors_when_content_outside_printable_area(
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "content-outside-printable-area", "invalid_pages": [1]}
-    mocker.patch("app.main.views.templates.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
 
     with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
         file_contents = file.read()
@@ -879,8 +1248,8 @@ def test_post_attach_pages_errors_when_base_template_plus_attachment_too_long(
             "data": template_version_json(SERVICE_ONE_ID, fake_uuid, api_user_active, version=1, type_="letter")
         },
     )
-    mocker.patch("app.main.views.templates.sanitise_letter")
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=9)
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter")
+    do_mock_get_page_counts_for_letter(mocker, count=9)
 
     with open("tests/test_pdf_files/multi_page_pdf.pdf", "rb") as file:
         page = client_request.post(
@@ -902,23 +1271,13 @@ def test_post_attach_pages_errors_when_base_template_plus_attachment_too_long(
     assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
 
 
-@pytest.mark.parametrize("page_count, expected_pages_content", [(1, "1 page"), (2, "2 pages")])
+@pytest.mark.parametrize("page_count", [1, 2])
 def test_post_attach_pages_redirects_to_template_view_when_validation_successful(
-    mocker,
-    client_request,
-    fake_uuid,
-    service_one,
-    mock_get_service_letter_template,
-    mock_get_template_folders,
-    page_count,
-    expected_pages_content,
+    mocker, client_request, service_one, mock_get_service_letter_template, page_count, mock_get_page_counts_for_letter
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
 
-    mock_sanitise = mocker.patch("app.main.views.templates.sanitise_letter")
-
-    # page count for letter template on redirect page
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
+    mock_sanitise = mocker.patch("app.template_previews.TemplatePreview.sanitise_letter")
 
     # page count for the attachment
     mocker.patch("app.main.views.templates.pdf_page_count", return_value=page_count)
@@ -942,30 +1301,28 @@ def test_post_attach_pages_redirects_to_template_view_when_validation_successful
 
     upload_id = mock_sanitise.call_args[1]["upload_id"]
 
-    mock_save.assert_called_once_with(
-        service_id=service_one["id"],
-        template_id=template_id,
-        upload_id=upload_id,
-        original_filename="tests/test_pdf_files/one_page_pdf.pdf",
-        sanitise_response=mock_sanitise.return_value,
-    )
+    with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
+        mock_save.assert_called_once_with(
+            service_id=service_one["id"],
+            template_id=template_id,
+            upload_id=upload_id,
+            original_filename="tests/test_pdf_files/one_page_pdf.pdf",
+            original_file=file.read(),
+            sanitise_response=mock_sanitise.return_value,
+        )
 
 
 def test_post_attach_pages_archives_existing_attachment_when_it_exists(
     mocker,
     client_request,
-    fake_uuid,
     service_one,
     active_user_with_permissions,
     mock_get_service_letter_template_with_attachment,
-    mock_get_template_folders,
+    mock_get_page_counts_for_letter,
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
 
-    mock_sanitise = mocker.patch("app.main.views.templates.sanitise_letter")
-
-    # page count for letter template on redirect page
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
+    mock_sanitise = mocker.patch("app.template_previews.TemplatePreview.sanitise_letter")
 
     # page count for the attachment
     mocker.patch("app.main.views.templates.pdf_page_count", return_value=1)
@@ -991,13 +1348,15 @@ def test_post_attach_pages_archives_existing_attachment_when_it_exists(
 
     upload_id = mock_sanitise.call_args[1]["upload_id"]
 
-    mock_save.assert_called_once_with(
-        service_id=service_one["id"],
-        template_id=template_id,
-        upload_id=upload_id,
-        original_filename="tests/test_pdf_files/one_page_pdf.pdf",
-        sanitise_response=mock_sanitise.return_value,
-    )
+    with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
+        mock_save.assert_called_once_with(
+            service_id=service_one["id"],
+            template_id=template_id,
+            upload_id=upload_id,
+            original_filename="tests/test_pdf_files/one_page_pdf.pdf",
+            original_file=file.read(),
+            sanitise_response=mock_sanitise.return_value,
+        )
 
     mock_archive_attachment.assert_called_once_with(
         letter_attachment_id=sample_uuid(),
@@ -1021,7 +1380,7 @@ def test_post_attach_pages_doesnt_replace_existing_attachment_if_new_attachment_
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "content-outside-printable-area", "invalid_pages": [1]}
-    mocker.patch("app.main.views.templates.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
 
     mocker.patch("app.main.views.templates.upload_letter_to_s3")
     mocker.patch("app.main.views.templates.pdf_page_count", return_value=1)
@@ -1077,6 +1436,7 @@ def test_save_letter_attachment_saves_to_s3_and_db_and_redirects(notify_admin, s
         template_id=template_id,
         upload_id=upload_id,
         original_filename="foo.pdf",
+        original_file=b"the_original_file",
         sanitise_response=mock_sanitise_response,
     )
 
@@ -1086,7 +1446,7 @@ def test_save_letter_attachment_saves_to_s3_and_db_and_redirects(notify_admin, s
         page_count=attachment_page_count,
         original_filename="foo.pdf",
     )
-    mock_backup.assert_called_once_with(b"The sanitised content", upload_id=upload_id)
+    mock_backup.assert_called_once_with(b"the_original_file", upload_id=upload_id)
     mock_save_to_db.assert_called_once_with(
         upload_id=upload_id,
         template_id=template_id,
@@ -1206,9 +1566,7 @@ def test_edit_letter_templates_postage_updates_postage(
     fake_uuid,
     mock_get_service_letter_template,
 ):
-    mock_update_template_postage = mocker.patch(
-        "app.main.views.templates.service_api_client.update_service_template_postage"
-    )
+    mock_update_template_postage = mocker.patch("app.main.views.templates.service_api_client.update_service_template")
 
     client_request.post(
         "main.edit_template_postage",
@@ -1216,7 +1574,7 @@ def test_edit_letter_templates_postage_updates_postage(
         template_id=fake_uuid,
         _data={"postage": "first"},
     )
-    mock_update_template_postage.assert_called_with(SERVICE_ONE_ID, fake_uuid, "first")
+    mock_update_template_postage.assert_called_with(SERVICE_ONE_ID, fake_uuid, postage="first")
 
 
 @pytest.mark.parametrize(
@@ -1294,9 +1652,8 @@ def test_should_be_able_to_view_a_letter_template_with_links(
     active_user_with_permissions,
     single_letter_contact_block,
     fake_uuid,
+    mock_get_page_counts_for_letter,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
-
     page = client_request.get(
         "main.view_template",
         service_id=SERVICE_ONE_ID,
@@ -1356,43 +1713,52 @@ def test_should_be_able_to_view_a_letter_template_with_links(
     ]
 
 
-def test_view_broadcast_template(
+def test_should_be_able_to_view_a_letter_template_with_bilingual_content(
+    mocker,
     client_request,
     service_one,
-    mock_get_broadcast_template,
+    mock_get_service_letter_template_welsh_language,
     mock_get_template_folders,
+    active_user_with_permissions,
+    single_letter_contact_block,
     fake_uuid,
-    active_user_create_broadcasts_permission,
 ):
-    active_user_create_broadcasts_permission["permissions"][SERVICE_ONE_ID].append("manage_templates")
-    client_request.login(active_user_create_broadcasts_permission)
+    service_one["permissions"].append("extra_letter_formatting")
+    do_mock_get_page_counts_for_letter(mocker, count=5, welsh_page_count=3)
     page = client_request.get(
         "main.view_template",
         service_id=SERVICE_ONE_ID,
         template_id=fake_uuid,
         _test_page_title=False,
     )
-
-    assert [(link.text.strip(), link["href"]) for link in page.select(".pill-separate-item")] == [
+    assert [(str(ele)) for ele in page.select(".letter img, .letter div")] == [
         (
-            "Get ready to send",
-            url_for(
-                ".broadcast",
-                service_id=SERVICE_ONE_ID,
-                template_id=fake_uuid,
-            ),
+            '<img alt="" loading="eager" '
+            'src="/services/596364a0-858e-42c8-9062-a8fe822260eb/templates/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6.png'
+            '?page=1"/>'
         ),
         (
-            "Edit this template",
-            url_for(
-                ".edit_service_template",
-                service_id=SERVICE_ONE_ID,
-                template_id=fake_uuid,
-            ),
+            '<img alt="" loading="lazy" '
+            'src="/services/596364a0-858e-42c8-9062-a8fe822260eb/templates/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6.png'
+            '?page=2"/>'
+        ),
+        (
+            '<img alt="" loading="lazy" '
+            'src="/services/596364a0-858e-42c8-9062-a8fe822260eb/templates/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6.png'
+            '?page=3"/>'
+        ),
+        '<div id="first-page-of-english-in-bilingual-letter"></div>',
+        (
+            '<img alt="" loading="eager" '
+            'src="/services/596364a0-858e-42c8-9062-a8fe822260eb/templates/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6.png'
+            '?page=4"/>'
+        ),
+        (
+            '<img alt="" loading="lazy" '
+            'src="/services/596364a0-858e-42c8-9062-a8fe822260eb/templates/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6.png'
+            '?page=5"/>'
         ),
     ]
-
-    assert normalize_spaces(page.select_one(".broadcast-message-wrapper").text) == "Emergency alert This is a test"
 
 
 def test_should_show_template_id_on_template_page(
@@ -1408,21 +1774,6 @@ def test_should_show_template_id_on_template_page(
         _test_page_title=False,
     )
     assert fake_uuid in page.select(".copy-to-clipboard__value")[0].text
-
-
-def test_should_hide_template_id_for_broadcast_templates(
-    client_request,
-    mock_get_broadcast_template,
-    mock_get_template_folders,
-    fake_uuid,
-):
-    page = client_request.get(
-        "main.view_template",
-        service_id=SERVICE_ONE_ID,
-        template_id=fake_uuid,
-        _test_page_title=False,
-    )
-    assert not page.select(".copy-to-clipboard__value")
 
 
 def test_should_show_sms_template_with_downgraded_unicode_characters(
@@ -1481,8 +1832,8 @@ def test_should_let_letter_contact_block_be_changed_for_the_template(
     fake_uuid,
     contact_block_data,
     expected_partial_url,
+    mock_get_page_counts_for_letter,
 ):
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
     mocker.patch("app.service_api_client.get_letter_contacts", return_value=contact_block_data)
 
     page = client_request.get(
@@ -1517,13 +1868,17 @@ def test_should_show_message_with_prefix_hint_if_enabled_for_service(
     "view, extra_view_args",
     [
         ("no_cookie.view_letter_template_preview", {}),
-        ("no_cookie.view_template_version_preview", {"version": 1}),
+        ("no_cookie.view_letter_template_preview", {"page": "2"}),
+        ("no_cookie.view_letter_template_version_preview", {"version": 1}),
+        ("no_cookie.view_letter_template_version_preview", {"version": 1, "page": "2"}),
     ],
 )
 def test_should_show_preview_letter_templates(
     view, extra_view_args, filetype, client_request, mock_get_service_email_template, service_one, fake_uuid, mocker
 ):
-    mocked_preview = mocker.patch("app.main.views.templates.TemplatePreview.from_database_object", return_value="foo")
+    mocked_preview = mocker.patch(
+        "app.main.views.templates.TemplatePreview.get_preview_for_templated_letter", return_value="foo"
+    )
 
     service_id, template_id = service_one["id"], fake_uuid
 
@@ -1533,16 +1888,21 @@ def test_should_show_preview_letter_templates(
 
     assert response.get_data(as_text=True) == "foo"
     mock_get_service_email_template.assert_called_with(service_id, template_id, extra_view_args.get("version"))
-    assert mocked_preview.call_args[0][0]["id"] == template_id
-    assert mocked_preview.call_args[0][0]["service"] == service_id
-    assert mocked_preview.call_args[0][1] == filetype
+    assert mocked_preview.call_args_list[0].kwargs["db_template"]["id"] == template_id
+    assert mocked_preview.call_args_list[0].kwargs["db_template"]["service"] == service_id
+    assert mocked_preview.call_args_list[0].kwargs["filetype"] == filetype
+
+    if "page" in extra_view_args:
+        assert mocked_preview.call_args[1]["page"] == extra_view_args["page"]
+    else:
+        assert mocked_preview.call_args[1]["page"] is None
 
 
 def test_should_show_preview_letter_attachment(
     client_request, mock_get_service_email_template, service_one, fake_uuid, mocker
 ):
     mocked_preview = mocker.patch(
-        "app.main.views.templates.LetterAttachmentPreview.from_attachment_data", return_value="foo"
+        "app.main.views.templates.TemplatePreview.get_png_for_letter_attachment_page", return_value="foo"
     )
 
     service_id, attachment_id = service_one["id"], fake_uuid
@@ -1574,24 +1934,40 @@ def test_dont_show_preview_letter_templates_for_bad_filetype(
 def test_letter_branding_preview_image(
     mocker,
     client_request,
+    mock_onwards_request_headers,
     original_filename,
     new_filename,
 ):
-    mocked_preview = mocker.patch("app.main.views.templates.TemplatePreview.from_example_template", return_value="foo")
-    resp = client_request.get_response(
+    class MockedResponse:
+        content = "foo"
+        status_code = 200
+        headers = {}
+
+    mocked_preview = mocker.patch("app.template_previews.requests.post", return_value=MockedResponse())
+    response = client_request.get_response(
         "no_cookie.letter_branding_preview_image",
         filename=original_filename,
     )
 
     mocked_preview.assert_called_with(
-        {
-            "subject": "An example letter",
-            "content": ANY,
-            "template_type": "letter",
+        "http://localhost:9999/preview.png",
+        json={
+            "letter_contact_block": "",
+            "template": {
+                "subject": "An example letter",
+                "content": ANY,
+                "template_type": "letter",
+                "is_precompiled_letter": False,
+            },
+            "values": None,
+            "filename": new_filename,
         },
-        new_filename,
+        headers={
+            "Authorization": "Token my-secret-key",
+            "some-onwards": "request-headers",
+        },
     )
-    assert resp.get_data(as_text=True) == "foo"
+    assert response.get_data(as_text=True) == "foo"
 
 
 def test_choosing_to_copy_redirects(
@@ -1608,6 +1984,29 @@ def test_choosing_to_copy_redirects(
         _expected_redirect=url_for(
             "main.choose_template_to_copy",
             service_id=SERVICE_ONE_ID,
+        ),
+    )
+
+
+def test_choosing_to_copy_redirects_and_includes_folder_id(
+    client_request,
+    service_one,
+    mock_get_service_templates,
+    mock_get_template_folders,
+):
+    mock_get_template_folders.return_value = [
+        _folder("Parent folder", PARENT_FOLDER_ID),
+    ]
+    client_request.post(
+        "main.choose_template",
+        service_id=SERVICE_ONE_ID,
+        template_folder_id=PARENT_FOLDER_ID,
+        _data={"operation": "add-new-template", "add_template_by_template_type": "copy-existing"},
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.choose_template_to_copy",
+            service_id=SERVICE_ONE_ID,
+            to_folder_id=PARENT_FOLDER_ID,
         ),
     )
 
@@ -1635,9 +2034,9 @@ def test_choosing_letter_creates(
     mock_create_service_template.assert_called_once_with(
         name="Untitled letter template",
         type_="letter",
-        content="Body",
+        content="Body text",
         service_id=SERVICE_ONE_ID,
-        subject="Main heading",
+        subject="Heading",
         parent_folder_id=None,
     )
 
@@ -1676,7 +2075,7 @@ def test_choose_a_template_to_copy(
 
     assert len(actual) == len(expected)
 
-    for actual, expected in zip(actual, expected):  # noqa: B020
+    for actual, expected in zip(actual, expected, strict=True):  # noqa: B020
         assert normalize_spaces(actual.text) == expected
 
     links = page.select(".template-list-item a")
@@ -1695,6 +2094,66 @@ def test_choose_a_template_to_copy(
         service_id=SERVICE_ONE_ID,
         template_id=TEMPLATE_ONE_ID,
         from_service=SERVICE_TWO_ID,
+    )
+
+
+def test_choose_a_template_to_copy_passes_through_folder_id(
+    client_request,
+    mock_get_service_templates,
+    mock_get_template_folders,
+    mock_get_no_api_keys,
+    mock_get_just_services_for_user,
+):
+    page = client_request.get(
+        "main.choose_template_to_copy",
+        service_id=SERVICE_ONE_ID,
+        to_folder_id=PARENT_FOLDER_ID,
+    )
+
+    assert page.select(".folder-heading") == []
+
+    expected = [
+        "Service 1 6 templates",
+        "Service 1 sms_template_one Text message template",
+        "Service 1 sms_template_two Text message template",
+        "Service 1 email_template_one Email template",
+        "Service 1 email_template_two Email template",
+        "Service 1 letter_template_one Letter template",
+        "Service 1 letter_template_two Letter template",
+        "Service 2 6 templates",
+        "Service 2 sms_template_one Text message template",
+        "Service 2 sms_template_two Text message template",
+        "Service 2 email_template_one Email template",
+        "Service 2 email_template_two Email template",
+        "Service 2 letter_template_one Letter template",
+        "Service 2 letter_template_two Letter template",
+    ]
+    actual = page.select(".template-list-item")
+
+    assert len(actual) == len(expected)
+
+    for actual, expected in zip(actual, expected, strict=True):  # noqa: B020
+        assert normalize_spaces(actual.text) == expected
+
+    links = page.select(".template-list-item a")
+    assert links[0]["href"] == url_for(
+        "main.choose_template_to_copy",
+        service_id=SERVICE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+        to_folder_id=PARENT_FOLDER_ID,
+    )
+    assert links[1]["href"] == url_for(
+        "main.choose_template_to_copy",
+        service_id=SERVICE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+        to_folder_id=PARENT_FOLDER_ID,
+    )
+    assert links[2]["href"] == url_for(
+        "main.copy_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=TEMPLATE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+        to_folder_id=PARENT_FOLDER_ID,
     )
 
 
@@ -1724,7 +2183,7 @@ def test_choose_a_template_to_copy_when_user_has_one_service(
 
     assert len(actual) == len(expected)
 
-    for actual, expected in zip(actual, expected):  # noqa: B020
+    for actual, expected in zip(actual, expected, strict=True):  # noqa: B020
         assert normalize_spaces(actual.text) == expected
 
     assert page.select(".template-list-item a")[0]["href"] == url_for(
@@ -1795,7 +2254,7 @@ def test_choose_a_template_to_copy_from_folder_within_service(
 
     assert len(actual) == len(expected)
 
-    for actual, expected in zip(actual, expected):  # noqa: B020
+    for actual, expected in zip(actual, expected, strict=True):  # noqa: B020
         assert normalize_spaces(actual.text) == expected
 
     links = page.select(".template-list-item a")
@@ -1835,9 +2294,12 @@ def test_choose_a_template_to_copy_from_folder_within_service(
         (["Two week reminder (copy)", "Two week reminder (copy 10)"], "Two week reminder (copy 2)"),
     ),
 )
-def test_load_edit_template_with_copy_of_template(
+def test_copy_template_page_renders_preview(
+    mocker,
+    api_user_active,
     client_request,
     active_user_with_permission_to_two_services,
+    multiple_sms_senders,
     mock_get_service_templates,
     mock_get_service_email_template,
     mock_get_non_empty_organisations_and_services_for_user,
@@ -1867,18 +2329,16 @@ def test_load_edit_template_with_copy_of_template(
 
     assert page.select_one("form")["method"] == "post"
 
-    assert page.select_one("input")["value"] == (expected_name)
-    assert page.select_one("textarea").text == "\r\nYour ((thing)) is due soon"
-    mock_get_service_email_template.assert_called_once_with(
-        SERVICE_TWO_ID,
-        TEMPLATE_ONE_ID,
-    )
+    assert page.select_one("input[id=name]")["value"] == expected_name
+    assert page.select_one("div[class=email-message]") is not None  # template is rendered on page
+    assert mock_get_service_email_template.call_args_list == [mocker.call(SERVICE_TWO_ID, TEMPLATE_ONE_ID, None)]
 
 
 def test_copy_template_loads_template_from_within_subfolder(
     client_request,
     active_user_with_permission_to_two_services,
     mock_get_service_templates,
+    multiple_sms_senders,
     mock_get_non_empty_organisations_and_services_for_user,
     mocker,
 ):
@@ -1908,9 +2368,35 @@ def test_copy_template_loads_template_from_within_subfolder(
         from_folder=PARENT_FOLDER_ID,
     )
 
-    assert page.select_one("input")["value"] == "foo (copy)"
-    mock_get_service_template.assert_called_once_with(SERVICE_TWO_ID, TEMPLATE_ONE_ID)
-    mock_get_template_folder.assert_called_once_with(SERVICE_TWO_ID, PARENT_FOLDER_ID)
+    assert page.select_one("input[id=name]")["value"] == "foo (copy)"
+    assert mock_get_service_template.call_args_list == [mocker.call(SERVICE_TWO_ID, TEMPLATE_ONE_ID, None)]
+    assert mock_get_template_folder.call_args_list == [mocker.call(SERVICE_TWO_ID, PARENT_FOLDER_ID)]
+
+
+def test_copy_letter_template_across_service_boundary(
+    mocker,
+    client_request,
+    active_user_with_permission_to_two_services,
+    mock_get_service_templates,
+    multiple_sms_senders,
+):
+    template = template_json(service_id=SERVICE_TWO_ID, id_=TEMPLATE_ONE_ID, name="foo", folder=None, type_="letter")
+    mocker.patch("app.service_api_client.get_service_template", return_value={"data": template})
+    client_request.login(active_user_with_permission_to_two_services)
+    request_mock_returns = Mock(
+        content=b'{"count": 4, "welsh_page_count": 1, "attachment_page_count": 2}', status_code=200
+    )
+    mocker.patch("app.template_previews.requests.post", return_value=request_mock_returns)
+
+    page = client_request.get(
+        "main.copy_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=TEMPLATE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+    )
+
+    for img in page.select("img"):
+        assert img.get("src").startswith(f"/services/{SERVICE_TWO_ID}/templates/{TEMPLATE_ONE_ID}.png")
 
 
 def test_cant_copy_template_from_non_member_service(
@@ -1931,27 +2417,183 @@ def test_cant_copy_template_from_non_member_service(
 def test_post_copy_template(
     mocker,
     client_request,
+    active_user_with_permissions,
+    mock_get_service,
+    multiple_sms_senders,
     mock_get_service_email_template,
+    mock_get_service_templates,
     mock_get_organisations_and_services_for_user,
     mock_create_service_template,
 ):
+    active_user_with_permissions["services"].append(SERVICE_TWO_ID)
+    active_user_with_permissions["permissions"][SERVICE_TWO_ID] = active_user_with_permissions["permissions"][
+        SERVICE_ONE_ID
+    ]
+    client_request.post(
+        "main.copy_template",
+        service_id=SERVICE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+        template_id=TEMPLATE_ONE_ID,
+        _data={
+            "service": SERVICE_ONE_ID,
+            "name": "Two week reminder (copy)",
+        },
+        _expected_status=302,
+    )
+    assert mock_create_service_template.call_args_list == [
+        mocker.call(
+            name="Two week reminder (copy)",
+            type_="email",
+            service_id=SERVICE_ONE_ID,
+            parent_folder_id=None,
+            subject="Your ((thing)) is due soon",
+            content="Your vehicle tax expires on ((date))",
+            letter_languages=None,
+            letter_welsh_subject=None,
+            letter_welsh_content=None,
+        )
+    ]
+
+
+def test_post_copy_template_into_folder(
+    mocker,
+    client_request,
+    active_user_with_permissions,
+    mock_get_service,
+    multiple_sms_senders,
+    mock_get_service_email_template,
+    mock_get_service_templates,
+    mock_get_organisations_and_services_for_user,
+    mock_create_service_template,
+):
+    active_user_with_permissions["services"].append(SERVICE_TWO_ID)
+    active_user_with_permissions["permissions"][SERVICE_TWO_ID] = active_user_with_permissions["permissions"][
+        SERVICE_ONE_ID
+    ]
+    client_request.post(
+        "main.copy_template",
+        service_id=SERVICE_ONE_ID,
+        from_service=SERVICE_TWO_ID,
+        template_id=TEMPLATE_ONE_ID,
+        to_folder_id=PARENT_FOLDER_ID,
+        _data={
+            "service": SERVICE_ONE_ID,
+            "name": "Two week reminder (copy)",
+        },
+        _expected_status=302,
+    )
+    assert mock_create_service_template.call_args_list == [
+        mocker.call(
+            name="Two week reminder (copy)",
+            type_="email",
+            service_id=SERVICE_ONE_ID,
+            subject="Your ((thing)) is due soon",
+            content="Your vehicle tax expires on ((date))",
+            parent_folder_id=PARENT_FOLDER_ID,
+            letter_languages=None,
+            letter_welsh_subject=None,
+            letter_welsh_content=None,
+        )
+    ]
+
+
+def test_post_copy_letter_template(
+    mocker,
+    client_request,
+    mock_get_service_letter_template,
+    mock_get_service_templates,
+    multiple_sms_senders,
+    mock_get_organisations_and_services_for_user,
+    mock_create_service_template,
+    service_one,
+):
+    service_one["permissions"].append("letter")
+
     client_request.post(
         "main.copy_template",
         service_id=SERVICE_ONE_ID,
         from_service=SERVICE_ONE_ID,
         template_id=TEMPLATE_ONE_ID,
         _data={
-            "name": "template (copy)",
-            "subject": "some email",
-            "template_content": "this is a copy of that other template",
-            "template_type": "sms",
             "service": SERVICE_ONE_ID,
+            "name": "Two week reminder (copy)",
         },
         _expected_status=302,
     )
     assert mock_create_service_template.call_args_list == [
         mocker.call(
-            "template (copy)", "email", "this is a copy of that other template", SERVICE_ONE_ID, "some email", None
+            name="Two week reminder (copy)",
+            type_="letter",
+            service_id=SERVICE_ONE_ID,
+            subject="Subject",
+            parent_folder_id=None,
+            content="Template <em>content</em> with & entity",
+            letter_languages="english",
+            letter_welsh_subject=None,
+            letter_welsh_content=None,
+        )
+    ]
+
+
+@pytest.mark.parametrize("from_service", (SERVICE_ONE_ID, SERVICE_TWO_ID))
+def test_copy_letter_template_with_letter_attachment(
+    mocker,
+    client_request,
+    active_user_with_permission_to_two_services,
+    mock_get_service_templates,
+    mock_get_service_letter_template_with_attachment,
+    mock_create_service_template,
+    multiple_sms_senders,
+    from_service,
+):
+    client_request.login(active_user_with_permission_to_two_services)
+    mocker.patch(
+        "app.main.views.templates.s3download",
+        return_value=BytesIO(b"PDF"),
+    )
+    mock_upload = mocker.patch("app.main.views.templates.upload_letter_attachment_to_s3")
+    mock_save_to_db = mocker.patch("app.letter_attachment_client.create_letter_attachment")
+    mocker.patch("uuid.uuid4", return_value="12341234-1234-1234-1234-123412341234")
+
+    client_request.post(
+        "main.copy_template",
+        service_id=SERVICE_ONE_ID,
+        from_service=from_service,
+        template_id=TEMPLATE_ONE_ID,
+        _data={
+            "service": SERVICE_ONE_ID,
+            "name": "Two week reminder (copy)",
+        },
+        _expected_status=302,
+    )
+    assert mock_create_service_template.call_args_list == [
+        mocker.call(
+            name="Two week reminder (copy)",
+            type_="letter",
+            service_id=SERVICE_ONE_ID,
+            subject="Subject",
+            parent_folder_id=None,
+            content="Template <em>content</em> with & entity",
+            letter_languages="english",
+            letter_welsh_subject=None,
+            letter_welsh_content=None,
+        )
+    ]
+    assert mock_upload.call_args_list == [
+        mocker.call(
+            b"PDF",
+            file_location=f"service-{SERVICE_ONE_ID}/12341234-1234-1234-1234-123412341234.pdf",
+            page_count=1,
+            original_filename="original file.pdf",
+        )
+    ]
+    assert mock_save_to_db.call_args_list == [
+        mocker.call(
+            upload_id="12341234-1234-1234-1234-123412341234",
+            original_filename="original file.pdf",
+            page_count=1,
+            template_id=mocker.ANY,
+            service_id=SERVICE_ONE_ID,
         )
     ]
 
@@ -2015,14 +2657,6 @@ def test_choose_template_for_each_template_type(
             },
             "Sending letters has been disabled for your service.",
         ),
-        (
-            ["letter"],
-            {
-                "operation": "add-new-template",
-                "add_template_by_template_type": "broadcast",
-            },
-            "Sending broadcasts has been disabled for your service.",
-        ),
     ),
 )
 def test_should_not_allow_creation_of_template_through_form_without_correct_permission(
@@ -2053,12 +2687,11 @@ def test_should_not_allow_creation_of_template_through_form_without_correct_perm
 
 @pytest.mark.parametrize("method", ("get", "post"))
 @pytest.mark.parametrize(
-    "type_of_template, expected_error",
+    "type_of_template, expected_status, expected_error",
     [
-        ("email", "Sending emails has been disabled for your service."),
-        ("sms", "Sending text messages has been disabled for your service."),
-        ("letter", "Sending letters has been disabled for your service."),
-        ("broadcast", "Sending broadcasts has been disabled for your service."),
+        ("email", 403, "Sending emails has been disabled for your service."),
+        ("sms", 403, "Sending text messages has been disabled for your service."),
+        ("foo", 404, None),
     ],
 )
 def test_should_not_allow_creation_of_a_template_without_correct_permission(
@@ -2067,6 +2700,7 @@ def test_should_not_allow_creation_of_a_template_without_correct_permission(
     mocker,
     method,
     type_of_template,
+    expected_status,
     expected_error,
 ):
     service_one["permissions"] = []
@@ -2076,14 +2710,15 @@ def test_should_not_allow_creation_of_a_template_without_correct_permission(
         service_id=SERVICE_ONE_ID,
         template_type=type_of_template,
         _follow_redirects=True,
-        _expected_status=403,
+        _expected_status=expected_status,
     )
-    assert page.select("main p")[0].text.strip() == expected_error
-    assert page.select_one(".govuk-back-link").text.strip() == "Back"
-    assert page.select(".govuk-back-link")[0]["href"] == url_for(
-        ".choose_template",
-        service_id=service_one["id"],
-    )
+    if expected_error:
+        assert page.select("main p")[0].text.strip() == expected_error
+        assert page.select_one(".govuk-back-link").text.strip() == "Back"
+        assert page.select(".govuk-back-link")[0]["href"] == url_for(
+            ".choose_template",
+            service_id=service_one["id"],
+        )
 
 
 @pytest.mark.parametrize(
@@ -2115,25 +2750,36 @@ def test_should_redirect_to_one_off_if_template_type_is_letter(
     )
 
 
-def test_should_redirect_when_saving_a_template(
+def test_should_show_page_to_rename_template(
     client_request,
-    mock_get_service_template,
-    mock_get_api_keys,
+    mock_get_service_letter_template,
+    fake_uuid,
+):
+    page = client_request.get(
+        ".rename_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+    )
+    assert normalize_spaces(page.select_one("h1").text) == "Rename template"
+    form = page.select_one("form[method=post]")
+    assert "action" not in form
+
+    assert form.select_one("input[name=name]")
+    assert normalize_spaces(form.select_one("label[for=name]").text) == "Template name"
+
+
+def test_should_show_rename_template(
+    client_request,
+    mock_get_service_letter_template,
     mock_update_service_template,
     fake_uuid,
 ):
-    name = "new name"
-    content = "template <em>content</em> with & entity"
     client_request.post(
-        ".edit_service_template",
+        ".rename_template",
         service_id=SERVICE_ONE_ID,
         template_id=fake_uuid,
         _data={
-            "id": fake_uuid,
-            "name": name,
-            "template_content": content,
-            "template_type": "sms",
-            "service": SERVICE_ONE_ID,
+            "name": "new name",
         },
         _expected_status=302,
         _expected_redirect=url_for(
@@ -2145,9 +2791,98 @@ def test_should_redirect_when_saving_a_template(
     mock_update_service_template.assert_called_with(
         template_id=fake_uuid,
         service_id=SERVICE_ONE_ID,
+        name="new name",
+    )
+
+
+def test_name_required_to_rename_template(
+    client_request,
+    mock_get_service_letter_template,
+    fake_uuid,
+):
+    page = client_request.post(
+        ".rename_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={
+            "name": "",
+        },
+        _expected_status=200,
+    )
+    assert normalize_spaces(page.select_one(".govuk-error-message").text) == "Error: Enter a name for this template"
+
+
+@pytest.mark.parametrize("template_type", ("email", "sms"))
+def test_only_letters_can_be_renamed_through_rename_page(
+    mocker,
+    client_request,
+    fake_uuid,
+    template_type,
+):
+    mocker.patch(
+        "app.service_api_client.get_service_template",
+        return_value={"data": create_template(template_type=template_type)},
+    )
+
+    client_request.post(
+        ".rename_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={
+            "name": "",
+        },
+        _expected_status=404,
+    )
+
+
+@pytest.mark.parametrize(
+    "service_id, template_id",
+    (
+        (
+            SERVICE_ONE_ID,
+            sample_uuid(),
+        ),
+        (
+            SERVICE_ONE_ID.upper(),
+            sample_uuid().upper(),
+        ),
+    ),
+)
+def test_should_redirect_when_saving_a_template(
+    client_request,
+    mock_get_service_template,
+    mock_get_api_keys,
+    mock_update_service_template,
+    service_id,
+    template_id,
+):
+    name = "new name"
+    content = "template <em>content</em> with & entity"
+    client_request.post(
+        ".edit_service_template",
+        service_id=service_id,
+        template_id=template_id,
+        _data={
+            "id": template_id,
+            "name": name,
+            "template_content": content,
+            "template_type": "sms",
+            "service": service_id,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.view_template",
+            # UUIDs are always lowercase here
+            service_id=SERVICE_ONE_ID,
+            template_id=sample_uuid(),
+        ),
+    )
+    mock_update_service_template.assert_called_with(
+        # UUIDs are always lowercase here
+        template_id=sample_uuid(),
+        service_id=SERVICE_ONE_ID,
         name=name,
         content=content,
-        subject=None,
     )
 
 
@@ -2177,10 +2912,85 @@ def test_should_not_allow_template_edits_without_correct_permission(
 
 
 @pytest.mark.parametrize(
-    "template_type",
+    "old_content, new_content, expected_paragraphs",
+    [
+        (
+            "my favourite colour is blue",
+            "my favourite colour is ((colour))",
+            [
+                "You added ((colour))",
+                "Before you send any messages, make sure your API calls include colour.",
+            ],
+        ),
+        (
+            "hello ((name))",
+            "hello ((first name)) ((middle name)) ((last name))",
+            [
+                "You removed ((name))",
+                "You added ((first name)) ((middle name)) and ((last name))",
+                "Before you send any messages, make sure your API calls include first name, middle name and last name.",
+            ],
+        ),
+    ],
+)
+def test_should_show_interstitial_when_making_breaking_change_to_sms_template(
+    client_request,
+    service_one,
+    mock_update_service_template,
+    mock_get_user_by_email,
+    mock_get_api_keys,
+    fake_uuid,
+    mocker,
+    new_content,
+    old_content,
+    expected_paragraphs,
+):
+    service_one["permissions"] += ["sms"]
+
+    email_template = create_template(
+        template_id=fake_uuid, template_type="sms", name="my old name", content=old_content
+    )
+    mocker.patch("app.service_api_client.get_service_template", return_value={"data": email_template})
+
+    data = {
+        "id": fake_uuid,
+        "name": "my new template name",
+        "template_content": new_content,
+        "template_type": "sms",
+        "service": SERVICE_ONE_ID,
+    }
+
+    page = client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data=data,
+        _expected_status=200,
+    )
+
+    assert page.select_one("h1").string.strip() == "Confirm changes"
+    assert page.select_one("a.govuk-back-link")["href"] == url_for(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+    )
+    assert [normalize_spaces(paragraph.text) for paragraph in page.select("main p")] == expected_paragraphs
+
+    for key, value in (
+        {
+            "name": "my new template name",
+            "template_content": new_content,
+            "confirm": "true",
+        }
+    ).items():
+        assert page.select_one(f"input[name={key}]")["value"] == value
+
+
+@pytest.mark.parametrize(
+    "template_type, additional_data",
     (
-        "email",
-        "letter",
+        ("email", {"name": "new name"}),
+        ("letter", {}),
     ),
 )
 @pytest.mark.parametrize(
@@ -2217,6 +3027,7 @@ def test_should_show_interstitial_when_making_breaking_change(
     old_content,
     expected_paragraphs,
     template_type,
+    additional_data,
 ):
     service_one["permissions"] += [template_type]
 
@@ -2227,12 +3038,11 @@ def test_should_show_interstitial_when_making_breaking_change(
 
     data = {
         "id": fake_uuid,
-        "name": "new name",
         "template_content": new_content,
         "template_type": "email",
         "subject": "reminder '\" <span> & ((thing))",
         "service": SERVICE_ONE_ID,
-    }
+    } | additional_data
 
     page = client_request.post(
         ".edit_service_template",
@@ -2250,12 +3060,14 @@ def test_should_show_interstitial_when_making_breaking_change(
     )
     assert [normalize_spaces(paragraph.text) for paragraph in page.select("main p")] == expected_paragraphs
 
-    for key, value in {
-        "name": "new name",
-        "subject": "reminder '\" <span> & ((thing))",
-        "template_content": new_content,
-        "confirm": "true",
-    }.items():
+    for key, value in (
+        {
+            "subject": "reminder '\" <span> & ((thing))",
+            "template_content": new_content,
+            "confirm": "true",
+        }
+        | additional_data
+    ).items():
         assert page.select_one(f"input[name={key}]")["value"] == value
 
     # BeautifulSoup returns the value attribute as unencoded, let’s make
@@ -2263,6 +3075,80 @@ def test_should_show_interstitial_when_making_breaking_change(
     assert str(page.select_one("input[name=subject]")) == (
         """<input name="subject" type="hidden" value="reminder '&quot; &lt;span&gt; &amp; ((thing))"/>"""
     )
+
+
+@pytest.mark.parametrize(
+    "url_kwargs",
+    [
+        {},
+        {"language": "welsh"},
+    ],
+)
+def test_confirm_breaking_change_on_letter_template_saves_correct_language_content(
+    client_request,
+    service_one,
+    mock_update_service_template,
+    mock_get_user_by_email,
+    mock_get_api_keys,
+    fake_uuid,
+    mocker,
+    url_kwargs,
+):
+    service_one["permissions"].append("letter")
+
+    letter_template = template_json(
+        id_=fake_uuid,
+        service_id=SERVICE_ONE_ID,
+        type_="letter",
+        name="a letter template",
+        subject="old english subject",
+        content="old english content",
+        letter_languages="welsh_then_english",
+        letter_welsh_subject="old welsh subject",
+        letter_welsh_content="old welsh content",
+        redact_personalisation=False,
+    )
+    mocker.patch("app.service_api_client.get_service_template", return_value={"data": letter_template})
+    do_mock_get_page_counts_for_letter(mocker, count=2)
+    mocker.patch("app.service_api_client.get_letter_contacts", return_value=[create_letter_contact_block()])
+
+    data = {
+        "id": fake_uuid,
+        "subject": "updated subject ((new_var))",
+        "template_content": "updated content ((new_var2))",
+        "service": SERVICE_ONE_ID,
+        "confirm": True,
+    }
+
+    client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        **url_kwargs,
+        _data=data,
+        _follow_redirects=True,
+    )
+
+    if url_kwargs:
+        assert mock_update_service_template.call_args_list == [
+            mocker.call(
+                service_id=SERVICE_ONE_ID,
+                template_id=fake_uuid,
+                name="a letter template",
+                letter_welsh_subject="updated subject ((new_var))",
+                letter_welsh_content="updated content ((new_var2))",
+            )
+        ]
+    else:
+        assert mock_update_service_template.call_args_list == [
+            mocker.call(
+                service_id=SERVICE_ONE_ID,
+                template_id=fake_uuid,
+                name="a letter template",
+                subject="updated subject ((new_var))",
+                content="updated content ((new_var2))",
+            )
+        ]
 
 
 def test_removing_placeholders_is_not_a_breaking_change(
@@ -2334,33 +3220,32 @@ def test_should_not_update_too_big_template(
     assert "Content has a character count greater than the limit of 459" in page.text
 
 
-@pytest.mark.parametrize(
-    "content, expected_error",
-    (
-        (("ŴŶ" * 308), "Content must be 615 characters or fewer because it contains Ŵ and Ŷ"),
-        (("ab" * 698), "Content must be 1,395 characters or fewer"),
-    ),
-)
-def test_should_not_create_too_big_template_for_broadcasts(
+def test_should_not_edit_letter_template_with_too_big_qr_code(
     client_request,
+    mock_get_service_template,
+    mock_update_service_template_400_qr_code_too_big,
+    fake_uuid,
     service_one,
-    content,
-    expected_error,
 ):
-    service_one["permissions"] = ["broadcast"]
+    service_one["permissions"].append("letter")
+
     page = client_request.post(
-        ".add_service_template",
+        ".edit_service_template",
         service_id=SERVICE_ONE_ID,
-        template_type="broadcast",
+        template_id=fake_uuid,
         _data={
-            "name": "New name",
-            "template_content": content,
-            "template_type": "broadcast",
+            "name": "new name",
+            "subject": "subject",
+            "template_content": "qr: " + ("content" * 100),
+            "template_type": "letter",
             "service": SERVICE_ONE_ID,
         },
         _expected_status=200,
     )
-    assert normalize_spaces(page.select_one(".error-message").text) == expected_error
+    assert (
+        normalize_spaces(page.select_one(".error-message").text)
+        == "Cannot create a usable QR code - the link you entered is too long"
+    )
 
 
 def test_should_redirect_when_saving_a_template_email(
@@ -2398,6 +3283,191 @@ def test_should_redirect_when_saving_a_template_email(
         name=name,
         content=content,
         subject=subject,
+    )
+
+
+def test_should_redirect_when_saving_a_template_letter(
+    client_request,
+    mock_get_service_letter_template,
+    mock_get_page_counts_for_letter,
+    mock_update_service_template,
+    mock_get_user_by_email,
+    fake_uuid,
+    service_one,
+):
+    service_one["permissions"].append("letter")
+    name = "new template name"
+    content = "new letter content"
+    subject = "new letter subject"
+    client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={
+            "name": name,
+            "subject": subject,
+            "template_content": content,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_update_service_template.assert_called_with(
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        name=name,
+        content=content,
+        subject=subject,
+    )
+
+
+@pytest.mark.parametrize(
+    "language, mock_fixturename",
+    (
+        pytest.param(
+            "welsh",
+            "mock_get_service_letter_template",
+            marks=pytest.mark.xfail(
+                raises=AssertionError,
+                reason="Cannot edit Welsh language content on template with letter_languages=english",
+            ),
+        ),
+        pytest.param(
+            "welsh",
+            "mock_get_service_letter_template",
+            marks=pytest.mark.xfail(
+                raises=AssertionError,
+                reason="Cannot edit Welsh language content on template with letter_languages=english",
+            ),
+        ),
+        pytest.param(
+            "gaelic",
+            "mock_get_service_letter_template_welsh_language",
+            marks=pytest.mark.xfail(
+                raises=AssertionError,
+                reason="The only accepted explicit language for editing letter templates is Welsh",
+            ),
+        ),
+        (
+            "welsh",
+            "mock_get_service_letter_template_welsh_language",
+        ),
+    ),
+)
+def test_update_template_for_welsh_language_content(
+    request,
+    client_request,
+    mock_update_service_template,
+    mock_get_page_counts_for_letter,
+    mock_get_user_by_email,
+    fake_uuid,
+    service_one,
+    language,
+    mock_fixturename,
+):
+    # Load get_service_letter_template fixture
+    request.getfixturevalue(mock_fixturename)
+
+    service_one["permissions"].append("letter")
+    name = "new template name"
+    content = "Welsh letter content"
+    subject = "Welsh letter subject"
+    client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        language=language,
+        _data={
+            "name": name,
+            "subject": subject,
+            "template_content": content,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+        ),
+    )
+    mock_update_service_template.assert_called_with(
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        name=name,
+        letter_welsh_subject=subject,
+        letter_welsh_content=content,
+    )
+
+
+def test_update_template_for_english_content_in_welsh_letter(
+    mocker,
+    client_request,
+    mock_update_service_template,
+    mock_get_service_letter_template_welsh_language,
+    mock_get_user_by_email,
+    fake_uuid,
+    service_one,
+):
+    do_mock_get_page_counts_for_letter(mocker, count=1, welsh_page_count=1)
+    service_one["permissions"].append("letter")
+    service_one["permissions"].append("extra_letter_formatting")
+    name = "new template name"
+    content = "English letter content"
+    subject = "English letter subject"
+    client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        _data={
+            "name": name,
+            "subject": subject,
+            "template_content": content,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.view_template",
+            service_id=SERVICE_ONE_ID,
+            template_id=fake_uuid,
+            _anchor="first-page-of-english-in-bilingual-letter",
+        ),
+    )
+    mock_update_service_template.assert_called_with(
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        name=name,
+        subject=subject,
+        content=content,
+    )
+
+
+@pytest.mark.parametrize("mock_fixturename", ["mock_get_service_email_template", "mock_get_service_template"])
+def test_cannot_edit_welsh_content_for_email_or_sms_templates(
+    request,
+    client_request,
+    mock_fixturename,
+    mock_update_service_template,
+    mock_get_user_by_email,
+    fake_uuid,
+):
+    # Load fixture to mock get email/sms template
+    request.getfixturevalue(mock_fixturename)
+
+    name = "new name"
+    content = "new content"
+    subject = "new subject"
+    client_request.post(
+        ".edit_service_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=fake_uuid,
+        language="welsh",
+        _data={
+            "name": name,
+            "template_content": content,
+            "subject": subject,
+        },
+        _expected_status=404,
     )
 
 
@@ -2489,7 +3559,6 @@ def test_should_redirect_when_deleting_a_template(
     mock_get_template_folders,
     parent,
 ):
-
     mock_get_template_folders.return_value = [
         {"id": PARENT_FOLDER_ID, "name": "Folder", "parent": None, "users_with_permission": [ANY]}
     ]
@@ -2631,7 +3700,6 @@ def test_route_invalid_permissions(
     (
         ("email", "New email template"),
         ("sms", "New text message template"),
-        ("broadcast", "New template"),
     ),
 )
 def test_add_template_page_furniture(
@@ -2669,25 +3737,15 @@ def test_can_create_email_template_with_emoji(client_request, mock_create_servic
     assert mock_create_service_template.called is True
 
 
-@pytest.mark.parametrize(
-    "template_type, expected_error",
-    (
-        ("sms", "You cannot use 🍜 in text messages."),
-        ("broadcast", "You cannot use 🍜 in broadcasts."),
-    ),
-)
-def test_should_not_create_sms_or_broadcast_template_with_emoji(
+def test_should_not_create_sms_template_with_emoji(
     client_request,
     service_one,
     mock_create_service_template,
-    template_type,
-    expected_error,
 ):
-    service_one["permissions"] += [template_type]
     page = client_request.post(
         ".add_service_template",
         service_id=SERVICE_ONE_ID,
-        template_type=template_type,
+        template_type="sms",
         _data={
             "name": "new name",
             "template_content": "here are some noodles 🍜",
@@ -2696,34 +3754,24 @@ def test_should_not_create_sms_or_broadcast_template_with_emoji(
         },
         _expected_status=200,
     )
-    assert expected_error in page.text
+    assert "You cannot use 🍜 in text messages." in page.text
     assert mock_create_service_template.called is False
 
 
-@pytest.mark.parametrize(
-    "template_type, expected_error",
-    (
-        ("sms", "You cannot use 🍔 in text messages."),
-        ("broadcast", "You cannot use 🍔 in broadcasts."),
-    ),
-)
 def test_should_not_update_sms_template_with_emoji(
     mocker,
     client_request,
     service_one,
     mock_update_service_template,
     fake_uuid,
-    template_type,
-    expected_error,
 ):
-    service_one["permissions"] += [template_type]
     mocker.patch(
         "app.service_api_client.get_service_template",
         return_value={
             "data": template_json(
                 service_id=SERVICE_ONE_ID,
                 id_=fake_uuid,
-                type_=template_type,
+                type_="sms",
             )
         },
     )
@@ -2736,23 +3784,19 @@ def test_should_not_update_sms_template_with_emoji(
             "name": "new name",
             "template_content": "here's a burger 🍔",
             "service": SERVICE_ONE_ID,
-            "template_type": template_type,
+            "template_type": "sms",
         },
         _expected_status=200,
     )
-    assert expected_error in page.text
+    assert "You cannot use 🍔 in text messages." in page.text
     assert mock_update_service_template.called is False
 
 
-@pytest.mark.parametrize("template_type", ("sms", "broadcast"))
-def test_should_create_sms_or_broadcast_template_without_downgrading_unicode_characters(
+def test_should_create_sms_template_without_downgrading_unicode_characters(
     client_request,
     service_one,
     mock_create_service_template,
-    template_type,
 ):
-    service_one["permissions"] += [template_type]
-
     msg = "here:\tare some “fancy quotes” and non\u200Bbreaking\u200Bspaces"
 
     client_request.post(
@@ -2762,7 +3806,7 @@ def test_should_create_sms_or_broadcast_template_without_downgrading_unicode_cha
         _data={
             "name": "new name",
             "template_content": msg,
-            "template_type": template_type,
+            "template_type": "sms",
             "service": SERVICE_ONE_ID,
         },
         expected_status=302,
@@ -2784,7 +3828,6 @@ def test_should_show_message_before_redacting_template(
     service_one,
     fake_uuid,
 ):
-
     page = client_request.get(
         "main.redact_template",
         service_id=SERVICE_ONE_ID,
@@ -2809,7 +3852,6 @@ def test_should_show_redact_template(
     service_one,
     fake_uuid,
 ):
-
     page = client_request.post(
         "main.redact_template",
         service_id=SERVICE_ONE_ID,
@@ -2851,26 +3893,7 @@ def test_should_not_show_redaction_stuff_for_letters(
     mock_get_service_letter_template,
     mock_get_template_folders,
     single_letter_contact_block,
-):
-
-    mocker.patch("app.template_previews.get_page_count_for_letter", return_value=1)
-
-    page = client_request.get(
-        "main.view_template",
-        service_id=SERVICE_ONE_ID,
-        template_id=fake_uuid,
-        _test_page_title=False,
-    )
-
-    assert page.select(".hint") == []
-    assert "personalisation" not in " ".join(link.text.lower() for link in page.select("a"))
-
-
-def test_should_not_show_redaction_stuff_for_broadcasts(
-    client_request,
-    fake_uuid,
-    mock_get_broadcast_template,
-    mock_get_template_folders,
+    mock_get_page_counts_for_letter,
 ):
     page = client_request.get(
         "main.view_template",
@@ -2958,65 +3981,21 @@ def test_set_template_sender_escapes_letter_contact_block_names(
 
 
 @pytest.mark.parametrize(
-    "template_content",
-    (
-        "This is a ((test))",
-        "This ((unsure??might)) be a test",
-        pytest.param("This is a test", marks=pytest.mark.xfail),
-    ),
-)
-@pytest.mark.parametrize(
-    "template_type",
-    (
-        "broadcast",
-        pytest.param("sms", marks=pytest.mark.xfail),
-    ),
-)
-def test_should_not_create_broadcast_template_with_placeholders(
-    client_request,
-    service_one,
-    mock_create_service_template,
-    mock_update_service_template,
-    template_content,
-    template_type,
-):
-    service_one["permissions"] += [template_type]
-    page = client_request.post(
-        ".add_service_template",
-        service_id=SERVICE_ONE_ID,
-        template_type=template_type,
-        _data={
-            "name": "new name",
-            "template_content": template_content,
-            "service": SERVICE_ONE_ID,
-        },
-        _expected_status=200,
-    )
-    assert normalize_spaces(page.select_one(".error-message").text) == (
-        "You can’t use ((double brackets)) to personalise this message"
-    )
-    assert mock_create_service_template.called is False
-
-
-@pytest.mark.parametrize(
-    "template_type, prefix_sms, content, expected_message, expected_class",
+    "prefix_sms, content, expected_message, expected_class",
     (
         (
-            "sms",
             False,
             "",
             "Will be charged as 1 text message",
             None,
         ),
         (
-            "sms",
             False,
             "a" * 160,
             "Will be charged as 1 text message",
             None,
         ),
         (
-            "sms",
             False,
             "a" * 161,
             "Will be charged as 2 text messages",
@@ -3024,7 +4003,6 @@ def test_should_not_create_broadcast_template_with_placeholders(
         ),
         (
             # service name takes 13 characters, 147 + 13 = 160
-            "sms",
             True,
             "a" * 147,
             "Will be charged as 1 text message",
@@ -3032,14 +4010,12 @@ def test_should_not_create_broadcast_template_with_placeholders(
         ),
         (
             # service name takes 13 characters, 148 + 13 = 161
-            "sms",
             True,
             "a" * 148,
             "Will be charged as 2 text messages",
             None,
         ),
         (
-            "sms",
             False,
             "a" * 918,
             "Will be charged as 6 text messages",
@@ -3048,7 +4024,6 @@ def test_should_not_create_broadcast_template_with_placeholders(
         (
             # Service name increases fragment count but doesn’t count
             # against total character limit
-            "sms",
             True,
             "a" * 918,
             "Will be charged as 7 text messages",
@@ -3056,7 +4031,6 @@ def test_should_not_create_broadcast_template_with_placeholders(
         ),
         (
             # Can’t make a 7 fragment text template from content alone
-            "sms",
             False,
             "a" * 919,
             "You have 1 character too many",
@@ -3065,7 +4039,6 @@ def test_should_not_create_broadcast_template_with_placeholders(
         (
             # Service name increases content count but character count
             # is based on content alone
-            "sms",
             True,
             "a" * 919,
             "You have 1 character too many",
@@ -3074,42 +4047,36 @@ def test_should_not_create_broadcast_template_with_placeholders(
         (
             # Service name increases content count but character count
             # is based on content alone
-            "sms",
             True,
             "a" * 920,
             "You have 2 characters too many",
             "govuk-error-message",
         ),
         (
-            "sms",
             False,
             "Ẅ" * 70,
             "Will be charged as 1 text message",
             None,
         ),
         (
-            "sms",
             False,
             "Ẅ" * 71,
             "Will be charged as 2 text messages",
             None,
         ),
         (
-            "sms",
             False,
             "Ẅ" * 918,
             "Will be charged as 14 text messages",
             None,
         ),
         (
-            "sms",
             False,
             "Ẅ" * 919,
             "You have 1 character too many",
             "govuk-error-message",
         ),
         (
-            "sms",
             False,
             "Hello ((name))",
             "Will be charged as 1 text message (not including personalisation)",
@@ -3117,67 +4084,16 @@ def test_should_not_create_broadcast_template_with_placeholders(
         ),
         (
             # Length of placeholder body doesn’t count towards fragment count
-            "sms",
             False,
             f'Hello (( {"a" * 999} ))',
             "Will be charged as 1 text message (not including personalisation)",
             None,
-        ),
-        (
-            "broadcast",
-            False,
-            "",
-            "You have 1,395 characters remaining",
-            None,
-        ),
-        (
-            "broadcast",
-            False,
-            "a",
-            "You have 1,394 characters remaining",
-            None,
-        ),
-        (
-            "broadcast",
-            False,
-            "a" * 1395,
-            "You have 0 characters remaining",
-            None,
-        ),
-        (
-            "broadcast",
-            False,
-            "a" * 1396,
-            "You have 1 character too many",
-            "govuk-error-message",
-        ),
-        (
-            "broadcast",
-            False,
-            "a" * 1397,
-            "You have 2 characters too many",
-            "govuk-error-message",
-        ),
-        (
-            "broadcast",
-            False,
-            "Ẅ" * 615,
-            "You have 0 characters remaining",
-            None,
-        ),
-        (
-            "broadcast",
-            False,
-            "Ẅ" * 616,
-            "You have 1 character too many",
-            "govuk-error-message",
         ),
     ),
 )
 def test_content_count_json_endpoint(
     client_request,
     service_one,
-    template_type,
     prefix_sms,
     content,
     expected_message,
@@ -3187,7 +4103,7 @@ def test_content_count_json_endpoint(
     response = client_request.post_response(
         "main.count_content_length",
         service_id=SERVICE_ONE_ID,
-        template_type=template_type,
+        template_type="sms",
         _data={
             "template_content": content,
         },
@@ -3255,10 +4171,12 @@ def test_letter_attachment_preview_image_shows_overlay_when_content_outside_prin
         ),
     )
     template_preview_mock_valid = mocker.patch(
-        "app.main.views.templates.TemplatePreview.from_valid_pdf_file", return_value=make_response("page.html", 200)
+        "app.main.views.templates.TemplatePreview.get_png_for_valid_pdf_page",
+        return_value=make_response("page.html", 200),
     )
     template_preview_mock_invalid = mocker.patch(
-        "app.main.views.templates.TemplatePreview.from_invalid_pdf_file", return_value=make_response("page.html", 200)
+        "app.main.views.templates.TemplatePreview.get_png_for_invalid_pdf_page",
+        return_value=make_response("page.html", 200),
     )
 
     client_request.get_response(

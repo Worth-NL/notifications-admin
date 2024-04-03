@@ -16,7 +16,7 @@
 
     {{ content_metadata(
       data={
-        "Last updated": "24 January 2023"
+        "Last updated": letter_rates.last_updated
       }
     ) }}
 
@@ -35,22 +35,16 @@
   <div>
     {% call mapping_table(
       caption='Letter pricing',
-      field_headings=['Paper', 'Second class', 'First class', 'International'],
+      field_headings=['Paper'] + letter_rates.post_classes.values()|list,
       field_headings_visible=True,
       caption_visible=False
     ) %}
-      {% for sheets, second, first, international in [
-        ('1 sheet', '47p', '72p', '£1.05'),
-        ('2 sheets', '52p', '77p', '£1.13'),
-        ('3 sheets', '57p', '82p', '£1.21'),
-        ('4 sheets', '62p', '87p', '£1.29'),
-        ('5 sheets', '67p', '92p', '£1.37'),
-      ] %}
+      {% for sheets in letter_rates.sheet_counts %}
         {% call row() %}
-          {% call row_heading() %} {{ sheets }} {% endcall %}
-          {{ text_field(second + ' + VAT') }}
-          {{ text_field(first + ' + VAT') }}
-          {{ text_field(international + ' + VAT') }}
+          {% call row_heading() %} {{ sheets }} sheet{{ 's' if sheets > 1 else '' }} {% endcall %}
+          {% for post_class in letter_rates.post_classes.keys() %}
+            {{ text_field(letter_rates.get(sheet_count=sheets, post_class=post_class)|format_pennies_as_currency(long=False) + ' + VAT') }}
+          {% endfor %}
         {% endcall %}
       {% endfor %}
     {% endcall %}

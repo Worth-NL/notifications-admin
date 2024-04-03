@@ -4,6 +4,7 @@ import pytest
 from flask import url_for
 
 from app.main.views.service_settings.index import PLATFORM_ADMIN_SERVICE_PERMISSIONS
+from tests import organisation_json
 from tests.conftest import normalize_spaces
 
 
@@ -37,19 +38,6 @@ def test_service_set_permission_requires_platform_admin(
         permission="email_auth",
         _data={"enabled": "True"},
         _expected_status=403,
-    )
-
-
-def test_service_set_permission_does_not_exist_for_broadcast_permission(
-    mocker,
-    client_request,
-    platform_admin_user,
-    service_one,
-    mock_get_inbound_number_for_service,
-):
-    client_request.login(platform_admin_user)
-    client_request.get(
-        "main.service_set_permission", service_id=service_one["id"], permission="broadcast", _expected_status=404
     )
 
 
@@ -173,6 +161,10 @@ def test_service_setting_toggles_show(
     kwargs,
     text,
 ):
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(agreement_signed=True),
+    )
     link_url = url_for(endpoint, **kwargs, service_id=service_one["id"])
     service_one.update(service_fields)
     page = get_service_settings_page()

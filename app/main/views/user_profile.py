@@ -46,27 +46,35 @@ def user_profile():
 @main.route("/user-profile/name", methods=["GET", "POST"])
 @user_is_logged_in
 def user_profile_name():
-
     form = ChangeNameForm(new_name=current_user.name)
 
     if form.validate_on_submit():
         current_user.update(name=form.new_name.data)
         return redirect(url_for(".user_profile"))
 
-    return render_template("views/user-profile/change.html", thing="name", form_field=form.new_name)
+    return render_template(
+        "views/user-profile/change.html",
+        thing="name",
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/user-profile/email", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
 def user_profile_email():
-
     form = ChangeEmailForm(User.already_registered, email_address=current_user.email_address)
 
     if form.validate_on_submit():
         session[NEW_EMAIL] = form.email_address.data
         return redirect(url_for(".user_profile_email_authenticate"))
-    return render_template("views/user-profile/change.html", thing="email address", form_field=form.email_address)
+    return render_template(
+        "views/user-profile/change.html",
+        thing="email address",
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/user-profile/email/authenticate", methods=["GET", "POST"])
@@ -79,7 +87,7 @@ def user_profile_email_authenticate():
     form = ConfirmPasswordForm(_check_password)
 
     if NEW_EMAIL not in session:
-        return redirect("main.user_profile_email")
+        return redirect(url_for("main.user_profile_email"))
 
     if form.validate_on_submit():
         user_api_client.send_change_email_verification(current_user.id, session[NEW_EMAIL])
@@ -90,6 +98,7 @@ def user_profile_email_authenticate():
         thing="email address",
         form=form,
         back_link=url_for(".user_profile_email"),
+        error_summary_enabled=True,
     )
 
 
@@ -114,7 +123,6 @@ def user_profile_email_confirm(token):
 @main.route("/user-profile/mobile-number/delete", methods=["GET"], endpoint="user_profile_confirm_delete_mobile_number")
 @user_is_logged_in
 def user_profile_mobile_number():
-
     user = User.from_id(current_user.id)
     form = ChangeMobileNumberForm(mobile_number=current_user.mobile_number)
 
@@ -126,7 +134,11 @@ def user_profile_mobile_number():
         flash("Are you sure you want to delete your mobile number from Notify?", "delete")
 
     return render_template(
-        "views/user-profile/change.html", thing="mobile number", form_field=form.mobile_number, user_auth=user.auth_type
+        "views/user-profile/change.html",
+        thing="mobile number",
+        form=form,
+        user_auth=user.auth_type,
+        error_summary_enabled=True,
     )
 
 
@@ -144,7 +156,6 @@ def user_profile_mobile_number_delete():
 @main.route("/user-profile/mobile-number/authenticate", methods=["GET", "POST"])
 @user_is_logged_in
 def user_profile_mobile_number_authenticate():
-
     # Validate password for form
     def _check_password(pwd):
         return user_api_client.verify_password(current_user.id, pwd)
@@ -164,13 +175,13 @@ def user_profile_mobile_number_authenticate():
         thing="mobile number",
         form=form,
         back_link=url_for(".user_profile_mobile_number_confirm"),
+        error_summary_enabled=True,
     )
 
 
 @main.route("/user-profile/mobile-number/confirm", methods=["GET", "POST"])
 @user_is_logged_in
 def user_profile_mobile_number_confirm():
-
     # Validate verify code for form
     def _check_code(cde):
         return user_api_client.check_verify_code(current_user.id, cde, "sms")
@@ -194,7 +205,6 @@ def user_profile_mobile_number_confirm():
 @main.route("/user-profile/password", methods=["GET", "POST"])
 @user_is_logged_in
 def user_profile_password():
-
     # Validate password for form
     def _check_password(pwd):
         return user_api_client.verify_password(current_user.id, pwd)
@@ -205,7 +215,11 @@ def user_profile_password():
         user_api_client.update_password(current_user.id, password=form.new_password.data)
         return redirect(url_for(".user_profile"))
 
-    return render_template("views/user-profile/change-password.html", form=form)
+    return render_template(
+        "views/user-profile/change-password.html",
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/user-profile/take-part-in-user-research", methods=["GET", "POST"])
@@ -220,7 +234,7 @@ def user_profile_take_part_in_user_research():
         current_user.update(take_part_in_research=form.enabled.data)
         return redirect(url_for(".user_profile"))
 
-    return render_template("views/user-profile/take-part-in-user-research.html", form=form)
+    return render_template("views/user-profile/take-part-in-user-research.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/user-profile/disable-platform-admin-view", methods=["GET", "POST"])
@@ -240,7 +254,7 @@ def user_profile_disable_platform_admin_view():
         session["disable_platform_admin_view"] = not form.enabled.data
         return redirect(url_for(".user_profile"))
 
-    return render_template("views/user-profile/disable-platform-admin-view.html", form=form)
+    return render_template("views/user-profile/disable-platform-admin-view.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/user-profile/security-keys", methods=["GET"])
@@ -286,7 +300,12 @@ def user_profile_manage_security_key(key_id):
     if request.endpoint == "main.user_profile_confirm_delete_security_key":
         flash("Are you sure you want to delete this security key?", "delete")
 
-    return render_template("views/user-profile/manage-security-key.html", security_key=security_key, form=form)
+    return render_template(
+        "views/user-profile/manage-security-key.html",
+        security_key=security_key,
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/user-profile/security-keys/<uuid:key_id>/delete", methods=["POST"])

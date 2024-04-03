@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 import pytz
 from notifications_utils.letter_timings import (
@@ -19,7 +20,6 @@ from app.utils.time import is_less_than_days_ago
 
 
 class Job(JSONModel):
-
     ALLOWED_PROPERTIES = {
         "id",
         "service",
@@ -141,7 +141,6 @@ class Job(JSONModel):
 
     @property
     def letter_job_can_be_cancelled(self):
-
         if self.template["template_type"] != "letter":
             return False
 
@@ -210,6 +209,10 @@ class Job(JSONModel):
             return job_api_client.cancel_letter_job(self.service, self.id)
         else:
             return job_api_client.cancel_job(self.service, self.id)
+
+    @property
+    def original_file_name_without_extention(self):
+        return Path(self.original_file_name).stem
 
 
 class ImmediateJobs(ModelList):

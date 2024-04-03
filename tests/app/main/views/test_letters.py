@@ -3,8 +3,10 @@ from functools import partial
 import pytest
 from flask import url_for
 
+from tests import sample_uuid
+
 letters_urls = [
-    partial(url_for, "main.add_service_template", template_type="letter"),
+    partial(url_for, "main.edit_service_template", template_id=sample_uuid()),
 ]
 
 
@@ -16,7 +18,7 @@ def test_letters_access_restricted(
     mocker,
     permissions,
     response_code,
-    mock_get_service_templates,
+    mock_get_service_letter_template,
     url,
     service_one,
 ):
@@ -36,7 +38,7 @@ def test_letters_lets_in_without_permission(
     mock_login,
     mock_has_permissions,
     api_user_active,
-    mock_get_service_templates,
+    mock_get_service_letter_template,
     url,
     service_one,
 ):

@@ -24,7 +24,7 @@
           url_for('main.estimate_usage', service_id=current_service.id),
         ) }}
         {{ task_list_item(
-          current_service.has_team_members,
+          current_service.has_team_members_with_manage_service_permission,
           'Add a team member who can manage settings, team and usage',
           url_for('main.manage_users', service_id=current_service.id),
         ) }}
@@ -46,7 +46,7 @@
         ) %}
           {{ task_list_item(
             not current_service.sms_sender_is_govuk,
-            'Change your text message sender name',
+            'Change your Text message sender ID',
             url_for('main.service_sms_senders', service_id=current_service.id),
           ) }}
         {% endif %}
@@ -68,7 +68,7 @@
         </p>
       {% else %}
         <p class="govuk-body">
-          When we receive your request we’ll get back to you within one working day.
+          When we receive your request we’ll get back to you by the end of the next working day.
         </p>
         <p class="bottom-gutter">
           By requesting to go live you’re agreeing to our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.terms_of_use') }}">terms of use</a>.

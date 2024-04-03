@@ -3,7 +3,7 @@ import json
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
-from functools import partial
+from typing import Optional
 from unittest import mock
 from unittest.mock import Mock, PropertyMock
 from uuid import UUID, uuid4
@@ -15,13 +15,13 @@ from notifications_python_client.errors import HTTPError
 from notifications_utils.url_safe_token import generate_token
 
 from app import create_app, webauthn_server
+from app.constants import LetterLanguageOptions
 
 from . import (
     NotifyBeautifulSoup,
     TestClient,
     api_key_json,
     assert_url_expected,
-    broadcast_message_json,
     contact_list_json,
     generate_uuid,
     inbound_sms_json,
@@ -60,7 +60,6 @@ def notify_admin_without_context():
 
 @pytest.fixture
 def notify_admin(notify_admin_without_context):
-
     with notify_admin_without_context.app_context():
         yield notify_admin_without_context
 
@@ -521,17 +520,31 @@ def fake_uuid():
     return sample_uuid()
 
 
+@pytest.fixture
+def mocked_get_service_data():
+    """Data source for `mock_get_service`
+
+    This fixture is the underlying data source for `mock_get_service`. Insert service JSON blobs into this dictionary,
+    with service ID as the key, to allow multiple services to be queried from `get_service` calls.
+    """
+    return {}
+
+
 @pytest.fixture(scope="function")
-def mock_get_service(mocker, api_user_active):
+def mock_get_service(mocker, api_user_active, mocked_get_service_data):
     def _get(service_id):
-        service = service_json(
-            service_id,
-            users=[api_user_active["id"]],
-            email_message_limit=50,
-            sms_message_limit=50,
-            letter_message_limit=50,
-        )
-        return {"data": service}
+        return {
+            "data": mocked_get_service_data.get(
+                service_id,
+                service_json(
+                    service_id,
+                    users=[api_user_active["id"]],
+                    email_message_limit=50,
+                    sms_message_limit=50,
+                    letter_message_limit=50,
+                ),
+            )
+        }
 
     return mocker.patch("app.service_api_client.get_service", side_effect=_get)
 
@@ -604,14 +617,12 @@ def mock_create_service(mocker):
         letter_message_limit,
         restricted,
         user_id,
-        email_from,
     ):
         service = service_json(
             101,
             service_name,
             [user_id],
             restricted=restricted,
-            email_from=email_from,
             email_message_limit=email_message_limit,
             sms_message_limit=sms_message_limit,
             letter_message_limit=letter_message_limit,
@@ -638,7 +649,6 @@ def mock_update_service(mocker):
                     "email_message_limit",
                     "letter_message_limit",
                     "restricted",
-                    "email_from",
                     "sms_sender",
                     "permissions",
                 ]
@@ -828,23 +838,6 @@ def mock_get_service_email_template(mocker):
 
 
 @pytest.fixture(scope="function")
-def mock_get_broadcast_template(mocker):
-    def _get(service_id, template_id, version=None):
-        template = template_json(
-            service_id=service_id,
-            id_=template_id,
-            name="Test alert",
-            type_="broadcast",
-            content="This is a test",
-        )
-        if version:
-            template.update({"version": version})
-        return {"data": template}
-
-    return mocker.patch("app.service_api_client.get_service_template", side_effect=_get)
-
-
-@pytest.fixture(scope="function")
 def mock_get_service_email_template_without_placeholders(mocker):
     def _get(service_id, template_id, version=None):
         template = template_json(
@@ -872,6 +865,26 @@ def mock_get_service_letter_template(mocker):
             content="Template <em>content</em> with & entity",
             subject="Subject",
             postage=postage,
+        )
+        return {"data": template}
+
+    return mocker.patch("app.service_api_client.get_service_template", side_effect=_get)
+
+
+@pytest.fixture(scope="function")
+def mock_get_service_letter_template_welsh_language(mocker):
+    def _get(service_id, template_id, version=None, postage="second"):
+        template = template_json(
+            service_id=service_id,
+            id_=template_id,
+            name="Two week reminder",
+            type_="letter",
+            content="Template <em>content</em> with & entity",
+            subject="Subject",
+            postage=postage,
+            letter_languages=LetterLanguageOptions.welsh_then_english.value,
+            letter_welsh_subject="Pennawd y llythyr",
+            letter_welsh_content="Corff y llythyr",
         )
         return {"data": template}
 
@@ -918,8 +931,35 @@ def mock_get_service_letter_template_with_placeholders(mocker):
 
 
 @pytest.fixture(scope="function")
+def mock_get_service_letter_template_with_qr_placeholder(mocker):
+    def _get(service_id, template_id, version=None, postage="second"):
+        template = template_json(
+            service_id=service_id,
+            id_=template_id,
+            name="QR code",
+            type_="letter",
+            content="qr: ((data))",
+            subject="Subject",
+            postage=postage,
+        )
+        return {"data": template}
+
+    return mocker.patch("app.service_api_client.get_service_template", side_effect=_get)
+
+
+@pytest.fixture(scope="function")
 def mock_create_service_template(mocker, fake_uuid):
-    def _create(name, type_, content, service_id, subject=None, parent_folder_id=None):
+    def _create(
+        name,
+        type_,
+        content,
+        service_id,
+        subject=None,
+        parent_folder_id=None,
+        letter_languages: Optional[LetterLanguageOptions] = None,
+        letter_welsh_subject: str = None,
+        letter_welsh_content: str = None,
+    ):
         template = template_json(
             service_id=service_id, id_=fake_uuid, name=name, type_=type_, content=content, folder=parent_folder_id
         )
@@ -930,8 +970,25 @@ def mock_create_service_template(mocker, fake_uuid):
 
 @pytest.fixture(scope="function")
 def mock_update_service_template(mocker):
-    def _update(*, service_id, template_id, name=None, content=None, subject=None):
-        template = template_json(service_id=service_id, id_=template_id, name=name, content=content, subject=subject)
+    def _update(
+        *,
+        service_id,
+        template_id,
+        name=None,
+        content=None,
+        subject=None,
+        letter_welsh_subject=None,
+        letter_welsh_content=None,
+    ):
+        template = template_json(
+            service_id=service_id,
+            id_=template_id,
+            name=name,
+            content=content,
+            subject=subject,
+            letter_welsh_subject=None,
+            letter_welsh_content=None,
+        )
         return {"data": template}
 
     return mocker.patch("app.service_api_client.update_service_template", side_effect=_update)
@@ -968,6 +1025,22 @@ def mock_update_service_template_400_content_too_big(mocker):
         http_error = HTTPError(
             response=resp_mock, message={"content": ["Content has a character count greater than the limit of 459"]}
         )
+        raise http_error
+
+    return mocker.patch("app.service_api_client.update_service_template", side_effect=_update)
+
+
+@pytest.fixture(scope="function")
+def mock_update_service_template_400_qr_code_too_big(mocker):
+    def _update(*, service_id, template_id, name=None, content=None, subject=None):
+        json_mock = Mock(
+            return_value={
+                "message": {"content": ["qr-code-too-long"]},
+                "result": "error",
+            }
+        )
+        resp_mock = Mock(status_code=400, json=json_mock)
+        http_error = HTTPError(response=resp_mock, message={"content": ["qr-code-too-long"]})
         raise http_error
 
     return mocker.patch("app.service_api_client.update_service_template", side_effect=_update)
@@ -1138,16 +1211,6 @@ def api_nongov_user_active(fake_uuid):
 @pytest.fixture(scope="function")
 def active_user_with_permissions(fake_uuid):
     return create_active_user_with_permissions()
-
-
-@pytest.fixture(scope="function")
-def active_user_create_broadcasts_permission():
-    return create_active_user_create_broadcasts_permissions()
-
-
-@pytest.fixture(scope="function")
-def active_user_approve_broadcasts_permission():
-    return create_active_user_approve_broadcasts_permissions()
 
 
 @pytest.fixture(scope="function")
@@ -2796,11 +2859,11 @@ def _client(notify_admin):
 
 
 @pytest.fixture(scope="function")
-def _logged_in_client(_client, active_user_with_permissions, mocker, service_one, mock_login):
+def _logged_in_client(_client, request, active_user_with_permissions, mocker, service_one, mock_login):
     """
     Do not use this fixture directly – use `client_request` instead
     """
-    _client.login(active_user_with_permissions, mocker, service_one)
+    _client.login(active_user_with_permissions, mocker, service_one, request=request)
     yield _client
 
 
@@ -2818,7 +2881,7 @@ def os_environ():
 
 
 @pytest.fixture  # noqa (C901 too complex)
-def client_request(_logged_in_client, mocker, service_one):  # noqa (C901 too complex)
+def client_request(request, _logged_in_client, mocker, service_one):  # noqa (C901 too complex)
     def block_method(object, method_name, preferred_method_name):
         def blocked_method(*args, **kwargs):
             raise AttributeError(
@@ -2837,7 +2900,7 @@ def client_request(_logged_in_client, mocker, service_one):  # noqa (C901 too co
 
         @staticmethod
         def login(user, service=service_one):
-            _logged_in_client.login(user, mocker, service)
+            _logged_in_client.login(user, mocker, service, request)
 
         @staticmethod
         def logout():
@@ -2931,6 +2994,16 @@ def client_request(_logged_in_client, mocker, service_one):  # noqa (C901 too co
                             f"\n"
                             f'(you probably want to add class="{hint}")'
                         )
+
+                assert not page.select(
+                    r"main.govuk-\!-padding-top-0 h1.govuk-heading-l"
+                ), "Use heading-large or set error_summary_enabled=True"
+
+                if page.select("h1.heading-large"):
+                    assert (
+                        "govuk-!-padding-top-0" in page.select_one("main")["class"]
+                    ), "Use govuk-heading-l or set error_summary_enabled=False"
+
             return page
 
         @staticmethod
@@ -3668,17 +3741,36 @@ def mock_get_returned_letter_summary_with_no_returned_letters(mocker):
     )
 
 
+def do_mock_get_page_counts_for_letter(mocker, count, welsh_page_count=0, attachment_page_count=0):
+    return mocker.patch(
+        "app.template_previews.TemplatePreview.get_page_counts_for_letter",
+        return_value={
+            "count": count,
+            "welsh_page_count": welsh_page_count,
+            "attachment_page_count": attachment_page_count,
+        },
+    )
+
+
+@pytest.fixture(scope="function")
+def mock_get_page_counts_for_letter(mocker, count=1, welsh_page_count=0, attachment_page_count=0):
+    return do_mock_get_page_counts_for_letter(
+        mocker=mocker, count=count, welsh_page_count=welsh_page_count, attachment_page_count=attachment_page_count
+    )
+
+
 @pytest.fixture
-def mock_template_preview(mocker):
-    content = b'{"count":1}'
+def mock_template_preview(mocker, mock_get_page_counts_for_letter):
+    content = b"letter preview as png or pdf"
     status_code = 200
     headers = {}
     example_response = (content, status_code, headers)
-    mocker.patch("app.template_previews.TemplatePreview.from_database_object", return_value=example_response)
-    mocker.patch("app.template_previews.TemplatePreview.from_valid_pdf_file", return_value=example_response)
-    mocker.patch("app.template_previews.TemplatePreview.from_invalid_pdf_file", return_value=example_response)
-    mocker.patch("app.template_previews.TemplatePreview.from_example_template", return_value=example_response)
-    mocker.patch("app.template_previews.TemplatePreview.from_utils_template", return_value=example_response)
+    mocker.patch(
+        "app.template_previews.TemplatePreview.get_preview_for_templated_letter", return_value=example_response
+    )
+
+    mocker.patch("app.template_previews.TemplatePreview.get_png_for_valid_pdf_page", return_value=example_response)
+    mocker.patch("app.template_previews.TemplatePreview.get_png_for_invalid_pdf_page", return_value=example_response)
 
 
 @pytest.fixture(scope="function")
@@ -3716,38 +3808,6 @@ def create_active_user_view_permissions(with_unique_id=False):
         id=str(uuid4()) if with_unique_id else sample_uuid(),
         name="Test User With Permissions",
         permissions={SERVICE_ONE_ID: ["view_activity"]},
-    )
-
-
-def create_active_user_create_broadcasts_permissions(with_unique_id=False):
-    return create_service_one_user(
-        id=str(uuid4()) if with_unique_id else sample_uuid(),
-        name="Test User Create Broadcasts Permission",
-        permissions={
-            SERVICE_ONE_ID: [
-                "create_broadcasts",
-                "reject_broadcasts",
-                "cancel_broadcasts",
-                "view_activity",  # added automatically by API
-            ]
-        },
-        auth_type="webauthn_auth",
-    )
-
-
-def create_active_user_approve_broadcasts_permissions(with_unique_id=False):
-    return create_service_one_user(
-        id=str(uuid4()) if with_unique_id else sample_uuid(),
-        name="Test User Approve Broadcasts Permission",
-        permissions={
-            SERVICE_ONE_ID: [
-                "approve_broadcasts",
-                "reject_broadcasts",
-                "cancel_broadcasts",
-                "view_activity",  # added automatically by API
-            ]
-        },
-        auth_type="webauthn_auth",
     )
 
 
@@ -4120,188 +4180,6 @@ def create_template(
     )
 
 
-@pytest.fixture(scope="function")
-def mock_create_broadcast_message(
-    mocker,
-    fake_uuid,
-):
-    def _create(
-        *,
-        service_id,
-        template_id,
-        content,
-        reference,
-    ):
-        return {
-            "id": fake_uuid,
-        }
-
-    return mocker.patch(
-        "app.broadcast_message_api_client.create_broadcast_message",
-        side_effect=_create,
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_get_draft_broadcast_message(
-    mocker,
-    fake_uuid,
-):
-    def _get(*, service_id, broadcast_message_id):
-        return broadcast_message_json(
-            id_=broadcast_message_id,
-            service_id=service_id,
-            template_id=fake_uuid,
-            status="draft",
-            created_by_id=fake_uuid,
-        )
-
-    return mocker.patch(
-        "app.broadcast_message_api_client.get_broadcast_message",
-        side_effect=_get,
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_get_live_broadcast_message(
-    mocker,
-    fake_uuid,
-):
-    def _get(*, service_id, broadcast_message_id):
-        return broadcast_message_json(
-            id_=broadcast_message_id,
-            service_id=service_id,
-            template_id=fake_uuid,
-            status="broadcasting",
-            created_by_id=fake_uuid,
-            starts_at=(datetime.utcnow()).isoformat(),
-            finishes_at=(datetime.utcnow() + timedelta(hours=24)).isoformat(),
-        )
-
-    return mocker.patch(
-        "app.broadcast_message_api_client.get_broadcast_message",
-        side_effect=_get,
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_get_no_broadcast_messages(
-    mocker,
-    fake_uuid,
-):
-    return mocker.patch(
-        "app.models.broadcast_message.BroadcastMessages.client_method",
-        return_value=[
-            broadcast_message_json(
-                id_=fake_uuid,
-                service_id=SERVICE_ONE_ID,
-                template_id=fake_uuid,
-                status="draft",  # draft broadcasts aren’t shown on the dashboard
-                created_by_id=fake_uuid,
-            ),
-        ],
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_get_broadcast_messages(
-    mocker,
-    fake_uuid,
-):
-    def _get(service_id):
-        partial_json = partial(
-            broadcast_message_json,
-            service_id=service_id,
-            template_id=fake_uuid,
-            created_by_id=fake_uuid,
-        )
-        return [
-            partial_json(
-                id_=uuid4(),
-                status="draft",
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="pending-approval",
-                updated_at=(datetime.utcnow() - timedelta(minutes=30)).isoformat(),
-                template_name="Half an hour ago",
-                finishes_at=None,
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="pending-approval",
-                updated_at=(datetime.utcnow() - timedelta(hours=1, minutes=30)).isoformat(),
-                template_name="Hour and a half ago",
-                finishes_at=None,
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="broadcasting",
-                updated_at=(datetime.utcnow()).isoformat(),
-                starts_at=(datetime.utcnow()).isoformat(),
-                finishes_at=(datetime.utcnow() + timedelta(hours=24)).isoformat(),
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="broadcasting",
-                updated_at=(datetime.utcnow() - timedelta(hours=1)).isoformat(),
-                starts_at=(datetime.utcnow() - timedelta(hours=1)).isoformat(),
-                finishes_at=(datetime.utcnow() + timedelta(hours=24)).isoformat(),
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="completed",
-                starts_at=(datetime.utcnow() - timedelta(hours=12)).isoformat(),
-                finishes_at=(datetime.utcnow() - timedelta(hours=6)).isoformat(),
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="cancelled",
-                starts_at=(datetime.utcnow() - timedelta(days=1)).isoformat(),
-                finishes_at=(datetime.utcnow() - timedelta(days=100)).isoformat(),
-                cancelled_at=(datetime.utcnow() - timedelta(days=10)).isoformat(),
-            ),
-            partial_json(
-                id_=uuid4(),
-                status="rejected",
-                updated_at=(datetime.utcnow() - timedelta(hours=1)).isoformat(),
-            ),
-        ]
-
-    return mocker.patch(
-        "app.models.broadcast_message.BroadcastMessages.client_method",
-        side_effect=_get,
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_update_broadcast_message(
-    mocker,
-    fake_uuid,
-):
-    def _update(*, service_id, broadcast_message_id, data):
-        pass
-
-    return mocker.patch(
-        "app.broadcast_message_api_client.update_broadcast_message",
-        side_effect=_update,
-    )
-
-
-@pytest.fixture(scope="function")
-def mock_update_broadcast_message_status(
-    mocker,
-    fake_uuid,
-):
-    def _update(status, *, service_id, broadcast_message_id):
-        pass
-
-    return mocker.patch(
-        "app.broadcast_message_api_client.update_broadcast_message_status",
-        side_effect=_update,
-    )
-
-
 @pytest.fixture
 def mock_get_invited_user_by_id(mocker, sample_invite):
     def _get(invited_user_id):
@@ -4363,3 +4241,47 @@ def logo_client(notify_admin):
     from app import logo_client
 
     yield logo_client
+
+
+@pytest.fixture(scope="function")
+def mock_request_invite_for(mocker):
+    def _request_invite_for(*, user_to_invite_id, service_id, service_managers_ids, reason):
+        return
+
+    return mocker.patch("app.invite_api_client.request_invite_for", side_effect=_request_invite_for)
+
+
+@pytest.fixture(scope="function")
+def mock_get_letter_rates(mocker):
+    def _get_letter_rates():
+        return [
+            {"post_class": "second", "rate": "0.54", "sheet_count": 1, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "first", "rate": "0.82", "sheet_count": 1, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "europe", "rate": "1.44", "sheet_count": 1, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "rest-of-world", "rate": "1.44", "sheet_count": 1, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "second", "rate": "0.59", "sheet_count": 2, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "first", "rate": "0.86", "sheet_count": 2, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "europe", "rate": "1.49", "sheet_count": 2, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "rest-of-world", "rate": "1.49", "sheet_count": 2, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "second", "rate": "0.63", "sheet_count": 3, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "first", "rate": "0.9", "sheet_count": 3, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "europe", "rate": "1.53", "sheet_count": 3, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "rest-of-world", "rate": "1.53", "sheet_count": 3, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "second", "rate": "0.68", "sheet_count": 4, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "first", "rate": "0.96", "sheet_count": 4, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "europe", "rate": "1.58", "sheet_count": 4, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "rest-of-world", "rate": "1.58", "sheet_count": 4, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "second", "rate": "0.73", "sheet_count": 5, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "first", "rate": "1", "sheet_count": 5, "start_date": "2023-11-01T00:00:00"},
+            {"post_class": "europe", "rate": "1.63", "sheet_count": 5, "start_date": "2024-01-02T00:00:00"},
+            {"post_class": "rest-of-world", "rate": "1.63", "sheet_count": 5, "start_date": "2024-01-02T00:00:00"},
+        ]
+
+    return mocker.patch("app.models.letter_rates.LetterRates.client_method", side_effect=_get_letter_rates)
+
+
+@pytest.fixture(scope="function")
+def mock_onwards_request_headers(mocker):
+    mock_gorh = mocker.patch("notifications_utils.request_helper.NotifyRequest.get_onwards_request_headers")
+    mock_gorh.return_value = {"some-onwards": "request-headers"}
+    return mock_gorh

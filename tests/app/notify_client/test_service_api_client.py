@@ -71,7 +71,6 @@ def test_client_creates_service_with_correct_data(
         1,
         True,
         fake_uuid,
-        "test@example.com",
     )
     mock_post.assert_called_once_with(
         "/service",
@@ -88,7 +87,6 @@ def test_client_creates_service_with_correct_data(
             letter_message_limit=1,
             restricted=True,
             user_id=fake_uuid,
-            email_from="test@example.com",
         ),
     )
 
@@ -154,7 +152,6 @@ def test_client_returns_count_of_service_templates(
     extra_args,
     expected_count,
 ):
-
     mocker.patch("app.service_api_client.get_service_templates", return_value={"data": template_data})
 
     assert service_api_client.count_service_templates(SERVICE_ONE_ID, **extra_args) == expected_count
@@ -339,7 +336,6 @@ def test_returns_value_from_cache(
     expected_api_calls,
     expected_cache_set_calls,
 ):
-
     mock_redis_get = mocker.patch(
         "app.extensions.RedisClient.get",
         return_value=cache_value,
@@ -380,7 +376,6 @@ def test_returns_value_from_cache(
         (service_api_client, "delete_sms_sender", [SERVICE_ONE_ID, ""], {}),
         (service_api_client, "update_service_callback_api", [SERVICE_ONE_ID] + [""] * 4, {}),
         (service_api_client, "create_service_callback_api", [SERVICE_ONE_ID] + [""] * 3, {}),
-        (service_api_client, "set_service_broadcast_settings", [SERVICE_ONE_ID, "training", "severe", "all", []], {}),
         (user_api_client, "add_user_to_service", [SERVICE_ONE_ID, uuid4(), [], []], {}),
         (invite_api_client, "accept_invite", [SERVICE_ONE_ID, uuid4()], {}),
     ],
@@ -442,13 +437,6 @@ def test_deletes_service_cache(
             [f"service-{SERVICE_ONE_ID}-template-{FAKE_TEMPLATE_ID}*"],
         ),
         (
-            "update_service_template_postage",
-            [SERVICE_ONE_ID, FAKE_TEMPLATE_ID, "first"],
-            {},
-            [f"service-{SERVICE_ONE_ID}-templates"],
-            [f"service-{SERVICE_ONE_ID}-template-{FAKE_TEMPLATE_ID}*"],
-        ),
-        (
             "delete_service_template",
             [SERVICE_ONE_ID, FAKE_TEMPLATE_ID],
             {},
@@ -497,21 +485,6 @@ def test_deletes_cached_users_when_archiving_service(mocker, mock_get_service_te
 
     assert call("user-my-user-id1", "user-my-user-id2") in mock_redis_delete.call_args_list
     assert call(f"service-{SERVICE_ONE_ID}-template*") in mock_redis_delete_by_pattern.call_args_list
-
-
-def test_deletes_cached_users_when_changing_broadcast_service_settings(mocker):
-    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete")
-
-    mocker.patch("notifications_python_client.base.BaseAPIClient.request", return_value={"data": ""})
-
-    service_api_client.set_service_broadcast_settings(
-        SERVICE_ONE_ID, "live", "severe", "all", ["my-user-id1", "my-user-id2"]
-    )
-
-    assert mock_redis_delete.call_args_list == [
-        call("user-my-user-id1", "user-my-user-id2"),
-        call(f"service-{SERVICE_ONE_ID}"),
-    ]
 
 
 def test_client_gets_guest_list(mocker):
@@ -579,7 +552,6 @@ def test_client_updates_service_with_allowed_attributes(
         "contact_link",
         "count_as_live",
         "email_branding",
-        "email_from",
         "free_sms_fragment_limit",
         "go_live_at",
         "go_live_user",
@@ -610,10 +582,10 @@ def test_client_updates_service_with_allowed_attributes(
 @pytest.mark.parametrize(
     "err_data, expected_message",
     (
-        ({"name": "Service name error"}, "This service name is already in use"),
+        ({"name": "Service name error"}, "This service name is already in use - enter a unique name"),
         (
-            {"email_from": "email_from disallowed characters"},
-            "Service name must not include characters from a non-Latin alphabet",
+            {"normalised_service_name": "normalised service name has disallowed characters"},
+            "Service name cannot include characters from a non-Latin alphabet",
         ),
         ({"other": "blah"}, None),
     ),

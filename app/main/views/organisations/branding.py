@@ -1,7 +1,6 @@
 from typing import Optional
 
 from flask import (
-    Markup,
     abort,
     current_app,
     flash,
@@ -10,6 +9,7 @@ from flask import (
     request,
     url_for,
 )
+from markupsafe import Markup
 from werkzeug import Response
 
 from app import current_organisation, organisations_client
@@ -206,6 +206,7 @@ def add_organisation_email_branding_options(org_id):
         "views/organisations/organisation/settings/add-email-branding-options.html",
         form=form,
         _search_form=SearchByNameForm(),
+        error_summary_enabled=True,
     )
 
 
@@ -368,4 +369,5 @@ def add_organisation_letter_branding_options(org_id):
         "views/organisations/organisation/settings/add-letter-branding-options.html",
         form=form,
         _search_form=SearchByNameForm(),
+        error_summary_enabled=True,
     )

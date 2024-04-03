@@ -3,6 +3,7 @@ import pathlib
 from time import monotonic
 
 import jinja2
+import requests
 import werkzeug
 from flask import (
     current_app,
@@ -27,6 +28,7 @@ from notifications_utils.formatters import (
     get_lines_with_normalised_whitespace,
 )
 from notifications_utils.recipients import format_phone_number_human_readable
+from notifications_utils.safe_string import make_string_safe_for_email_local_part, make_string_safe_for_id
 from notifications_utils.sanitise_text import SanitiseASCII
 from werkzeug.exceptions import HTTPException as WerkzeugHTTPException
 from werkzeug.exceptions import abort
@@ -47,7 +49,6 @@ from app.formatters import (
     format_date_numeric,
     format_date_short,
     format_datetime,
-    format_datetime_24h,
     format_datetime_human,
     format_datetime_normal,
     format_datetime_relative,
@@ -56,17 +57,16 @@ from app.formatters import (
     format_delta,
     format_delta_days,
     format_list_items,
-    format_mobile_network,
     format_notification_status,
     format_notification_status_as_field_status,
     format_notification_status_as_time,
     format_notification_status_as_url,
     format_notification_type,
-    format_number_in_pounds_as_currency,
+    format_pennies_as_currency,
+    format_pounds_as_currency,
     format_thousands,
     format_time,
     format_yes_no,
-    id_safe,
     iteration_count,
     linkable_name,
     message_count,
@@ -76,8 +76,6 @@ from app.formatters import (
     recipient_count,
     recipient_count_label,
     redact_mobile_number,
-    round_to_significant_figures,
-    square_metres_to_square_miles,
     valid_phone_number,
 )
 from app.models.organisation import Organisation
@@ -88,11 +86,11 @@ from app.navigation import (
     HeaderNavigation,
     MainNavigation,
     OrgNavigation,
+    PlatformAdminNavigation,
 )
 from app.notify_client import InviteTokenError
 from app.notify_client.api_key_api_client import api_key_api_client
 from app.notify_client.billing_api_client import billing_api_client
-from app.notify_client.broadcast_message_api_client import broadcast_message_api_client
 from app.notify_client.complaint_api_client import complaint_api_client
 from app.notify_client.contact_list_api_client import contact_list_api_client
 from app.notify_client.email_branding_client import email_branding_client
@@ -103,6 +101,7 @@ from app.notify_client.job_api_client import job_api_client
 from app.notify_client.letter_attachment_client import letter_attachment_client
 from app.notify_client.letter_branding_client import letter_branding_client
 from app.notify_client.letter_jobs_client import letter_jobs_client
+from app.notify_client.letter_rate_api_client import letter_rate_api_client
 from app.notify_client.notification_api_client import notification_api_client
 from app.notify_client.org_invite_api_client import org_invite_api_client
 from app.notify_client.organisations_api_client import organisations_client
@@ -144,6 +143,7 @@ navigation = {
     "main_navigation": MainNavigation(),
     "header_navigation": HeaderNavigation(),
     "org_navigation": OrgNavigation(),
+    "platform_admin_navigation": PlatformAdminNavigation(),
 }
 
 
@@ -173,7 +173,6 @@ def create_app(application):
         # API clients
         api_key_api_client,
         billing_api_client,
-        broadcast_message_api_client,
         contact_list_api_client,
         complaint_api_client,
         email_branding_client,
@@ -184,6 +183,7 @@ def create_app(application):
         letter_attachment_client,
         letter_branding_client,
         letter_jobs_client,
+        letter_rate_api_client,
         notification_api_client,
         org_invite_api_client,
         organisations_client,
@@ -273,7 +273,7 @@ def init_app(application):
             "font_paths": font_paths,
         }
 
-    application.url_map.converters["uuid"].to_python = lambda self, value: value
+    application.url_map.converters["uuid"].to_python = lambda self, value: value.lower()
     application.url_map.converters["template_type"] = TemplateTypeConverter
     application.url_map.converters["ticket_type"] = TicketTypeConverter
     application.url_map.converters["letter_file_extension"] = LetterFileExtensionConverter
@@ -293,23 +293,10 @@ def load_user(user_id):
     return User.from_id(user_id)
 
 
-def make_session_permanent():
-    """
-    Make sessions permanent. By permanent, we mean "admin app sets when it expires". Normally the cookie would expire
-    whenever you close the browser. With this, the session expiry is set in `config['PERMANENT_SESSION_LIFETIME']`
-    (20 hours) and is refreshed after every request. IE: you will be logged out after twenty hours of inactivity.
-
-    We don't _need_ to set this every request (it's saved within the cookie itself under the `_permanent` flag), only
-    when you first log in/sign up/get invited/etc, but we do it just to be safe. For more reading, check here:
-    https://stackoverflow.com/questions/34118093/flask-permanent-session-where-to-define-them
-    """
-    session.permanent = True
-
-
 def load_service_before_request():
     g.current_service = None
 
-    if "/static/" in request.url:
+    if request.path.startswith("/static/"):
         return
 
     if request.view_args:
@@ -331,7 +318,7 @@ def load_service_before_request():
 def load_organisation_before_request():
     g.current_organisation = None
 
-    if "/static/" in request.url:
+    if request.path.startswith("/static/"):
         return
 
     if request.view_args:
@@ -350,20 +337,6 @@ def load_organisation_before_request():
 
 def load_user_id_before_request():
     g.user_id = get_user_id_from_flask_login_session()
-
-
-def save_service_or_org_after_request(response):
-    # Only save the current session if the request is 200
-    service_id = request.view_args.get("service_id", None) if request.view_args else None
-    organisation_id = request.view_args.get("org_id", None) if request.view_args else None
-    if response.status_code == 200:
-        if service_id:
-            session["service_id"] = service_id
-            session["organisation_id"] = None
-        elif organisation_id:
-            session["service_id"] = None
-            session["organisation_id"] = organisation_id
-    return response
 
 
 #  https://www.owasp.org/index.php/List_of_useful_HTTP_headers
@@ -413,9 +386,9 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
     @application.errorhandler(HTTPError)
     def render_http_error(error):
         application.logger.warning(
-            "API %(api)s failed with status %(status)s message %(message)s",
+            "API %(api)s failed with status=%(status)s, message='%(message)s'",
             dict(
-                api=error.response.url if error.response else "unknown",
+                api=error.response.url if isinstance(error.response, requests.Response) else "unknown",
                 status=error.status_code,
                 message=error.message,
             ),
@@ -426,9 +399,9 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
             # it might be a 400, which we should handle as if it's an internal server error. If the API might
             # legitimately return a 400, we should handle that within the view or the client that calls it.
             application.logger.exception(
-                "API %(api)s failed with status %(status)s message %(message)s",
+                "API %(api)s failed with status=%(status)s message='%(message)s'",
                 dict(
-                    api=error.response.url if error.response else "unknown",
+                    api=error.response.url if isinstance(error.response, requests.Response) else "unknown",
                     status=error.status_code,
                     message=error.message,
                 ),
@@ -532,9 +505,6 @@ def setup_blueprints(application):
     from app.main import no_cookie as no_cookie_blueprint
     from app.status import status as status_blueprint
 
-    main_blueprint.before_request(make_session_permanent)
-    main_blueprint.after_request(save_service_or_org_after_request)
-
     application.register_blueprint(main_blueprint)
     application.register_blueprint(json_updates_blueprint)
 
@@ -556,12 +526,12 @@ def add_template_filters(application):
         format_auth_type,
         format_billions,
         format_datetime,
-        format_datetime_24h,
         format_datetime_normal,
         format_datetime_short,
         format_time,
         valid_phone_number,
         linkable_name,
+        format_pennies_as_currency,
         format_date,
         format_date_human,
         format_date_normal,
@@ -577,26 +547,24 @@ def add_template_filters(application):
         format_notification_status_as_time,
         format_notification_status_as_field_status,
         format_notification_status_as_url,
-        format_number_in_pounds_as_currency,
+        format_pounds_as_currency,
         formatted_list,
         get_lines_with_normalised_whitespace,
         nl2br,
         format_phone_number_human_readable,
         format_thousands,
-        id_safe,
+        make_string_safe_for_id,
         convert_to_boolean,
         format_list_items,
         iteration_count,
         recipient_count,
         recipient_count_label,
         redact_mobile_number,
-        round_to_significant_figures,
         message_count_label,
         message_count,
         message_count_noun,
-        format_mobile_network,
         format_yes_no,
-        square_metres_to_square_miles,
+        make_string_safe_for_email_local_part,
     ]:
         application.add_template_filter(fn)
 

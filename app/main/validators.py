@@ -6,12 +6,13 @@ from notifications_utils.field import Field
 from notifications_utils.formatters import formatted_list
 from notifications_utils.recipients import InvalidEmailError, validate_email_address
 from notifications_utils.sanitise_text import SanitiseSMS
-from notifications_utils.template import BroadcastMessageTemplate
-from orderedset import OrderedSet
+from ordered_set import OrderedSet
 from wtforms import ValidationError
-from wtforms.validators import DataRequired, StopValidation
+from wtforms.validators import URL, DataRequired, InputRequired, StopValidation
+from wtforms.validators import Length as WTFormsLength
 
 from app import antivirus_client
+from app.formatters import sentence_case
 from app.main._commonly_used_passwords import commonly_used_passwords
 from app.models.spreadsheet import Spreadsheet
 from app.utils.user import is_gov_user
@@ -39,7 +40,6 @@ class CsvFileValidator:
 
 class ValidGovEmail:
     def __call__(self, form, field):
-
         if field.data == "":
             return
 
@@ -59,11 +59,10 @@ class ValidGovEmail:
 
 
 class ValidEmail:
-
-    message = "Enter a valid email address"
+    def __init__(self, message="Enter an email address in the correct format, like name@example.gov.uk"):
+        self.message = message
 
     def __call__(self, form, field):
-
         if not field.data:
             return
 
@@ -119,60 +118,15 @@ class OnlySMSCharacters:
         non_sms_characters = sorted(list(SanitiseSMS.get_non_compatible_characters(field.data)))
         if non_sms_characters:
             raise ValidationError(
-                "You cannot use {} in {}. {} will not show up properly on everyone’s phones.".format(
+                "You cannot use {} in text messages. {} will not display properly on some phones.".format(
                     formatted_list(non_sms_characters, conjunction="or", before_each="", after_each=""),
-                    {
-                        "broadcast": "broadcasts",
-                        "sms": "text messages",
-                    }.get(self._template_type),
-                    ("It" if len(non_sms_characters) == 1 else "They"),
+                    ("It" if len(non_sms_characters) == 1 else "These characters"),
                 )
             )
 
 
-class NoPlaceholders:
-    def __init__(self, message=None):
-        self.message = message or "You can’t use ((double brackets)) to personalise this message"
-
-    def __call__(self, form, field):
-        if Field(field.data).placeholders:
-            raise ValidationError(self.message)
-
-
-class BroadcastLength:
-    def __call__(self, form, field):
-        template = BroadcastMessageTemplate(
-            {
-                "template_type": "broadcast",
-                "content": field.data,
-            }
-        )
-
-        if template.content_too_long:
-            non_gsm_characters = list(sorted(template.non_gsm_characters))
-            if non_gsm_characters:
-                raise ValidationError(
-                    f"Content must be {template.max_content_count:,.0f} "
-                    f"characters or fewer because it contains "
-                    f'{formatted_list(non_gsm_characters, conjunction="and", before_each="", after_each="")}'
-                )
-            raise ValidationError(f"Content must be {template.max_content_count:,.0f} characters or fewer")
-
-
-class LettersNumbersSingleQuotesFullStopsAndUnderscoresOnly:
-
-    regex = re.compile(r"^[a-zA-Z0-9\s\._']+$")
-
-    def __init__(self, message="Use letters and numbers only"):
-        self.message = message
-
-    def __call__(self, form, field):
-        if field.data and not re.match(self.regex, field.data):
-            raise ValidationError(self.message)
-
-
 class DoesNotStartWithDoubleZero:
-    def __init__(self, message="Cannot start with 00"):
+    def __init__(self, message="Text message sender ID cannot start with 00"):
         self.message = message
 
     def __call__(self, form, field):
@@ -180,12 +134,49 @@ class DoesNotStartWithDoubleZero:
             raise ValidationError(self.message)
 
 
-class MustContainAlphanumericCharacters:
+class IsNotAGenericSenderID:
+    generic_sender_ids = ["info", "verify", "alert"]
 
+    def __init__(
+        self,
+        message="Text message sender ID cannot be Alert, Info or Verify as those are prohibited due to "
+        "usage by spam",
+    ):
+        self.message = message
+
+    def __call__(self, form, field):
+        if field.data and field.data.lower() in self.generic_sender_ids:
+            raise ValidationError(self.message)
+
+
+class IsAUKMobileNumberOrShortCode:
+    number_regex = re.compile(r"^[0-9\.]+$")
+    mobile_regex = re.compile(r"^07[0-9]{9}$")
+    shortcode_regex = re.compile(r"^[6-8][0-9]{4}$")
+
+    def __init__(self, message="A numeric sender id should be a valid mobile number or short code"):
+        self.message = message
+
+    def __call__(self, form, field):
+        if (
+            field.data
+            and re.match(self.number_regex, field.data)
+            and not re.match(self.mobile_regex, field.data)
+            and not re.match(self.shortcode_regex, field.data)
+        ):
+            raise ValidationError(self.message)
+
+
+class MustContainAlphanumericCharacters:
     regex = re.compile(r".*[a-zA-Z0-9].*[a-zA-Z0-9].*")
 
-    def __init__(self, message="Must include at least two alphanumeric characters"):
-        self.message = message
+    def __init__(self, *, thing=None, message="Must include at least two alphanumeric characters"):
+        if thing:
+            self.message = f"{sentence_case(thing)} must include at least 2 letters or numbers"
+        else:
+            # DEPRECATED - prefer to pass in `thing` instead. When all instances are using `thing,` retire `message`
+            # altogether.
+            self.message = message
 
     def __call__(self, form, field):
         if field.data and not re.match(self.regex, field.data):
@@ -239,3 +230,34 @@ class FileIsVirusFree:
 class NotifyDataRequired(DataRequired):
     def __init__(self, thing):
         super().__init__(message=f"Enter {thing}")
+
+
+class NotifyInputRequired(InputRequired):
+    def __init__(self, thing):
+        super().__init__(message=f"Enter {thing}")
+
+
+class NotifyUrlValidator(URL):
+    def __init__(self, thing="a URL in the correct format"):
+        super().__init__(message=f"Enter {thing}")
+
+
+class Length(WTFormsLength):
+    def __init__(self, min=-1, max=-1, message=None, thing=None, unit="characters"):
+        super().__init__(min=min, max=max, message=message)
+        self.thing = thing
+        self.unit = unit
+
+        if not self.message:
+            if not self.thing:
+                raise RuntimeError("Must provide `thing` (preferred) unless `message` is explicitly set.")
+
+            if min >= 0 and max >= 0:
+                if min == max:
+                    self.message = f"{sentence_case(thing)} must be {min} {unit} long"
+                else:
+                    self.message = f"{sentence_case(thing)} must be between {min} and {max} {unit} long"
+            elif min >= 0:
+                self.message = f"{sentence_case(thing)} must be at least {min} {unit} long"
+            else:
+                self.message = f"{sentence_case(thing)} cannot be longer than {max} {unit}"

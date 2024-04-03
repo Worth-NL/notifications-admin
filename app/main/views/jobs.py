@@ -3,7 +3,6 @@
 from functools import partial
 
 from flask import (
-    Markup,
     Response,
     abort,
     flash,
@@ -14,7 +13,9 @@ from flask import (
     stream_with_context,
     url_for,
 )
+from markupsafe import Markup
 from notifications_python_client.errors import HTTPError
+from notifications_utils.recipients import RecipientCSV
 from notifications_utils.template import (
     EmailPreviewTemplate,
     LetterPreviewTemplate,
@@ -32,6 +33,7 @@ from app.formatters import get_time_left, message_count_noun
 from app.main import json_updates, main
 from app.main.forms import SearchNotificationsForm
 from app.models.job import Job
+from app.s3_client.s3_csv_client import s3download
 from app.utils import parse_filter_args, set_status_filters
 from app.utils.csv import generate_notifications_csv
 from app.utils.letters import get_letter_printing_statement, printing_today_or_tomorrow
@@ -68,6 +70,15 @@ def view_job(service_id, job_id):
         "letter has" if job.notification_count == 1 else "letters have", printing_today_or_tomorrow(job.created_at)
     )
 
+    if job.scheduled:
+        scheduled_recipients = RecipientCSV(
+            s3download(current_service.id, job.id),
+            template=current_service.get_template(job.template_id),
+            max_initial_rows_shown=50,
+        )
+    else:
+        scheduled_recipients = None
+
     return render_template(
         "views/jobs/job.html",
         job=job,
@@ -81,6 +92,7 @@ def view_job(service_id, job_id):
         partials=get_job_partials(job),
         just_sent=request.args.get("just_sent") == "yes",
         just_sent_message=just_sent_message,
+        scheduled_recipients=scheduled_recipients,
     )
 
 
@@ -109,6 +121,23 @@ def view_job_csv(service_id, job_id):
                 job.template["name"], format_datetime_short(job.created_at)
             )
         },
+    )
+
+
+@main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>/original.csv")
+@user_has_permissions("view_activity")
+def view_job_original_file_csv(service_id, job_id):
+    job = Job.from_id(job_id, service_id=service_id)
+
+    if not job.scheduled:
+        abort(404)
+
+    original_file_contents = s3download(current_service.id, job.id)
+
+    return Response(
+        original_file_contents,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'inline; filename="{job.original_file_name_without_extention}.csv"'},
     )
 
 
@@ -146,7 +175,6 @@ def cancel_letter_job(service_id, job_id):
 @json_updates.route("/services/<uuid:service_id>/jobs/<uuid:job_id>.json")
 @user_has_permissions()
 def view_job_updates(service_id, job_id):
-
     job = Job.from_id(job_id, service_id=service_id)
 
     return jsonify(**get_job_partials(job))
@@ -374,13 +402,11 @@ def get_job_partials(job):
 
 
 def add_preview_of_content_to_notifications(notifications):
-
     for notification in notifications:
         yield dict(preview_of_content=get_preview_of_content(notification), **notification)
 
 
 def get_preview_of_content(notification):
-
     if notification["template"].get("redact_personalisation"):
         notification["personalisation"] = {}
 

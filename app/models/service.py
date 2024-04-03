@@ -1,3 +1,5 @@
+from typing import Optional
+
 from flask import abort, current_app
 from notifications_utils.serialised_model import SerialisedModelCollection
 from werkzeug.utils import cached_property
@@ -18,21 +20,19 @@ from app.notify_client.service_api_client import service_api_client
 from app.notify_client.template_folder_api_client import template_folder_api_client
 from app.utils import get_default_sms_sender
 from app.utils.constants import SIGN_IN_METHOD_TEXT, SIGN_IN_METHOD_TEXT_OR_EMAIL
-from app.utils.templates import get_template
+from app.utils.templates import get_template as get_template_as_rich_object
 
 
 class Service(JSONModel):
-
     ALLOWED_PROPERTIES = {
         "active",
-        "allowed_broadcast_provider",
         "billing_contact_email_addresses",
         "billing_contact_names",
         "billing_reference",
-        "broadcast_channel",
         "contact_link",
         "count_as_live",
-        "email_from",
+        "custom_email_sender_name",
+        "email_sender_local_part",
         "go_live_at",
         "has_active_go_live_request",
         "id",
@@ -57,7 +57,6 @@ class Service(JSONModel):
         "email",
         "sms",
         "letter",
-        "broadcast",
     )
 
     ALL_PERMISSIONS = TEMPLATE_TYPES + (
@@ -69,7 +68,6 @@ class Service(JSONModel):
         "international_letters",
         "international_sms",
         "upload_document",
-        "broadcast",
     )
 
     @classmethod
@@ -109,7 +107,6 @@ class Service(JSONModel):
         )
 
     def force_permission(self, permission, on=False):
-
         permissions, permission = set(self.permissions), {permission}
 
         return self.update_permissions(
@@ -171,15 +168,19 @@ class Service(JSONModel):
     def active_users(self):
         return Users(self.id)
 
+    def active_users_with_permission(self, permission):
+        return tuple(user for user in self.active_users if user.has_permission_for_service(self.id, permission))
+
     @cached_property
     def team_members(self):
         return self.invited_users + self.active_users
 
+    def team_members_with_permission(self, permission):
+        return tuple(user for user in self.team_members if user.has_permission_for_service(self.id, permission))
+
     @cached_property
-    def has_team_members(self):
-        return (
-            len([user for user in self.team_members if user.has_permission_for_service(self.id, "manage_service")]) > 1
-        )
+    def has_team_members_with_manage_service_permission(self):
+        return len(self.team_members_with_permission("manage_service")) > 1
 
     def cancel_invite(self, invited_user_id):
         if str(invited_user_id) not in {user.id for user in self.invited_users}:
@@ -190,8 +191,15 @@ class Service(JSONModel):
             invited_user_id=str(invited_user_id),
         )
 
-    def get_team_member(self, user_id):
+    def request_invite_for(self, user_to_invite, *, service_managers_ids, reason):
+        invite_api_client.request_invite_for(
+            user_to_invite_id=user_to_invite.id,
+            service_id=self.id,
+            service_managers_ids=service_managers_ids,
+            reason=reason,
+        )
 
+    def get_team_member(self, user_id):
         if str(user_id) not in {user.id for user in self.active_users}:
             abort(404)
 
@@ -199,7 +207,6 @@ class Service(JSONModel):
 
     @cached_property
     def all_templates(self):
-
         templates = service_api_client.get_service_templates(self.id)["data"]
 
         return [template for template in templates if template["template_type"] in self.available_template_types]
@@ -210,7 +217,7 @@ class Service(JSONModel):
 
     def get_template(self, template_id, version=None, **kwargs):
         template = service_api_client.get_service_template(self.id, template_id, version)["data"]
-        return get_template(template, service=self, **kwargs)
+        return get_template_as_rich_object(template, service=self, **kwargs)
 
     def get_template_folder_with_user_permission_or_403(self, folder_id, user):
         template_folder = self.get_template_folder(folder_id)
@@ -228,7 +235,7 @@ class Service(JSONModel):
         return template
 
     def get_precompiled_letter_template(self, *, letter_preview_url, page_count):
-        return get_template(
+        return get_template_as_rich_object(
             service_api_client.get_precompiled_template(self.id),
             self,
             letter_preview_url=letter_preview_url,
@@ -394,16 +401,12 @@ class Service(JSONModel):
         return all(
             (
                 any(self.volumes_by_channel.values()),
-                self.has_team_members,
+                self.has_team_members_with_manage_service_permission,
                 self.has_templates,
                 not self.needs_to_add_email_reply_to_address,
                 not self.needs_to_change_sms_sender,
             )
         )
-
-    @property
-    def go_live_checklist_completed_as_yes_no(self):
-        return "Yes" if self.go_live_checklist_completed else "No"
 
     @property
     def go_live_user(self):
@@ -428,6 +431,15 @@ class Service(JSONModel):
         return next((dr for dr in self.data_retention if dr["notification_type"] == notification_type), {}).get(
             "days_of_retention", current_app.config["ACTIVITY_STATS_LIMIT_DAYS"]
         )
+
+    def get_consistent_data_retention_period(self) -> Optional[int]:
+        """If the service's data retention periods are all the same, returns that period. Otherwise returns None."""
+        consistent_data_retention = (
+            self.get_days_of_retention("email")
+            == self.get_days_of_retention("sms")
+            == self.get_days_of_retention("letter")
+        )
+        return self.get_days_of_retention("email") if consistent_data_retention else None
 
     @property
     def email_branding_id(self):
@@ -510,7 +522,6 @@ class Service(JSONModel):
         return self._get_by_id(self.all_template_folders, folder_id)
 
     def get_template_folder_path(self, template_folder_id):
-
         folder = self.get_template_folder(template_folder_id)
 
         if folder["id"] is None:
@@ -528,7 +539,6 @@ class Service(JSONModel):
         return len(self.all_templates + self.all_template_folders)
 
     def move_to_folder(self, ids_to_move, move_to):
-
         ids_to_move = set(ids_to_move)
 
         template_folder_api_client.move_to_folder(
@@ -600,6 +610,10 @@ class Service(JSONModel):
             return SIGN_IN_METHOD_TEXT_OR_EMAIL
 
         return SIGN_IN_METHOD_TEXT
+
+    @property
+    def email_sender_name(self) -> str:
+        return self.custom_email_sender_name or self.name
 
 
 class Services(SerialisedModelCollection):

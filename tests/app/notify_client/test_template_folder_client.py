@@ -2,7 +2,7 @@ import uuid
 from unittest.mock import call
 
 import pytest
-from orderedset import OrderedSet
+from ordered_set import OrderedSet
 
 from app.notify_client.template_folder_api_client import TemplateFolderAPIClient
 
@@ -48,7 +48,6 @@ def test_get_template_folders_calls_correct_api_endpoint(mocker):
 
 
 def test_move_templates_and_folders(mocker):
-
     mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete")
     mock_api_post = mocker.patch("app.notify_client.NotifyAdminAPIClient.post")
 
@@ -81,7 +80,6 @@ def test_move_templates_and_folders(mocker):
 
 
 def test_move_templates_and_folders_to_root(mocker):
-
     mock_api_post = mocker.patch("app.notify_client.NotifyAdminAPIClient.post")
 
     some_service_id = uuid.uuid4()

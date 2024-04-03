@@ -29,10 +29,10 @@ applications:
     health-check-http-endpoint: '/_status?simple=true'
     health-check-invocation-timeout: 10
 
+    stack: cflinuxfs3
+
     services:
       - logit-ssl-syslog-drain
-      - notify-splunk
-      - notify-redis
 
     env:
       NOTIFY_APP_NAME: admin
@@ -43,15 +43,13 @@ applications:
       # Credentials variables
       ADMIN_CLIENT_SECRET: '{{ ADMIN_CLIENT_SECRET }}'
       ADMIN_BASE_URL: '{{ ADMIN_BASE_URL }}'
-      API_HOST_NAME: '{{ API_HOST_NAME }}'
+      API_HOST_NAME: '{{ API_HOST_NAME_INTERNAL }}'
       DANGEROUS_SALT: '{{ DANGEROUS_SALT }}'
       SECRET_KEY: '{{ SECRET_KEY }}'
       ROUTE_SECRET_KEY_1: '{{ ROUTE_SECRET_KEY_1 }}'
       ROUTE_SECRET_KEY_2: '{{ ROUTE_SECRET_KEY_2 }}'
       METRICS_BASIC_AUTH_TOKEN: {{ METRICS_BASIC_AUTH_TOKEN }}
-      {% if REDIS_URL is defined %}
       REDIS_URL: '{{ REDIS_URL }}'
-      {% endif %}
 
       AWS_ACCESS_KEY_ID: '{{ AWS_ACCESS_KEY_ID }}'
       AWS_SECRET_ACCESS_KEY: '{{ AWS_SECRET_ACCESS_KEY }}'
@@ -70,3 +68,4 @@ applications:
       SENTRY_DSN: '{{ NOTIFICATIONS_ADMIN_SENTRY_DSN }}'
       SENTRY_ERRORS_SAMPLE_RATE: '{{ NOTIFICATIONS_ADMIN_SENTRY_ERRORS_SAMPLE_RATE }}'
       SENTRY_TRACES_SAMPLE_RATE: '{{ NOTIFICATIONS_ADMIN_SENTRY_TRACES_SAMPLE_RATE }}'
+      SENTRY_FORCE_TRACE_HEADER_VALUE: '{{ NOTIFICATIONS_ADMIN_SENTRY_FORCE_TRACE_HEADER_VALUE }}'

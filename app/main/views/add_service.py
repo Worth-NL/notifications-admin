@@ -1,17 +1,15 @@
-from flask import current_app, redirect, render_template, session, url_for
+from flask import abort, current_app, redirect, render_template, session, url_for
 from flask_login import current_user
 from notifications_python_client.errors import HTTPError
 
 from app import service_api_client
-from app.formatters import email_safe
 from app.main import main
-from app.main.forms import CreateNhsServiceForm, CreateServiceForm
+from app.main.forms import AddOrJoinServiceForm, CreateNhsServiceForm, CreateServiceForm
 from app.models.service import Service
 from app.utils.user import user_is_gov_user, user_is_logged_in
 
 
-def _create_service(service_name, organisation_type, email_from, form):
-
+def _create_service(service_name, organisation_type, form):
     try:
         service_id = service_api_client.create_service(
             service_name=service_name,
@@ -21,7 +19,6 @@ def _create_service(service_name, organisation_type, email_from, form):
             letter_message_limit=current_app.config["DEFAULT_SERVICE_LIMIT"],
             restricted=True,
             user_id=session["user_id"],
-            email_from=email_from,
         )
         session["service_id"] = service_id
 
@@ -47,6 +44,25 @@ def _create_example_template(service_id):
     return example_sms_template
 
 
+@main.route("/add-or-join-service", methods=["GET", "POST"])
+@user_is_logged_in
+@user_is_gov_user
+def add_or_join_service():
+    if not current_user.default_organisation.can_ask_to_join_a_service:
+        abort(403)
+
+    form = AddOrJoinServiceForm(organisation=current_user.default_organisation)
+
+    if form.validate_on_submit():
+        return redirect(url_for(form.add_or_join.data, back="add_or_join"))
+
+    return render_template(
+        "views/add-or-join-service.html",
+        form=form,
+        error_summary_enabled=True,
+    )
+
+
 @main.route("/add-service", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
@@ -59,19 +75,16 @@ def add_service():
         form = CreateServiceForm(organisation_type=default_organisation_type)
 
     if form.validate_on_submit():
-        email_from = email_safe(form.name.data)
         service_name = form.name.data
 
         service_id, error = _create_service(
             service_name,
             default_organisation_type or form.organisation_type.data,
-            email_from,
             form,
         )
         if error:
             return _render_add_service_page(form, default_organisation_type)
         if len(service_api_client.get_active_services({"user_id": session["user_id"]}).get("data", [])) > 1:
-
             # if user has email auth, it makes sense that people they invite to their new service can have it too
             if current_user.email_auth:
                 new_service = Service.from_id(service_id)
@@ -93,4 +106,5 @@ def _render_add_service_page(form, default_organisation_type):
         "views/add-service.html",
         form=form,
         default_organisation_type=default_organisation_type,
+        error_summary_enabled=True,
     )

@@ -43,7 +43,7 @@ from app.s3_client.s3_letter_upload_client import (
     get_transient_letter_file_location,
     upload_letter_to_s3,
 )
-from app.template_previews import TemplatePreview, sanitise_letter
+from app.template_previews import TemplatePreview
 from app.utils import unicode_truncate
 from app.utils.csv import Spreadsheet, get_errors_for_csv
 from app.utils.letters import (
@@ -132,7 +132,6 @@ def uploaded_letters(service_id, letter_print_day):
 
 
 def add_preview_of_content_uploaded_letters(notifications):
-
     for notification in notifications:
         yield dict(
             preview_of_content=", ".join(notification.pop("to").splitlines()),
@@ -165,7 +164,7 @@ def upload_letter(service_id):
         file_location = get_transient_letter_file_location(service_id, upload_id)
 
         try:
-            response = sanitise_letter(
+            response = TemplatePreview.sanitise_letter(
                 BytesIO(pdf_file_bytes),
                 upload_id=upload_id,
                 allow_international_letters=current_service.has_permission("international_letters"),
@@ -299,9 +298,9 @@ def view_letter_upload_as_preview(service_id, file_id):
     invalid_pages = json.loads(metadata.get("invalid_pages", "[]"))
 
     if metadata.get("message") == "content-outside-printable-area" and page in invalid_pages:
-        return TemplatePreview.from_invalid_pdf_file(pdf_file, page)
+        return TemplatePreview.get_png_for_invalid_pdf_page(pdf_file, page)
     else:
-        return TemplatePreview.from_valid_pdf_file(pdf_file, page)
+        return TemplatePreview.get_png_for_valid_pdf_page(pdf_file, page)
 
 
 @main.route("/services/<uuid:service_id>/upload-letter/send/<uuid:file_id>", methods=["POST"])
@@ -376,7 +375,7 @@ def upload_contact_list(service_id):
             )
         except (UnicodeDecodeError, BadZipFile, XLRDError):
             flash(f"Could not read {form.file.data.filename}. Try using a different file format.")
-        except (XLDateError):
+        except XLDateError:
             flash(
                 (
                     "{} contains numbers or dates that Notify cannot understand. "
@@ -402,7 +401,6 @@ def upload_contact_list(service_id):
 )
 @user_has_permissions("send_messages")
 def check_contact_list(service_id, upload_id):
-
     form = CsvUploadForm()
 
     contents = ContactList.download(service_id, upload_id)

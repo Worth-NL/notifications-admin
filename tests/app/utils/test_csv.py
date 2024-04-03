@@ -21,6 +21,7 @@ def _get_notifications_csv(
     job_id=fake_uuid,
     created_by_name=None,
     created_by_email_address=None,
+    api_key_name=None,
 ):
     def _get(
         service_id,
@@ -52,6 +53,7 @@ def _get_notifications_csv(
                     "updated_at": None,
                     "created_by_name": created_by_name,
                     "created_by_email_address": created_by_email_address,
+                    "api_key_name": api_key_name,
                 }
                 for i in range(rows)
             ],
@@ -76,20 +78,22 @@ def _get_notifications_csv_mock(
 
 
 @pytest.mark.parametrize(
-    "created_by_name, expected_content",
+    "created_by_name, api_key_name, expected_content",
     [
         (
             None,
+            "my-key-name",
             [
-                "Recipient,Reference,Template,Type,Sent by,Sent by email,Job,Status,Time\n",
-                "foo@bar.com,ref 1234,foo,sms,,sender@email.gov.uk,,Delivered,1943-04-19 12:00:00\r\n",
+                "Recipient,Reference,Template,Type,Sent by,Sent by email,Job,Status,Time,API key name\n",
+                "foo@bar.com,ref 1234,foo,sms,,sender@email.gov.uk,,Delivered,1943-04-19 12:00:00,my-key-name\r\n",
             ],
         ),
         (
             "Anne Example",
+            None,
             [
-                "Recipient,Reference,Template,Type,Sent by,Sent by email,Job,Status,Time\n",
-                "foo@bar.com,ref 1234,foo,sms,Anne Example,sender@email.gov.uk,,Delivered,1943-04-19 12:00:00\r\n",
+                "Recipient,Reference,Template,Type,Sent by,Sent by email,Job,Status,Time,API key name\n",
+                "foo@bar.com,ref 1234,foo,sms,Anne Example,sender@email.gov.uk,,Delivered,1943-04-19 12:00:00,\r\n",
             ],
         ),
     ],
@@ -98,12 +102,17 @@ def test_generate_notifications_csv_without_job(
     notify_admin,
     mocker,
     created_by_name,
+    api_key_name,
     expected_content,
 ):
     mocker.patch(
         "app.notification_api_client.get_notifications_for_service",
         side_effect=_get_notifications_csv(
-            created_by_name=created_by_name, created_by_email_address="sender@email.gov.uk", job_id=None, job_name=None
+            created_by_name=created_by_name,
+            created_by_email_address="sender@email.gov.uk",
+            job_id=None,
+            job_name=None,
+            api_key_name=api_key_name,
         ),
     )
     assert list(generate_notifications_csv(service_id=fake_uuid)) == expected_content
@@ -153,7 +162,7 @@ def test_generate_notifications_csv_returns_correct_csv_file(
     csv_content = generate_notifications_csv(service_id="1234", job_id=fake_uuid, template_type="sms")
     csv_file = DictReader(StringIO("\n".join(csv_content)))
     assert csv_file.fieldnames == expected_column_headers
-    assert next(csv_file) == dict(zip(expected_column_headers, expected_1st_row))
+    assert next(csv_file) == dict(zip(expected_column_headers, expected_1st_row, strict=True))
 
 
 def test_generate_notifications_csv_only_calls_once_if_no_next_link(
@@ -171,7 +180,6 @@ def test_generate_notifications_csv_calls_twice_if_next_link(
     mocker,
     job_id,
 ):
-
     mocker.patch(
         "app.s3_client.s3_csv_client.s3download",
         return_value="""
@@ -219,27 +227,35 @@ def test_generate_notifications_csv_calls_twice_if_next_link(
 
 MockRecipients = namedtuple(
     "RecipientCSV",
-    ["rows_with_bad_recipients", "rows_with_missing_data", "rows_with_message_too_long", "rows_with_empty_message"],
+    [
+        "rows_with_bad_recipients",
+        "rows_with_missing_data",
+        "rows_with_message_too_long",
+        "rows_with_empty_message",
+        "rows_with_bad_qr_codes",
+    ],
 )
 
 
 @pytest.mark.parametrize(
     "rows_with_bad_recipients, rows_with_missing_data, "
-    "rows_with_message_too_long, rows_with_empty_message, template_type, expected_errors",
+    "rows_with_message_too_long, rows_with_empty_message, rows_with_bad_qr_codes, template_type, expected_errors",
     [
-        ([], [], [], [], "sms", []),
-        ({2}, [], [], [], "sms", ["fix 1 phone number"]),
-        ({2, 4, 6}, [], [], [], "sms", ["fix 3 phone numbers"]),
-        ({1}, [], [], [], "email", ["fix 1 email address"]),
-        ({2, 4, 6}, [], [], [], "email", ["fix 3 email addresses"]),
-        ({2}, [], [], [], "letter", ["fix 1 address"]),
-        ({2, 4}, [], [], [], "letter", ["fix 2 addresses"]),
-        ({2}, {3}, [], [], "sms", ["fix 1 phone number", "enter missing data in 1 row"]),
-        ({2, 4, 6, 8}, {3, 6, 9, 12}, [], [], "sms", ["fix 4 phone numbers", "enter missing data in 4 rows"]),
-        ({}, {}, {3}, [], "sms", ["shorten the message in 1 row"]),
-        ({}, {}, {3, 12}, [], "sms", ["shorten the messages in 2 rows"]),
-        ({}, {}, {}, {2}, "sms", ["check you have content for the empty message in 1 row"]),
-        ({}, {}, {}, {2, 4, 8}, "sms", ["check you have content for the empty messages in 3 rows"]),
+        ([], [], [], [], [], "sms", []),
+        ({2}, [], [], [], [], "sms", ["fix 1 phone number"]),
+        ({2, 4, 6}, [], [], [], [], "sms", ["fix 3 phone numbers"]),
+        ({1}, [], [], [], [], "email", ["fix 1 email address"]),
+        ({2, 4, 6}, [], [], [], [], "email", ["fix 3 email addresses"]),
+        ({2}, [], [], [], [], "letter", ["fix 1 address"]),
+        ({2, 4}, [], [], [], [], "letter", ["fix 2 addresses"]),
+        ({2}, {3}, [], [], [], "sms", ["fix 1 phone number", "enter missing data in 1 row"]),
+        ({2, 4, 6, 8}, {3, 6, 9, 12}, [], [], [], "sms", ["fix 4 phone numbers", "enter missing data in 4 rows"]),
+        ({}, {}, {3}, [], [], "sms", ["shorten the message in 1 row"]),
+        ({}, {}, {3, 12}, [], [], "sms", ["shorten the messages in 2 rows"]),
+        ({}, {}, {}, {2}, [], "sms", ["check you have content for the empty message in 1 row"]),
+        ({}, {}, {}, {2, 4, 8}, [], "sms", ["check you have content for the empty messages in 3 rows"]),
+        ([], [], [], [], {2}, "letter", ["enter fewer characters for the QR code links in 1 row"]),
+        ([], [], [], [], {2, 4}, "letter", ["enter fewer characters for the QR code links in 2 rows"]),
     ],
 )
 def test_get_errors_for_csv(
@@ -247,13 +263,18 @@ def test_get_errors_for_csv(
     rows_with_missing_data,
     rows_with_message_too_long,
     rows_with_empty_message,
+    rows_with_bad_qr_codes,
     template_type,
     expected_errors,
 ):
     assert (
         get_errors_for_csv(
             MockRecipients(
-                rows_with_bad_recipients, rows_with_missing_data, rows_with_message_too_long, rows_with_empty_message
+                rows_with_bad_recipients,
+                rows_with_missing_data,
+                rows_with_message_too_long,
+                rows_with_empty_message,
+                rows_with_bad_qr_codes,
             ),
             template_type,
         )

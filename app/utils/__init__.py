@@ -4,7 +4,7 @@ from itertools import chain
 from flask import abort, g, make_response, request
 from flask_login import current_user
 from notifications_utils.field import Field
-from orderedset._orderedset import OrderedSet
+from ordered_set import OrderedSet
 from werkzeug.datastructures import MultiDict
 from werkzeug.routing import RequestRedirect
 
@@ -20,11 +20,10 @@ FAILURE_STATUSES = [
 ]
 REQUESTED_STATUSES = SENDING_STATUSES + DELIVERED_STATUSES + FAILURE_STATUSES
 
-NOTIFICATION_TYPES = ["sms", "email", "letter", "broadcast"]
+NOTIFICATION_TYPES = ["sms", "email", "letter"]
 
 
 def service_has_permission(permission):
-
     from app import current_service
 
     def wrap(func):
@@ -40,7 +39,6 @@ def service_has_permission(permission):
 
 
 def service_belongs_to_org_type(org_type):
-
     from app import current_service
 
     def wrap(func):

@@ -36,8 +36,7 @@ def test_organisation_page_shows_all_organisations(client_request, platform_admi
             link["href"],
         )
         for link, hint in zip(
-            page.select(".browse-list-item a"),
-            page.select(".browse-list-item .browse-list-hint"),
+            page.select(".browse-list-item a"), page.select(".browse-list-item .browse-list-hint"), strict=True
         )
     ] == [
         ("Test 1", "1 live service", url_for("main.organisation_dashboard", org_id="B1")),
@@ -139,9 +138,9 @@ def test_create_new_organisation_validates(
     assert [
         (error["data-error-label"], normalize_spaces(error.text)) for error in page.select(".govuk-error-message")
     ] == [
-        ("name", "Error: Cannot be empty"),
-        ("organisation_type", "Error: Select the type of organisation"),
-        ("crown_status", "Error: Select whether this organisation is a crown body"),
+        ("name", "Error: Enter an organisation name"),
+        ("organisation_type", "Error: Select a type of organisation"),
+        ("crown_status", "Error: Select yes if the organisation is a Crown body"),
     ]
     assert mock_create_organisation.called is False
 
@@ -149,9 +148,9 @@ def test_create_new_organisation_validates(
 @pytest.mark.parametrize(
     "name, error_message",
     [
-        ("", "Cannot be empty"),
-        ("a", "at least two alphanumeric characters"),
-        ("a" * 256, "Organisation name must be 255 characters or fewer"),
+        ("", "Enter an organisation name"),
+        ("a", "Organisation name must include at least 2 letters or numbers"),
+        ("a" * 256, "Organisation name cannot be longer than 255 characters"),
     ],
 )
 def test_create_new_organisation_fails_with_incorrect_input(
@@ -235,7 +234,7 @@ def test_gps_can_create_own_organisations(
         return
 
     assert page.select_one("input[type=text]")["name"] == "name"
-    assert normalize_spaces(page.select_one("label[for=name]").text) == "What’s your practice called?"
+    assert normalize_spaces(page.select_one("label[for=name]").text) == "What’s your GP surgery called?"
 
 
 @pytest.mark.parametrize(
@@ -344,6 +343,37 @@ def test_gps_can_name_their_organisation(
     mock_update_service_organisation.assert_called_once_with(SERVICE_ONE_ID, ORGANISATION_ID)
 
 
+def test_add_organisation_from_gp_service_when_that_org_name_already_exists(
+    client_request,
+    mocker,
+    service_one,
+    mock_update_service_organisation,
+):
+    service_one["organisation_type"] = "nhs_gp"
+    mocker.patch(
+        "app.organisations_client.create_organisation",
+        side_effect=HTTPError(
+            response=mocker.Mock(
+                status_code=400, json={"result": "error", "message": "Organisation name already exists"}
+            ),
+            message="Organisation name already exists",
+        ),
+    )
+
+    page = client_request.post(
+        ".add_organisation_from_gp_service",
+        service_id=SERVICE_ONE_ID,
+        _data={
+            "same_as_service_name": True,
+            "name": "This is ignored",
+        },
+        _expected_status=200,
+    )
+
+    expected_message = "This organisation name is already in use."
+    assert expected_message in page.select_one(".banner-dangerous").text
+
+
 @pytest.mark.parametrize(
     "data, expected_error",
     (
@@ -351,14 +381,14 @@ def test_gps_can_name_their_organisation(
             {
                 "name": "Dr. Example",
             },
-            "Select yes or no",
+            "Select ‘yes‘ to confirm the name of your GP surgery",
         ),
         (
             {
                 "same_as_service_name": False,
                 "name": "",
             },
-            "Cannot be empty",
+            "Enter the name of your GP surgery",
         ),
     ),
 )
@@ -524,6 +554,71 @@ def test_organisation_services_shows_live_services_and_usage_with_count_of_1(
     assert normalize_spaces(usage_rows[3].text) == "1 email sent"
     assert normalize_spaces(usage_rows[4].text) == "1 free text message sent"
     assert normalize_spaces(usage_rows[5].text) == "£0.00 spent on letters"
+
+
+@pytest.mark.parametrize(
+    "service_usage, expected_css_class",
+    (
+        (
+            {"emails_sent": 999_999_999, "sms_cost": 0, "letter_cost": 0},
+            ".big-number-smaller",
+        ),
+        (
+            {"emails_sent": 1_000_000_000, "sms_cost": 0, "letter_cost": 0},
+            ".big-number-smallest",
+        ),
+        (
+            {"emails_sent": 0, "sms_cost": 999_999, "letter_cost": 0},
+            ".big-number-smaller",
+        ),
+        (
+            {"emails_sent": 0, "sms_cost": 1_000_000, "letter_cost": 0},
+            ".big-number-smallest",
+        ),
+        (
+            {"emails_sent": 0, "sms_cost": 0, "letter_cost": 999_999},
+            ".big-number-smaller",
+        ),
+        (
+            {"emails_sent": 0, "sms_cost": 0, "letter_cost": 1_000_000},
+            ".big-number-smallest",
+        ),
+    ),
+)
+@freeze_time("2020-02-20 20:20")
+def test_organisation_services_shows_usage_in_correct_font_size(
+    client_request,
+    mock_get_organisation,
+    mocker,
+    active_user_with_permissions,
+    fake_uuid,
+    service_usage,
+    expected_css_class,
+):
+    mocker.patch(
+        "app.organisations_client.get_services_and_usage",
+        return_value={
+            "services": [
+                service_usage
+                | {
+                    "service_id": SERVICE_ONE_ID,
+                    "service_name": "1",
+                    "chargeable_billable_sms": 1,
+                    "free_sms_limit": 250000,
+                    "sms_billable_units": 1,
+                    "sms_remainder": None,
+                },
+            ],
+            "updated_at": None,
+        },
+    )
+
+    client_request.login(active_user_with_permissions)
+    page = client_request.get(".organisation_dashboard", org_id=ORGANISATION_ID)
+
+    usage_totals = page.select_one("main .govuk-grid-row").select(expected_css_class)
+
+    assert len(usage_totals) == 3
 
 
 @freeze_time("2020-02-20 20:20")
@@ -1192,6 +1287,7 @@ def test_archive_organisation_after_confirmation(
     mock_get_organisations,
     mock_get_organisations_and_services_for_user,
     mock_get_service_and_organisation_counts,
+    mock_get_organisation_by_domain,
 ):
     mock_api = mocker.patch("app.organisations_client.post")
     redis_delete_mock = mocker.patch("app.notify_client.organisations_api_client.redis_client.delete")
@@ -1254,7 +1350,7 @@ def test_archive_organisation_does_not_allow_orgs_with_team_members_or_services_
                 {"value": "local", "label": "Local government"},
                 {"value": "nhs_central", "label": "NHS – central government agency or public body"},
                 {"value": "nhs_local", "label": "NHS Trust or Clinical Commissioning Group"},
-                {"value": "nhs_gp", "label": "GP practice"},
+                {"value": "nhs_gp", "label": "GP surgery"},
                 {"value": "emergency_service", "label": "Emergency service"},
                 {"value": "school_or_college", "label": "School or college"},
                 {"value": "other", "label": "Other"},
@@ -1706,9 +1802,9 @@ def test_update_organisation_name(
 @pytest.mark.parametrize(
     "name, error_message",
     [
-        ("", "Cannot be empty"),
-        ("a", "at least two alphanumeric characters"),
-        ("a" * 256, "Organisation name must be 255 characters or fewer"),
+        ("", "Enter your organisation name"),
+        ("a", "Organisation name must include at least 2 letters or numbers"),
+        ("a" * 256, "Organisation name cannot be longer than 255 characters"),
     ],
 )
 def test_update_organisation_with_incorrect_input(
@@ -1952,7 +2048,6 @@ def test_add_delete_can_ask_to_join_a_service(
     post_data,
     expected_parameter,
 ):
-
     client_request.login(platform_admin_user)
     client_request.post(
         "main.edit_organisation_can_ask_to_join_a_service",

@@ -129,10 +129,19 @@ def test_should_redirect_after_email_change(
 
 
 @pytest.mark.parametrize(
-    "email_address,error_message",
+    "email_address, error_message, error_link",
     [
-        ("me@example.com", "Enter a public sector email address or find out who can use Notify"),
-        ("not_valid", "Enter a valid email address"),  # 2 errors with email address, only first error shown
+        (
+            "me@example.com",
+            "Enter a public sector email address or find out who can use Notify",
+            "/features/who-can-use-notify",
+        ),
+        # 2 errors with email address, only first error shown
+        (
+            "not_valid",
+            "Enter an email address in the correct format, like name@example.gov.uk",
+            None,
+        ),
     ],
 )
 def test_should_show_errors_if_new_email_address_does_not_validate(
@@ -141,6 +150,7 @@ def test_should_show_errors_if_new_email_address_does_not_validate(
     mock_get_organisations,
     email_address,
     error_message,
+    error_link,
 ):
     page = client_request.post(
         "main.user_profile_email",
@@ -148,7 +158,17 @@ def test_should_show_errors_if_new_email_address_does_not_validate(
         _expected_status=200,
     )
 
+    assert normalize_spaces(page.select_one(".govuk-error-summary ul").text) == error_message
     assert normalize_spaces(page.select_one(".govuk-error-message").text) == f"Error: {error_message}"
+
+    # Each error summary entry is a link - the link inside the error message itself should not be present here
+    assert page.select_one(".govuk-error-summary ul a a") is None
+    if error_link:
+        # But should be present in the error message displayed next to the input
+        assert page.select_one(".govuk-error-message a").get("href") == error_link
+    else:
+        assert page.select_one(".govuk-error-message a") is None
+
     # We only call API to check if the email address is already in use if there are no other errors
     assert not mock_email_is_not_already_in_use.called
 
@@ -163,6 +183,15 @@ def test_should_show_authenticate_after_email_change(
 
     assert "Change your email address" in page.text
     assert "Confirm" in page.text
+
+
+def test_should_redirect_from_authenticate_if_new_email_not_in_session(
+    client_request,
+):
+    client_request.get(
+        "main.user_profile_email_authenticate",
+        _expected_redirect=url_for("main.user_profile_email"),
+    )
 
 
 def test_should_render_change_email_continue_after_authenticate_email(
@@ -186,7 +215,6 @@ def test_should_redirect_to_user_profile_when_user_confirms_email_link(
     api_user_active,
     mock_update_user_attribute,
 ):
-
     token = generate_token(
         payload=json.dumps({"user_id": api_user_active["id"], "email": "new_email@gov.uk"}),
         secret=notify_admin.config["SECRET_KEY"],

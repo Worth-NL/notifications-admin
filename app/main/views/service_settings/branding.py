@@ -63,7 +63,6 @@ def email_branding_options(service_id):
     form = ChooseEmailBrandingForm(current_service)
 
     if form.validate_on_submit():
-
         branding_choice = form.options.data
 
         if branding_choice == EmailBranding.NHS_ID:
@@ -102,8 +101,7 @@ def email_branding_options(service_id):
         )
 
     return render_template(
-        "views/service-settings/branding/email-branding-options.html",
-        form=form,
+        "views/service-settings/branding/email-branding-options.html", form=form, error_summary_enabled=True
     )
 
 
@@ -226,7 +224,6 @@ def email_branding_choose_logo(service_id):
 
     if form.validate_on_submit():
         if form.branding_options.data == "org":
-
             if branding_choice == "govuk_and_org":
                 return redirect(
                     url_for(
@@ -605,6 +602,7 @@ def letter_branding_options(service_id):
         "views/service-settings/branding/letter-branding-options.html",
         form=form,
         from_template=from_template,
+        error_summary_enabled=True,
     )
 
 
@@ -649,14 +647,8 @@ def letter_branding_request(service_id):
             service_id=current_service.id,
             **_letter_branding_flow_query_params(),
         ),
+        error_summary_enabled=True,
     )
-
-
-@main.route("/services/<uuid:service_id>/service-settings/letter-branding/option-preview", methods=["GET", "POST"])
-@user_has_permissions("manage_service")
-def old_letter_branding_option_preview(service_id):
-    # TODO: remove this view, it's temporary
-    return redirect(url_for("branding_option_preview", service_id=service_id, branding_type="letter"), code=301)
 
 
 @main.route("/services/<uuid:service_id>/service-settings/letter-branding/upload-branding", methods=["GET", "POST"])

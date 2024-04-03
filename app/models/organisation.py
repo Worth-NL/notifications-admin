@@ -16,7 +16,6 @@ from app.notify_client.organisations_api_client import organisations_client
 
 
 class Organisation(JSONModel):
-
     TYPE_CENTRAL = "central"
     TYPE_LOCAL = "local"
     TYPE_NHS_CENTRAL = "nhs_central"
@@ -109,7 +108,6 @@ class Organisation(JSONModel):
         )
 
     def __init__(self, _dict):
-
         super().__init__(_dict)
 
         if self._dict == {}:
@@ -234,7 +232,8 @@ class Organisation(JSONModel):
         organisations_client.update_service_organisation(service_id, self.id)
 
     def services_and_usage(self, financial_year) -> tuple[dict, Optional[datetime.date]]:
-        response = organisations_client.get_services_and_usage(self.id, financial_year)
+        response = organisations_client.get_services_and_usage(
+            self.id, financial_year)
         updated_at = response.get("updated_at")
         if updated_at:
             updated_at = datetime.datetime.fromisoformat(updated_at)

@@ -12,6 +12,7 @@ from tests.conftest import SERVICE_ONE_ID, normalize_spaces, sample_uuid
 def test_non_logged_in_user_can_see_homepage(
     client_request,
     mock_get_service_and_organisation_counts,
+    mock_get_letter_rates,
 ):
     client_request.logout()
     page = client_request.get("main.index", _test_page_title=False)
@@ -74,6 +75,7 @@ def test_robots(client_request):
 def test_hiding_pages_from_search_engines(
     client_request,
     mock_get_service_and_organisation_counts,
+    mock_get_letter_rates,
     endpoint,
     kwargs,
 ):
@@ -109,6 +111,7 @@ def test_hiding_pages_from_search_engines(
         "guidance_send_files_by_email",
         "guidance_templates",
         "guidance_text_message_sender",
+        "guidance_unsubscribe_links",
         "guidance_upload_a_letter",
         "guidance_using_notify",
         "guidance_who_can_use_notify",
@@ -119,6 +122,7 @@ def test_hiding_pages_from_search_engines(
 def test_static_pages(
     client_request,
     mock_get_organisation_by_domain,
+    mock_get_letter_rates,
     view,
 ):
     request = partial(client_request.get, f"main.{view}")
@@ -270,8 +274,22 @@ def test_email_branding_preview(
     email_branding_retrieved,
 ):
     page = client_request.get("main.email_template", _test_page_title=False, **extra_args)
-    assert page.select_one("title").text == "Email branding preview"
+    assert page.select_one("title").text == "Preview of email branding"
     assert mock_get_email_branding.called is email_branding_retrieved
+
+
+def test_email_branding_preview_allows_custom_page_title(
+    client_request,
+    mock_get_email_branding,
+):
+    page = client_request.get(
+        "main.email_template",
+        _test_page_title=False,
+        branding_style="custom",
+        type="org",
+        title="Preview of new email branding",
+    )
+    assert page.select_one("title").text == "Preview of new email branding"
 
 
 @pytest.mark.parametrize("filename", [None, FieldWithNoneOption.NONE_OPTION_VALUE])
@@ -348,6 +366,35 @@ def test_letter_template_preview_returns_400_if_both_branding_style_and_filename
     )
 
 
+@pytest.mark.parametrize(
+    "extra_args, expected_page_title",
+    (
+        (
+            {},
+            "Preview of letter branding",
+        ),
+        (
+            {"title": "Preview of new letter branding"},
+            "Preview of new letter branding",
+        ),
+    ),
+)
+def test_letter_template_preview_works_with_and_without_custom_page_title(
+    client_request,
+    extra_args,
+    expected_page_title,
+):
+    page = client_request.get(
+        "main.letter_template",
+        _test_page_title=False,
+        # Letter HTML doesn’t use the Design System, so elements won’t have class attributes
+        _test_for_elements_without_class=False,
+        filename="some-filename",
+        **extra_args,
+    )
+    assert page.select_one("title").text == expected_page_title
+
+
 def test_letter_template_preview_headers(
     client_request,
     mock_get_letter_branding_by_id,
@@ -381,6 +428,7 @@ def test_letter_spec_redirect_with_non_logged_in_user(client_request):
 def test_font_preload(
     client_request,
     mock_get_service_and_organisation_counts,
+    mock_get_letter_rates,
 ):
     client_request.logout()
     page = client_request.get("main.index", _test_page_title=False)
@@ -397,6 +445,7 @@ def test_font_preload(
 def test_sms_price(
     client_request,
     mock_get_service_and_organisation_counts,
+    mock_get_letter_rates,
 ):
     client_request.logout()
 
@@ -420,9 +469,7 @@ def test_bulk_sending_limits(client_request):
     page = client_request.get("main.guidance_bulk_sending")
     paragraphs = page.select("main p")
 
-    assert normalize_spaces(paragraphs[0].text) == (
-        "You can send a batch of up to 100,000" " personalised messages at once."
-    )
+    assert normalize_spaces(paragraphs[0].text) == "You can send a batch of up to 100,000 messages at once."
     assert normalize_spaces(paragraphs[1].text) == (
         "There’s a maximum daily limit of 250,000 emails, 250,000 text messages and 20,000 letters. "
         "If you need to discuss these limits, contact us."
