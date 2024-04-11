@@ -35,8 +35,8 @@ def index():
         "views/signedout.html",
         sms_rate=CURRENT_SMS_RATE,
         counts=status_api_client.get_count_of_live_services_and_organisations(),
-        one_page_second_class_letter_cost=LetterRates().get(
-            sheet_count=1, post_class="second"),
+        # one_page_second_class_letter_cost=LetterRates().get(
+        #     sheet_count=1, post_class="second"),
     )
 
 
