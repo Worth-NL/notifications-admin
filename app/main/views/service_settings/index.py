@@ -727,7 +727,7 @@ def service_set_channel(service_id, channel):
         f"views/service-settings/set-{channel}.html",
         form=form,
         sms_rate=CURRENT_SMS_RATE,
-        letter_rates=LetterRates().rates,
+        # letter_rates=LetterRates().rates,
     )
 
 
