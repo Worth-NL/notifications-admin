@@ -108,9 +108,15 @@ class Development(Config):
     S3_BUCKET_CONTACT_LIST_UPLOAD = os.environ.get("S3_BUCKET_CONTACT_LIST_UPLOAD", "development-contact-list-notifynl")
     S3_BUCKET_LOGO_UPLOAD = os.environ.get("S3_BUCKET_LOGO_UPLOAD", "public-logos-tools-notifynl")
     S3_BUCKET_MOU = os.environ.get("S3_BUCKET_MOU", "notify.tools-mou-notifynl")
-    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = os.environ.get("S3_BUCKET_TRANSIENT_UPLOADED_LETTERS", "development-transient-uploaded-letters-notifynl")
-    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = os.environ.get("S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS", "development-letters-precompiled-originals-backup-notifynl")
-    S3_BUCKET_LETTER_ATTACHMENTS = os.environ.get("S3_BUCKET_LETTER_ATTACHMENTS", "development-letter-attachments-notifynl")
+    S3_BUCKET_TRANSIENT_UPLOADED_LETTERS = os.environ.get(
+        "S3_BUCKET_TRANSIENT_UPLOADED_LETTERS", "development-transient-uploaded-letters-notifynl"
+    )
+    S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS = os.environ.get(
+        "S3_BUCKET_PRECOMPILED_ORIGINALS_BACKUP_LETTERS", "development-letters-precompiled-originals-backup-notifynl"
+    )
+    S3_BUCKET_LETTER_ATTACHMENTS = os.environ.get(
+        "S3_BUCKET_LETTER_ATTACHMENTS", "development-letter-attachments-notifynl"
+    )
 
     LOGO_CDN_DOMAIN = os.environ.get("LOGO_CDN_DOMAIN", "d26j1qfpsndp6a.cloudfront.net")
 

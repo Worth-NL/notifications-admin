@@ -178,8 +178,7 @@ class HeaderNavigation(Navigation):
             )
         else:
             nav_items.append(
-                {"href": url_for("main.sign_in"), "text": "Sign in",
-                 "active": self.is_selected("sign-in")}
+                {"href": url_for("main.sign_in"), "text": "Sign in", "active": self.is_selected("sign-in")}
             )
 
         return nav_items

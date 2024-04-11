@@ -122,26 +122,22 @@ def letter_template():
     if branding_style:
         if filename:
             abort(400, "Cannot provide both branding_style and filename")
-        filename = letter_branding_client.get_letter_branding(branding_style)[
-            "filename"]
+        filename = letter_branding_client.get_letter_branding(branding_style)["filename"]
     elif not filename:
         filename = "no-branding"
     template = {"subject": subject, "content": "", "template_type": "letter"}
-    image_url = url_for(
-        "no_cookie.letter_branding_preview_image", filename=filename)
+    image_url = url_for("no_cookie.letter_branding_preview_image", filename=filename)
 
     template_image = str(
         TemplatedLetterImageTemplate(
             template,
             image_url=image_url,
-            page_counts={"count": 1, "welsh_page_count": 0,
-                         "attachment_page_count": 0},
+            page_counts={"count": 1, "welsh_page_count": 0, "attachment_page_count": 0},
         )
     )
 
     resp = make_response(
-        render_template("views/service-settings/letter-preview.html",
-                        template=template_image, subject=subject)
+        render_template("views/service-settings/letter-preview.html", template=template_image, subject=subject)
     )
 
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
@@ -210,7 +206,8 @@ def guidance_bulk_sending():
         max_spreadsheet_rows=RecipientCSV.max_rows,
         rate_limits=[
             message_count(limit, channel)
-            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items() if channel != "letter"
+            for channel, limit in current_app.config["DEFAULT_LIVE_SERVICE_RATE_LIMITS"].items()
+            if channel != "letter"
         ],
         navigation_links=using_notify_nav(),
     )
@@ -444,5 +441,4 @@ REDIRECTS = {
 }
 
 for old_url, new_endpoint in REDIRECTS.items():
-    redirects.add_url_rule(old_url, defaults={
-                           "new_endpoint": new_endpoint}, view_func=historical_redirects)
+    redirects.add_url_rule(old_url, defaults={"new_endpoint": new_endpoint}, view_func=historical_redirects)

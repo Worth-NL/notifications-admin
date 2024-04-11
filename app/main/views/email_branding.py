@@ -80,8 +80,7 @@ def platform_admin_update_email_branding(branding_id, logo=None):
                 logo_type="email",
             )
             return redirect(
-                url_for(".platform_admin_update_email_branding",
-                        branding_id=branding_id, logo_key=temporary_logo_key)
+                url_for(".platform_admin_update_email_branding", branding_id=branding_id, logo_key=temporary_logo_key)
             )
 
         permanent_logo_key = email_branding.logo
@@ -108,8 +107,7 @@ def platform_admin_update_email_branding(branding_id, logo=None):
             )
         except HTTPError as e:
             if e.status_code == 400 and "name" in e.response.json().get("message", {}):
-                form.name.errors.append(
-                    e.response.json()["message"]["name"][0])
+                form.name.errors.append(e.response.json()["message"]["name"][0])
             else:
                 raise e
 
@@ -123,8 +121,7 @@ def platform_admin_update_email_branding(branding_id, logo=None):
             email_branding=email_branding,
             cdn_url=current_app.config["LOGO_CDN_DOMAIN"],
             logo=logo_key,
-            back_link=url_for(
-                "main.platform_admin_view_email_branding", branding_id=email_branding.id),
+            back_link=url_for("main.platform_admin_view_email_branding", branding_id=email_branding.id),
             error_summary_enabled=True,
         ),
         400 if form.errors else 200,
@@ -178,40 +175,40 @@ def create_email_branding_government_identity_logo():
 # @user_is_platform_admin
 # def create_email_branding_government_identity_colour():
 
-    # filename = request.args.get("filename")
-    # if filename not in get_government_identity_system_crests_or_insignia():
-    #     abort(400)
+# filename = request.args.get("filename")
+# if filename not in get_government_identity_system_crests_or_insignia():
+#     abort(400)
 
-    # filename = f"{filename}.png"
-    # form = GovernmentIdentityColour(crest_or_insignia_image_filename=filename)
+# filename = f"{filename}.png"
+# form = GovernmentIdentityColour(crest_or_insignia_image_filename=filename)
 
-    # if form.validate_on_submit():
-    #     image_file_path = get_insignia_asset_path() / filename
-    #     logo_data = FileStorage(
-    #         BytesIO(image_file_path.resolve().read_bytes()), filename=filename, content_type="image/png"
-    #     )
-    #     temporary_logo_key = logo_client.save_temporary_logo(
-    #         logo_data,
-    #         logo_type="email",
-    #     )
-    #     return redirect(
-    #         url_for(
-    #             "main.platform_admin_create_email_branding",
-    #             name=request.args.get("text"),
-    #             text=request.args.get("text"),
-    #             colour=form.colour.data,
-    #             logo_key=temporary_logo_key,
-    #             brand_type=request.args.get("brand_type"),
-    #             back="government-identity",
-    #             government_identity=request.args.get("filename"),
-    #         )
-    #     )
+# if form.validate_on_submit():
+#     image_file_path = get_insignia_asset_path() / filename
+#     logo_data = FileStorage(
+#         BytesIO(image_file_path.resolve().read_bytes()), filename=filename, content_type="image/png"
+#     )
+#     temporary_logo_key = logo_client.save_temporary_logo(
+#         logo_data,
+#         logo_type="email",
+#     )
+#     return redirect(
+#         url_for(
+#             "main.platform_admin_create_email_branding",
+#             name=request.args.get("text"),
+#             text=request.args.get("text"),
+#             colour=form.colour.data,
+#             logo_key=temporary_logo_key,
+#             brand_type=request.args.get("brand_type"),
+#             back="government-identity",
+#             government_identity=request.args.get("filename"),
+#         )
+#     )
 
-    # return render_template(
-    #     "views/email-branding/government-identity-options-colour.html",
-    #     form=form,
-    #     error_summary_enabled=True,
-    # )
+# return render_template(
+#     "views/email-branding/government-identity-options-colour.html",
+#     form=form,
+#     error_summary_enabled=True,
+# )
 
 
 @main.route("/email-branding/create", methods=["GET", "POST"])
@@ -254,8 +251,7 @@ def platform_admin_create_email_branding(logo=None):
             )
         except HTTPError as e:
             if e.status_code == 400 and "name" in e.response.json().get("message", {}):
-                form.name.errors.append(
-                    e.response.json()["message"]["name"][0])
+                form.name.errors.append(e.response.json()["message"]["name"][0])
             else:
                 raise e
 
