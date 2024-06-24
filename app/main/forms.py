@@ -1864,7 +1864,6 @@ class ServiceSwitchChannelForm(OnOffSettingForm):
 
 class ServiceEmailSenderForm(StripWhitespaceForm):
     BAD_EMAIL_LOCAL_PARTS = {
-        "noreply",
         "no.reply",
         "info",
         "support",
