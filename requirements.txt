@@ -81,7 +81,7 @@ govuk-frontend-jinja @ git+https://github.com/Worth-NL/notifynl-frontend-jinja.g
     # via -r requirements.in
 greenlet==3.0.3
     # via eventlet
-gunicorn[eventlet]==21.2.0
+gunicorn==22.0.0
     # via -r requirements.in
 humanize==4.4.0
     # via -r requirements.in
