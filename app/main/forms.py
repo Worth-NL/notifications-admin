@@ -1,4 +1,4 @@
-import bleach
+from html import escape
 import weakref
 from contextlib import suppress
 from datetime import datetime, timedelta
@@ -1981,7 +1981,7 @@ class AdminEditEmailBrandingForm(StripWhitespaceForm):
         op = request.form.get("operation")
         if op == "email-branding-details":
             # we only want to validate alt_text/text if we're editing the fields, not the file
-            self.alt_text.data = bleach.clean(self.alt_text.data)
+            self.alt_text.data = escape(self.alt_text.data)
 
             if self.alt_text.data and self.text.data:
                 self.alt_text.errors.append("Alt text must be empty if you have already entered logo text")
