@@ -2,10 +2,12 @@ from flask import current_app, jsonify, request
 from notifications_python_client.errors import HTTPError
 
 from app import status_api_client, version
+from app.limiters import RateLimit
 from app.status import status
 
 
 @status.route("/_status", methods=["GET"])
+@RateLimit.INTERNAL_LIMIT.value
 def show_status():
     if request.args.get("elb", None) or request.args.get("simple", None):
         return jsonify(status="ok"), 200

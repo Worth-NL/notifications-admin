@@ -30,6 +30,7 @@ from app import (
     service_api_client,
 )
 from app.formatters import get_time_left, message_count_noun
+from app.limiters import RateLimit
 from app.main import json_updates, main
 from app.main.forms import SearchNotificationsForm
 from app.models.job import Job
@@ -47,6 +48,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/jobs")
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def view_jobs(service_id):
     return redirect(
         url_for(
@@ -58,6 +60,7 @@ def view_jobs(service_id):
 
 @main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>")
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def view_job(service_id, job_id):
     job = Job.from_id(job_id, service_id=current_service.id)
     if job.cancelled:
@@ -98,6 +101,7 @@ def view_job(service_id, job_id):
 
 @main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>.csv")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT.value
 def view_job_csv(service_id, job_id):
     job = Job.from_id(job_id, service_id=service_id)
     filter_args = parse_filter_args(request.args)
@@ -126,6 +130,7 @@ def view_job_csv(service_id, job_id):
 
 @main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>/original.csv")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT.value
 def view_job_original_file_csv(service_id, job_id):
     job = Job.from_id(job_id, service_id=service_id)
 
@@ -143,6 +148,7 @@ def view_job_original_file_csv(service_id, job_id):
 
 @main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>", methods=["POST"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def cancel_job(service_id, job_id):
     Job.from_id(job_id, service_id=service_id).cancel()
     return redirect(url_for("main.service_dashboard", service_id=service_id))
@@ -150,6 +156,7 @@ def cancel_job(service_id, job_id):
 
 @main.route("/services/<uuid:service_id>/jobs/<uuid:job_id>/cancel", methods=["GET", "POST"])
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def cancel_letter_job(service_id, job_id):
     if request.method == "POST":
         job = Job.from_id(job_id, service_id=service_id)
@@ -174,6 +181,7 @@ def cancel_letter_job(service_id, job_id):
 
 @json_updates.route("/services/<uuid:service_id>/jobs/<uuid:job_id>.json")
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def view_job_updates(service_id, job_id):
     job = Job.from_id(job_id, service_id=service_id)
 
@@ -183,6 +191,7 @@ def view_job_updates(service_id, job_id):
 @main.route("/services/<uuid:service_id>/notifications", methods=["GET", "POST"])
 @main.route("/services/<uuid:service_id>/notifications/<template_type:message_type>", methods=["GET", "POST"])
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def view_notifications(service_id, message_type=None):
     return render_template(
         "views/notifications.html",
@@ -220,6 +229,7 @@ def view_notifications(service_id, message_type=None):
     "/services/<uuid:service_id>/notifications/<template_type:message_type>.json", methods=["GET", "POST"]
 )
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def get_notifications_page_partials_as_json(service_id, message_type=None):
     return jsonify(_get_notifications_dashboard_partials_data(service_id, message_type))
 

@@ -20,6 +20,7 @@ from app import (
     user_api_client,
 )
 from app.extensions import redis_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import (
     AdminClearCacheForm,
@@ -50,12 +51,14 @@ ZERO_FAILURE_THRESHOLD = 0
 @main.route("/find-services-by-name", methods=["GET"])
 @main.route("/find-users-by-email", methods=["GET"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def redirect_old_search_pages():
     return redirect(url_for(".platform_admin_search"))
 
 
 @main.route("/platform-admin", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_search():
     users, services, organisations = [], [], []
     search_form = PlatformAdminSearchForm()
@@ -84,6 +87,7 @@ def platform_admin_search():
 
 @main.route("/platform-admin/summary")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin():
     form = DateFilterForm(request.args, meta={"csrf": False})
     api_args = {}
@@ -173,6 +177,7 @@ def make_columns(global_stats, complaints_number):
 @main.route("/platform-admin/live-services", endpoint="live_services")
 @main.route("/platform-admin/trial-services", endpoint="trial_services")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_services():
     form = DateFilterForm(request.args, meta={"csrf": False})
     if all(
@@ -216,12 +221,14 @@ def platform_admin_services():
 
 @main.route("/platform-admin/reports")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_reports():
     return render_template("views/platform-admin/reports.html")
 
 
 @main.route("/platform-admin/reports/live-services.csv")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def live_services_csv():
     results = service_api_client.get_live_services_data()["data"]
 
@@ -267,6 +274,7 @@ def live_services_csv():
 
 @main.route("/platform-admin/reports/notifications-sent-by-service", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def notifications_sent_by_service():
     form = RequiredDateFilterForm()
 
@@ -310,6 +318,7 @@ def notifications_sent_by_service():
 
 @main.route("/platform-admin/reports/usage-for-all-services", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def get_billing_report():
     form = BillingReportDateFilterForm()
 
@@ -379,6 +388,8 @@ def get_billing_report():
 
 
 @main.route("/platform-admin/reports/dvla-billing", methods=["GET", "POST"])
+@user_is_platform_admin
+@RateLimit.NO_LIMIT
 def get_dvla_billing_report():
     form = BillingReportDateFilterForm()
 
@@ -433,6 +444,7 @@ def get_dvla_billing_report():
 
 @main.route("/platform-admin/reports/volumes-by-service", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def get_volumes_by_service():
     form = BillingReportDateFilterForm()
 
@@ -492,6 +504,7 @@ def get_volumes_by_service():
 
 @main.route("/platform-admin/reports/daily-volumes-report", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def get_daily_volumes():
     form = BillingReportDateFilterForm()
 
@@ -543,6 +556,7 @@ def get_daily_volumes():
 
 @main.route("/platform-admin/reports/daily-sms-provider-volumes-report", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def get_daily_sms_provider_volumes():
     form = BillingReportDateFilterForm()
 
@@ -592,6 +606,7 @@ def get_daily_sms_provider_volumes():
 
 @main.route("/platform-admin/complaints")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_list_complaints():
     page = get_page_from_request()
     if page is None:
@@ -617,6 +632,7 @@ def platform_admin_list_complaints():
 
 @main.route("/platform-admin/returned-letters", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_returned_letters():
     form = AdminReturnedLettersForm()
 
@@ -647,6 +663,7 @@ def platform_admin_returned_letters():
 
 @main.route("/platform-admin/clear-cache", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def clear_cache():
     # note: `service-{uuid}-templates` cache is cleared for both services and templates.
     CACHE_KEYS = {

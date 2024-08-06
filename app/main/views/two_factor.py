@@ -14,6 +14,7 @@ from itsdangerous import SignatureExpired
 from notifications_utils.url_safe_token import check_token
 
 from app import user_api_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import TwoFactorForm
 from app.models.user import User
@@ -26,17 +27,20 @@ from app.utils.login import (
 
 
 @main.route("/two-factor-email-sent", methods=["GET"])
+@RateLimit.NO_LIMIT
 def two_factor_email_sent():
     title = "Email resent" if request.args.get("email_resent") else "Check your email"
     return render_template("views/two-factor-email.html", title=title, redirect_url=request.args.get("next"))
 
 
 @main.route("/email-auth/<token>", methods=["GET"])
+@RateLimit.NO_LIMIT
 def two_factor_email_interstitial(token):
     return render_template("views/email-link-interstitial.html")
 
 
 @main.route("/email-auth/<token>", methods=["POST"])
+@RateLimit.NO_LIMIT
 def two_factor_email(token):
     redirect_url = request.args.get("next")
     if current_user.is_authenticated:
@@ -66,6 +70,7 @@ def two_factor_email(token):
 
 @main.route("/two-factor-sms", methods=["GET", "POST"])
 @redirect_to_sign_in
+@RateLimit.NO_LIMIT
 def two_factor_sms():
     user_id = session["user_details"]["id"]
     user = User.from_id(user_id)
@@ -93,6 +98,7 @@ def two_factor_sms():
 
 @main.route("/two-factor-webauthn", methods=["GET"])
 @redirect_to_sign_in
+@RateLimit.NO_LIMIT
 def two_factor_webauthn():
     user_id = session["user_details"]["id"]
     user = User.from_id(user_id)
@@ -104,6 +110,7 @@ def two_factor_webauthn():
 
 
 @main.route("/re-validate-email", methods=["GET"])
+@RateLimit.NO_LIMIT
 def revalidate_email_sent():
     title = "Email resent" if request.args.get("email_resent") else "Check your email"
     redirect_url = request.args.get("next")

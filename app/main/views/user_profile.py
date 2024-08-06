@@ -15,6 +15,7 @@ from notifications_python_client.errors import HTTPError
 from notifications_utils.url_safe_token import check_token
 
 from app import user_api_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import (
     ChangeEmailForm,
@@ -36,6 +37,7 @@ NEW_MOBILE_PASSWORD_CONFIRMED = "new-mob-password-confirmed"
 
 @main.route("/user-profile")
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile():
     return render_template(
         "views/user-profile.html",
@@ -45,6 +47,7 @@ def user_profile():
 
 @main.route("/user-profile/name", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_name():
     form = ChangeNameForm(new_name=current_user.name)
 
@@ -63,6 +66,7 @@ def user_profile_name():
 @main.route("/user-profile/email", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
+@RateLimit.USER_LIMIT.value
 def user_profile_email():
     form = ChangeEmailForm(User.already_registered, email_address=current_user.email_address)
 
@@ -79,6 +83,7 @@ def user_profile_email():
 
 @main.route("/user-profile/email/authenticate", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_email_authenticate():
     # Validate password for form
     def _check_password(pwd):
@@ -104,6 +109,7 @@ def user_profile_email_authenticate():
 
 @main.route("/user-profile/email/confirm/<token>", methods=["GET"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_email_confirm(token):
     token_data = check_token(
         token,
@@ -122,6 +128,7 @@ def user_profile_email_confirm(token):
 @main.route("/user-profile/mobile-number", methods=["GET", "POST"])
 @main.route("/user-profile/mobile-number/delete", methods=["GET"], endpoint="user_profile_confirm_delete_mobile_number")
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_mobile_number():
     user = User.from_id(current_user.id)
     form = ChangeMobileNumberForm(mobile_number=current_user.mobile_number)
@@ -144,6 +151,7 @@ def user_profile_mobile_number():
 
 @main.route("/user-profile/mobile-number/delete", methods=["POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_mobile_number_delete():
     if current_user.auth_type != "email_auth":
         abort(403)
@@ -155,6 +163,7 @@ def user_profile_mobile_number_delete():
 
 @main.route("/user-profile/mobile-number/authenticate", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_mobile_number_authenticate():
     # Validate password for form
     def _check_password(pwd):
@@ -181,6 +190,7 @@ def user_profile_mobile_number_authenticate():
 
 @main.route("/user-profile/mobile-number/confirm", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_mobile_number_confirm():
     # Validate verify code for form
     def _check_code(cde):
@@ -204,6 +214,7 @@ def user_profile_mobile_number_confirm():
 
 @main.route("/user-profile/password", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_password():
     # Validate password for form
     def _check_password(pwd):
@@ -224,6 +235,7 @@ def user_profile_password():
 
 @main.route("/user-profile/take-part-in-user-research", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_take_part_in_user_research():
     form = YesNoSettingForm(
         name="Take part in user research",
@@ -239,6 +251,7 @@ def user_profile_take_part_in_user_research():
 
 @main.route("/user-profile/disable-platform-admin-view", methods=["GET", "POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_disable_platform_admin_view():
     if not current_user.platform_admin and not session.get("disable_platform_admin_view"):
         abort(403)
@@ -259,6 +272,7 @@ def user_profile_disable_platform_admin_view():
 
 @main.route("/user-profile/security-keys", methods=["GET"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_security_keys():
     if not current_user.can_use_webauthn:
         abort(403)
@@ -279,6 +293,7 @@ def user_profile_security_keys():
     endpoint="user_profile_confirm_delete_security_key",
 )
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_manage_security_key(key_id):
     if not current_user.can_use_webauthn:
         abort(403)
@@ -310,6 +325,7 @@ def user_profile_manage_security_key(key_id):
 
 @main.route("/user-profile/security-keys/<uuid:key_id>/delete", methods=["POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT.value
 def user_profile_delete_security_key(key_id):
     if not current_user.can_use_webauthn:
         abort(403)

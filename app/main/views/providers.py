@@ -4,6 +4,7 @@ from flask import render_template, url_for
 from werkzeug.utils import redirect
 
 from app import provider_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import AdminProviderRatioForm
 from app.utils.user import user_is_platform_admin
@@ -13,6 +14,7 @@ PROVIDER_PRIORITY_MEANING_SWITCHOVER = datetime(2019, 11, 29, 11, 0).isoformat()
 
 @main.route("/providers")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def view_providers():
     providers = provider_client.get_all_providers()["provider_details"]
     domestic_email_providers, domestic_sms_providers, intl_sms_providers = [], [], []
@@ -44,6 +46,7 @@ def add_monthly_traffic(domestic_sms_providers):
 
 @main.route("/provider/edit-sms-provider-ratio", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def edit_sms_provider_ratio():
     providers = [
         provider
@@ -69,6 +72,7 @@ def edit_sms_provider_ratio():
 
 @main.route("/provider/<uuid:provider_id>")
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def view_provider(provider_id):
     versions = provider_client.get_provider_versions(provider_id)
     return render_template("views/providers/provider.html", provider_versions=versions["data"])

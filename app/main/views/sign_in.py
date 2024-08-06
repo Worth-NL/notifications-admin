@@ -14,6 +14,7 @@ from flask_login import current_user
 from markupsafe import Markup
 
 from app import login_manager
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import LoginForm
 from app.models.user import InvitedUser, User

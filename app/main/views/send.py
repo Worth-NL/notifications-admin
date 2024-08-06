@@ -29,6 +29,7 @@ from app import (
     notification_api_client,
     service_api_client,
 )
+from app.limiters import RateLimit
 from app.main import main, no_cookie
 from app.main.forms import (
     ChooseTimeForm,
@@ -89,6 +90,7 @@ def get_example_letter_address(key):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>/csv", methods=["GET", "POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_messages(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -172,6 +174,7 @@ def send_messages(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>.csv", methods=["GET"])
 @user_has_permissions("send_messages", "manage_templates")
+@RateLimit.USER_LIMIT.value
 def get_example_csv(service_id, template_id):
     template = current_service.get_template(template_id)
     return (
@@ -188,6 +191,7 @@ def get_example_csv(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>/set-sender", methods=["GET", "POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def set_sender(service_id, template_id):
     session["sender_id"] = None
     redirect_to_one_off = redirect(url_for(".send_one_off", service_id=service_id, template_id=template_id))
@@ -284,6 +288,7 @@ def get_sender_details(service_id, template_type):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>/one-off")
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_one_off(service_id, template_id):
     session["recipient"] = None
     session["placeholders"] = {}
@@ -326,6 +331,7 @@ def get_notification_check_endpoint(service_id, template):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>/one-off/address", methods=["GET", "POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_one_off_letter_address(service_id, template_id):
     if {"recipient", "placeholders"} - set(session.keys()):
         # if someone has come here via a bookmark or back button they might have some stuff still in their session
@@ -390,6 +396,7 @@ def send_one_off_letter_address(service_id, template_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
     if {"recipient", "placeholders"} - set(session.keys()):
         return redirect(
@@ -513,6 +520,7 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
 
 @no_cookie.route("/services/<uuid:service_id>/send/<uuid:template_id>/test.<filetype>", methods=["GET"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def send_test_preview(service_id, template_id, filetype):
     if filetype not in ("pdf", "png"):
         abort(404)
@@ -538,6 +546,7 @@ def send_test_preview(service_id, template_id, filetype):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>" "/from-contact-list")
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def choose_from_contact_list(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
     return render_template(
@@ -552,6 +561,7 @@ def choose_from_contact_list(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>" "/from-contact-list/<uuid:contact_list_id>")
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def send_from_contact_list(service_id, template_id, contact_list_id):
     contact_list = ContactList.from_id(
         contact_list_id,
@@ -613,11 +623,13 @@ def _check_messages(service_id, template_id, upload_id, preview_row):
         template=template,
         max_initial_rows_shown=50,
         max_errors_shown=50,
-        guestlist=itertools.chain.from_iterable(
-            [user.name, user.mobile_number, user.email_address] for user in Users(service_id)
-        )
-        if current_service.trial_mode
-        else None,
+        guestlist=(
+            itertools.chain.from_iterable(
+                [user.name, user.mobile_number, user.email_address] for user in Users(service_id)
+            )
+            if current_service.trial_mode
+            else None
+        ),
         remaining_messages=remaining_messages,
         allow_international_sms=current_service.has_permission("international_sms"),
         allow_international_letters=current_service.has_permission("international_letters"),
@@ -675,6 +687,7 @@ def _check_messages(service_id, template_id, upload_id, preview_row):
     "/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>/row-<int:row_index>", methods=["GET"]
 )
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def check_messages(service_id, template_id, upload_id, row_index=2):
     data = _check_messages(service_id, template_id, upload_id, row_index)
     data["allowed_file_extensions"] = Spreadsheet.ALLOWED_FILE_EXTENSIONS
@@ -720,6 +733,7 @@ def check_messages(service_id, template_id, upload_id, row_index=2):
     methods=["GET"],
 )
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def check_messages_preview(service_id, template_id, upload_id, filetype, row_index=2):
     if filetype == "pdf":
         page = None
@@ -739,6 +753,7 @@ def check_messages_preview(service_id, template_id, upload_id, filetype, row_ind
     methods=["GET"],
 )
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def check_notification_preview(service_id, template_id, filetype):
     if filetype == "pdf":
         page = None
@@ -758,6 +773,7 @@ def check_notification_preview(service_id, template_id, filetype):
 
 @main.route("/services/<uuid:service_id>/start-job/<uuid:upload_id>", methods=["POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def start_job(service_id, upload_id):
     job_api_client.create_job(
         upload_id,
@@ -874,6 +890,7 @@ def get_skip_link(step_index, template):
 
 @main.route("/services/<uuid:service_id>/template/<uuid:template_id>/one-off/send-to-myself", methods=["GET"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_one_off_to_myself(service_id, template_id):
     # We aren't concerned with creating the exact template (for example adding recipient and sender names)
     # we just want to create enough to use `fields_to_fill_in`
@@ -896,6 +913,7 @@ def send_one_off_to_myself(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/template/<uuid:template_id>/notification/check", methods=["GET"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def check_notification(service_id, template_id):
     return render_template(
         "views/notifications/check.html",
@@ -964,6 +982,7 @@ def get_template_error_dict(exception):
 
 @main.route("/services/<uuid:service_id>/template/<uuid:template_id>/notification/check", methods=["POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_notification(service_id, template_id):
     recipient = get_recipient()
 

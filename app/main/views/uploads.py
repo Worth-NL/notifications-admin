@@ -32,6 +32,7 @@ from app import (
     notification_api_client,
     upload_api_client,
 )
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import CsvUploadForm, LetterUploadPostageForm, PDFUploadForm
 from app.models.contact_list import ContactList
@@ -62,6 +63,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/uploads")
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def uploads(service_id):
     # No tests have been written, this has been quickly prepared for user research.
     # It's also very like that a new view will be created to show uploads.
@@ -90,6 +92,7 @@ def uploads(service_id):
 
 @main.route("/services/<uuid:service_id>/uploaded-letters/<simple_date:letter_print_day>")
 @user_has_permissions()
+@RateLimit.USER_LIMIT.value
 def uploaded_letters(service_id, letter_print_day):
     page = get_page_from_request()
     if page is None:
@@ -142,6 +145,7 @@ def add_preview_of_content_uploaded_letters(notifications):
 
 @main.route("/services/<uuid:service_id>/upload-letter", methods=["GET", "POST"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def upload_letter(service_id):
     form = PDFUploadForm()
     error = {}
@@ -232,6 +236,7 @@ def _invalid_upload_error(error_title, error_detail=None):
 
 @main.route("/services/<uuid:service_id>/preview-letter/<uuid:file_id>")
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def uploaded_letter_preview(service_id, file_id):
     re_upload_form = PDFUploadForm()
 
@@ -288,6 +293,7 @@ def uploaded_letter_preview(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/preview-letter-image/<uuid:file_id>")
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def view_letter_upload_as_preview(service_id, file_id):
     try:
         page = int(request.args.get("page"))
@@ -305,6 +311,7 @@ def view_letter_upload_as_preview(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/upload-letter/send/<uuid:file_id>", methods=["POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def send_uploaded_letter(service_id, file_id):
     if not current_service.has_permission("letter"):
         abort(403)
@@ -355,6 +362,7 @@ def send_uploaded_letter(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/upload-contact-list", methods=["GET", "POST"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def upload_contact_list(service_id):
     form = CsvUploadForm()
 
@@ -400,6 +408,7 @@ def upload_contact_list(service_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def check_contact_list(service_id, upload_id):
     form = CsvUploadForm()
 
@@ -417,11 +426,13 @@ def check_contact_list(service_id, upload_id):
     recipients = RecipientCSV(
         contents,
         template=get_sample_template(template_type or "sms"),
-        guestlist=itertools.chain.from_iterable(
-            [user.name, user.mobile_number, user.email_address] for user in current_service.active_users
-        )
-        if current_service.trial_mode
-        else None,
+        guestlist=(
+            itertools.chain.from_iterable(
+                [user.name, user.mobile_number, user.email_address] for user in current_service.active_users
+            )
+            if current_service.trial_mode
+            else None
+        ),
         allow_international_sms=current_service.has_permission("international_sms"),
         max_initial_rows_shown=50,
         max_errors_shown=50,
@@ -486,6 +497,7 @@ def check_contact_list(service_id, upload_id):
 
 @main.route("/services/<uuid:service_id>/save-contact-list/<uuid:upload_id>", methods=["POST"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def save_contact_list(service_id, upload_id):
     ContactList.create(current_service.id, upload_id)
     return redirect(
@@ -498,6 +510,7 @@ def save_contact_list(service_id, upload_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>", methods=["GET"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
     return render_template(
@@ -512,6 +525,7 @@ def contact_list(service_id, contact_list_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>/delete", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT.value
 def delete_contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
 
@@ -540,6 +554,7 @@ def delete_contact_list(service_id, contact_list_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>.csv", methods=["GET"])
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def download_contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
     return send_file(

@@ -4,6 +4,7 @@ from operator import attrgetter
 from flask import render_template, request
 
 from app import current_service, format_date_numeric
+from app.limiters import RateLimit
 from app.main import main
 from app.models.event import APIKeyEvent, APIKeyEvents, ServiceEvents
 from app.utils.user import user_has_permissions
@@ -11,6 +12,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/history")
 @user_has_permissions("manage_service")
+@RateLimit.USER_LIMIT.value
 def history(service_id):
     events = _get_events(current_service.id, request.args.get("selected"))
 

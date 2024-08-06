@@ -2,6 +2,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
 from app import current_service, organisations_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import OnOffSettingForm, ServiceGoLiveDecisionForm, UniqueServiceForm
 from app.utils.user import user_has_permissions
@@ -9,6 +10,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/make-service-live", methods=["GET"])
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT.value
 def org_member_make_service_live_start(service_id):
     if current_service.live:
         return render_template("views/service-settings/service-already-live.html", prompt_to_switch_service=False), 410
@@ -27,6 +29,7 @@ def org_member_make_service_live_start(service_id):
 
 @main.route("/services/<uuid:service_id>/make-service-live/unique-service", methods=["GET", "POST"])
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT.value
 def org_member_make_service_live_check_unique(service_id):
     if current_service.live:
         return render_template("views/service-settings/service-already-live.html", prompt_to_switch_service=False), 410
@@ -70,6 +73,7 @@ def org_member_make_service_live_check_unique(service_id):
 
 @main.route("/services/<uuid:service_id>/make-service-live/service-name", methods=["GET", "POST"])
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT.value
 def org_member_make_service_live_service_name(service_id):
     if current_service.live:
         return render_template("views/service-settings/service-already-live.html", prompt_to_switch_service=False), 410
@@ -129,6 +133,7 @@ def org_member_make_service_live_service_name(service_id):
 
 @main.route("/services/<uuid:service_id>/make-service-live/contact-user", methods=["GET"])
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT.value
 def org_member_make_service_live_contact_user(service_id):
     if current_service.live:
         return render_template("views/service-settings/service-already-live.html", prompt_to_switch_service=False), 410
@@ -164,6 +169,7 @@ def org_member_make_service_live_contact_user(service_id):
 
 @main.route("/services/<uuid:service_id>/make-service-live/decision", methods=["GET", "POST"])
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT.value
 def org_member_make_service_live_decision(service_id):
     if current_service.live:
         return render_template("views/service-settings/service-already-live.html", prompt_to_switch_service=False), 410

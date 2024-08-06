@@ -6,11 +6,13 @@ from statistics import mean
 from flask import render_template
 
 from app import performance_dashboard_api_client, status_api_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.views.sub_navigation_dictionaries import features_nav
 
 
 @main.route("/features/performance")
+@RateLimit.INTERNAL_LIMIT.value
 def performance():
     stats = performance_dashboard_api_client.get_performance_dashboard_stats(
         start_date=(datetime.utcnow() - timedelta(days=7)).date(),

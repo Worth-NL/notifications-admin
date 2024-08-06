@@ -3,12 +3,8 @@ from flask_login import current_user
 from markupsafe import Markup
 from notifications_utils.safe_string import make_string_safe
 
-from app import (
-    api_key_api_client,
-    current_service,
-    notification_api_client,
-    service_api_client,
-)
+from app import api_key_api_client, current_service, notification_api_client, service_api_client
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import CallbackForm, CreateKeyForm, GuestList
 from app.notify_client.api_key_api_client import (
@@ -23,6 +19,7 @@ dummy_bearer_token = "bearer_token_set"
 
 @main.route("/services/<uuid:service_id>/api")
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def api_integration(service_id):
     callbacks_link = ".api_callbacks" if current_service.has_permission("inbound_sms") else ".delivery_status_callback"
     return render_template(
@@ -34,6 +31,7 @@ def api_integration(service_id):
 
 @main.route("/services/<uuid:service_id>/api/documentation")
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def api_documentation(service_id):
     return redirect(url_for(".guidance_api_documentation"), code=301)
 
@@ -41,6 +39,7 @@ def api_documentation(service_id):
 @main.route("/services/<uuid:service_id>/api/whitelist", methods=["GET", "POST"], endpoint="old_guest_list")
 @main.route("/services/<uuid:service_id>/api/guest-list", methods=["GET", "POST"])
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def guest_list(service_id):
     form = GuestList()
     if form.validate_on_submit():
@@ -60,6 +59,7 @@ def guest_list(service_id):
 
 @main.route("/services/<uuid:service_id>/api/keys")
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def api_keys(service_id):
     return render_template(
         "views/api/keys.html",
@@ -68,6 +68,7 @@ def api_keys(service_id):
 
 @main.route("/services/<uuid:service_id>/api/keys/create", methods=["GET", "POST"])
 @user_has_permissions("manage_api_keys", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def create_api_key(service_id):
     form = CreateKeyForm(current_service.api_keys)
     form.key_type.choices = [
@@ -106,6 +107,7 @@ def create_api_key(service_id):
 
 @main.route("/services/<uuid:service_id>/api/keys/revoke/<uuid:key_id>", methods=["GET", "POST"])
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def revoke_api_key(service_id, key_id):
     key_name = current_service.get_api_key(key_id)["name"]
     if request.method == "GET":
@@ -147,6 +149,7 @@ def check_token_against_dummy_bearer(token):
 
 @main.route("/services/<uuid:service_id>/api/callbacks", methods=["GET"])
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def api_callbacks(service_id):
     if not current_service.has_permission("inbound_sms"):
         return redirect(url_for(".delivery_status_callback", service_id=service_id))
@@ -155,9 +158,9 @@ def api_callbacks(service_id):
 
     return render_template(
         "views/api/callbacks.html",
-        received_text_messages_callback=received_text_messages_callback["url"]
-        if received_text_messages_callback
-        else None,
+        received_text_messages_callback=(
+            received_text_messages_callback["url"] if received_text_messages_callback else None
+        ),
         delivery_status_callback=delivery_status_callback["url"] if delivery_status_callback else None,
     )
 
@@ -169,6 +172,7 @@ def get_delivery_status_callback_details():
 
 @main.route("/services/<uuid:service_id>/api/callbacks/delivery-status-callback", methods=["GET", "POST"])
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def delivery_status_callback(service_id):
     delivery_status_callback = get_delivery_status_callback_details()
     back_link = ".api_callbacks" if current_service.has_permission("inbound_sms") else ".api_integration"
@@ -219,6 +223,7 @@ def get_received_text_messages_callback():
 
 @main.route("/services/<uuid:service_id>/api/callbacks/received-text-messages-callback", methods=["GET", "POST"])
 @user_has_permissions("manage_api_keys")
+@RateLimit.USER_LIMIT.value
 def received_text_messages_callback(service_id):
     if not current_service.has_permission("inbound_sms"):
         return redirect(url_for(".api_integration", service_id=service_id))

@@ -1,6 +1,7 @@
 from flask import abort, redirect, render_template, session
 
 from app import current_service, current_user, service_api_client, url_for
+from app.limiters import RateLimit
 from app.main import main
 from app.main.views.send import (
     all_placeholders_in_session,
@@ -14,6 +15,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/tour/<uuid:template_id>")
 @user_has_permissions("send_messages")
+@RateLimit.USER_LIMIT.value
 def begin_tour(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -41,6 +43,7 @@ def begin_tour(service_id, template_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def tour_step(service_id, template_id, step_index):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -103,6 +106,7 @@ def _get_tour_step_back_link(service_id, template_id, step_index):
 
 @main.route("/services/<uuid:service_id>/tour/<uuid:template_id>/check", methods=["GET"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
+@RateLimit.USER_LIMIT.value
 def check_tour_notification(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -134,6 +138,7 @@ def check_tour_notification(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/end-tour/<uuid:example_template_id>")
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT.value
 def go_to_dashboard_after_tour(service_id, example_template_id):
     service_api_client.delete_service_template(service_id, example_template_id)
 
