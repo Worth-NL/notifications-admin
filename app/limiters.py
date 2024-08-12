@@ -9,12 +9,11 @@ from app.config import configs
 limiter = Limiter(
     get_remote_address,
     storage_uri=configs.get("REDIS_URL", "memory://"),
-    default_limits=["1/minute"],
+    default_limits=[configs.get("DEFAULT_RATE_LIMIT", "1/minute")],
 )
 
 
 class RateLimit(Enum):
     NO_LIMIT = limiter.exempt
-    INTERNAL_LIMIT = limiter.limit("12/minute")
-    DEFAULT_USER_LIMIT = limiter.limit("1/minute", key_func=lambda: current_user.id)
-    USER_LIMIT = limiter.limit("1/second", key_func=lambda: current_user.id)
+    INTERNAL_LIMIT = limiter.limit(configs.get("INTERNAL_RATE_LIMIT", "12/minute"))
+    USER_LIMIT = limiter.limit(configs.get("USER_RATE_LIMIT", "1/second"), key_func=lambda: current_user.id)
