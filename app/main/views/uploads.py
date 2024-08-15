@@ -63,7 +63,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/uploads")
 @user_has_permissions()
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def uploads(service_id):
     # No tests have been written, this has been quickly prepared for user research.
     # It's also very like that a new view will be created to show uploads.
@@ -92,7 +92,7 @@ def uploads(service_id):
 
 @main.route("/services/<uuid:service_id>/uploaded-letters/<simple_date:letter_print_day>")
 @user_has_permissions()
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def uploaded_letters(service_id, letter_print_day):
     page = get_page_from_request()
     if page is None:
@@ -145,7 +145,7 @@ def add_preview_of_content_uploaded_letters(notifications):
 
 @main.route("/services/<uuid:service_id>/upload-letter", methods=["GET", "POST"])
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def upload_letter(service_id):
     form = PDFUploadForm()
     error = {}
@@ -236,7 +236,7 @@ def _invalid_upload_error(error_title, error_detail=None):
 
 @main.route("/services/<uuid:service_id>/preview-letter/<uuid:file_id>")
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def uploaded_letter_preview(service_id, file_id):
     re_upload_form = PDFUploadForm()
 
@@ -293,7 +293,7 @@ def uploaded_letter_preview(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/preview-letter-image/<uuid:file_id>")
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def view_letter_upload_as_preview(service_id, file_id):
     try:
         page = int(request.args.get("page"))
@@ -311,7 +311,7 @@ def view_letter_upload_as_preview(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/upload-letter/send/<uuid:file_id>", methods=["POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def send_uploaded_letter(service_id, file_id):
     if not current_service.has_permission("letter"):
         abort(403)
@@ -362,7 +362,7 @@ def send_uploaded_letter(service_id, file_id):
 
 @main.route("/services/<uuid:service_id>/upload-contact-list", methods=["GET", "POST"])
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def upload_contact_list(service_id):
     form = CsvUploadForm()
 
@@ -408,7 +408,7 @@ def upload_contact_list(service_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def check_contact_list(service_id, upload_id):
     form = CsvUploadForm()
 
@@ -497,7 +497,7 @@ def check_contact_list(service_id, upload_id):
 
 @main.route("/services/<uuid:service_id>/save-contact-list/<uuid:upload_id>", methods=["POST"])
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def save_contact_list(service_id, upload_id):
     ContactList.create(current_service.id, upload_id)
     return redirect(
@@ -510,7 +510,7 @@ def save_contact_list(service_id, upload_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>", methods=["GET"])
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
     return render_template(
@@ -525,7 +525,7 @@ def contact_list(service_id, contact_list_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>/delete", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def delete_contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
 
@@ -554,7 +554,7 @@ def delete_contact_list(service_id, contact_list_id):
 
 @main.route("/services/<uuid:service_id>/contact-list/<uuid:contact_list_id>.csv", methods=["GET"])
 @user_has_permissions("send_messages")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def download_contact_list(service_id, contact_list_id):
     contact_list = ContactList.from_id(contact_list_id, service_id=service_id)
     return send_file(

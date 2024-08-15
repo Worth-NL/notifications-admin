@@ -17,7 +17,7 @@ from flask import (
     url_for,
 )
 
-from app.limiters import limiter
+from app.limiters import init_limiters
 from flask_login import LoginManager, current_user
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
@@ -172,8 +172,6 @@ def create_app(application):
         login_manager,
         proxy_fix,
         request_helper,
-        # Rate limiter
-        limiter,
         # API clients
         api_key_api_client,
         billing_api_client,
@@ -232,6 +230,8 @@ def create_app(application):
 
 
 def init_app(application):
+    init_limiters(application)
+
     application.after_request(useful_headers_after_request)
 
     # Load user first (as we want user_id to be available for all calls to API, which service+organisation might make.

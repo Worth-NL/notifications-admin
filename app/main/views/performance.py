@@ -12,7 +12,7 @@ from app.main.views.sub_navigation_dictionaries import features_nav
 
 
 @main.route("/features/performance")
-@RateLimit.INTERNAL_LIMIT.value
+@RateLimit.INTERNAL_LIMIT
 def performance():
     stats = performance_dashboard_api_client.get_performance_dashboard_stats(
         start_date=(datetime.utcnow() - timedelta(days=7)).date(),

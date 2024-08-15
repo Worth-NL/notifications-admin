@@ -15,7 +15,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/agreement")
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def service_agreement(service_id):
     if not current_service.organisation:
         if current_service.organisation_type == Organisation.TYPE_NHS_GP:
@@ -31,14 +31,14 @@ def service_agreement(service_id):
 
 @main.route("/services/<uuid:service_id>/agreement.pdf")
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def service_download_agreement(service_id):
     return send_file(**get_mou(current_service.organisation.crown_status_or_404))
 
 
 @main.route("/services/<uuid:service_id>/agreement/accept", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def service_accept_agreement(service_id):
     if not current_service.organisation:
         abort(404)
@@ -58,7 +58,7 @@ def service_accept_agreement(service_id):
 
 @main.route("/services/<uuid:service_id>/agreement/confirm", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def service_confirm_agreement(service_id):
     if not current_service.organisation or current_service.organisation.agreement_signed_version is None:
         abort(403)

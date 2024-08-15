@@ -12,7 +12,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/history")
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def history(service_id):
     events = _get_events(current_service.id, request.args.get("selected"))
 

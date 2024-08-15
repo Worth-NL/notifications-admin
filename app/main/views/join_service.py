@@ -11,7 +11,7 @@ from app.utils.user import user_is_gov_user, user_is_logged_in
 @main.route("/choose-service-to-join", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def choose_service_to_join():
     if not current_user.default_organisation.can_ask_to_join_a_service:
         abort(403)
@@ -25,7 +25,7 @@ def choose_service_to_join():
 @main.route("/services/<uuid:service_to_join_id>/join", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def join_service(service_to_join_id):
     service = Service.from_id(service_to_join_id)
 
@@ -62,7 +62,7 @@ def join_service(service_to_join_id):
 @main.route("/services/<uuid:service_to_join_id>/join/requested", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def join_service_requested(service_to_join_id):
     service = Service.from_id(service_to_join_id)
     return render_template(

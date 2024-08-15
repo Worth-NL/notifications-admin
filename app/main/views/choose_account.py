@@ -21,7 +21,7 @@ def services_or_dashboard():
 
 @main.route("/accounts")
 @user_is_logged_in
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def choose_account():
     org_count, live_service_count = None, None
     if current_user.platform_admin:

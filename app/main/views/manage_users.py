@@ -26,7 +26,7 @@ from app.utils.user_permissions import permission_options
 
 @main.route("/services/<uuid:service_id>/users")
 @user_has_permissions(allow_org_user=True)
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def manage_users(service_id):
     return render_template(
         "views/manage-users.html",
@@ -41,7 +41,7 @@ def manage_users(service_id):
 @main.route("/services/<uuid:service_id>/users/invite", methods=["GET", "POST"])
 @main.route("/services/<uuid:service_id>/users/invite/<uuid:user_id>", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def invite_user(service_id, user_id=None):
     form = InviteUserForm(
         inviter_email_address=current_user.email_address,
@@ -97,7 +97,7 @@ def invite_user(service_id, user_id=None):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def edit_user_permissions(service_id, user_id):
     user = current_service.get_team_member(user_id)
     form = PermissionsForm.from_user_and_service(user, current_service)
@@ -125,7 +125,7 @@ def edit_user_permissions(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>/delete", methods=["POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def remove_user_from_service(service_id, user_id):
     try:
         service_api_client.remove_user_from_service(service_id, user_id)
@@ -144,7 +144,7 @@ def remove_user_from_service(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>/edit-email", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def edit_user_email(service_id, user_id):
     user = current_service.get_team_member(user_id)
     user_email = user.email_address
@@ -174,7 +174,7 @@ def edit_user_email(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>/edit-email/confirm", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def confirm_edit_user_email(service_id, user_id):
     user = current_service.get_team_member(user_id)
     session_key = f"team_member_email_change-{user_id}"
@@ -205,7 +205,7 @@ def confirm_edit_user_email(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>/edit-mobile-number", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def edit_user_mobile_number(service_id, user_id):
     user = current_service.get_team_member(user_id)
     user_mobile_number = redact_mobile_number(user.mobile_number)
@@ -228,7 +228,7 @@ def edit_user_mobile_number(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/users/<uuid:user_id>/edit-mobile-number/confirm", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def confirm_edit_user_mobile_number(service_id, user_id):
     user = current_service.get_team_member(user_id)
     if "team_member_mobile_change" in session:
@@ -262,7 +262,7 @@ def confirm_edit_user_mobile_number(service_id, user_id):
 
 @main.route("/services/<uuid:service_id>/cancel-invited-user/<uuid:invited_user_id>", methods=["GET"])
 @user_has_permissions("manage_service")
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def cancel_invited_user(service_id, invited_user_id):
     current_service.cancel_invite(invited_user_id)
 

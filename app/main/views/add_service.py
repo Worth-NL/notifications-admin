@@ -48,7 +48,7 @@ def _create_example_template(service_id):
 @main.route("/add-or-join-service", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def add_or_join_service():
     if not current_user.default_organisation.can_ask_to_join_a_service:
         abort(403)
@@ -68,7 +68,7 @@ def add_or_join_service():
 @main.route("/add-service", methods=["GET", "POST"])
 @user_is_logged_in
 @user_is_gov_user
-@RateLimit.USER_LIMIT.value
+@RateLimit.USER_LIMIT
 def add_service():
     default_organisation_type = current_user.default_organisation_type
     if default_organisation_type == "nhs":

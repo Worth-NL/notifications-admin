@@ -7,7 +7,7 @@ from app.status import status
 
 
 @status.route("/_status", methods=["GET"])
-@RateLimit.INTERNAL_LIMIT.value
+@RateLimit.INTERNAL_LIMIT
 def show_status():
     if request.args.get("elb", None) or request.args.get("simple", None):
         return jsonify(status="ok"), 200
