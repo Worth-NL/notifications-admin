@@ -97,6 +97,10 @@ class Config:
     EMAIL_BRANDING_MIN_LOGO_HEIGHT_PX = 108
     EMAIL_BRANDING_MAX_LOGO_WIDTH_PX = 640
 
+    DEFAULT_RATE_LIMIT = os.environ.get("DEFAULT_RATE_LIMIT", "1/minute")
+    USER_RATE_LIMIT = os.environ.get("USER_RATE_LIMIT", "1/second")
+    INTERNAL_RATE_LIMIT = os.environ.get("INTERNAL_RATE_LIMIT", "12/minute")
+
 
 class Development(Config):
     SERVER_NAME = os.getenv("SERVER_NAME")

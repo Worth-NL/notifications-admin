@@ -16,6 +16,8 @@ from flask import (
     session,
     url_for,
 )
+
+from app.limiters import init_limiters
 from flask_login import LoginManager, current_user
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
@@ -128,10 +130,10 @@ from app.url_converters import (
 from app.utils import format_provider
 from app.utils.user_id import get_user_id_from_flask_login_session
 
+
 login_manager = LoginManager()
 csrf = CSRFProtect()
 metrics = GDSMetrics()
-
 
 current_service = LocalProxy(lambda: g.current_service)
 
@@ -228,6 +230,8 @@ def create_app(application):
 
 
 def init_app(application):
+    init_limiters(application)
+
     application.after_request(useful_headers_after_request)
 
     # Load user first (as we want user_id to be available for all calls to API, which service+organisation might make.
@@ -460,6 +464,10 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
     @application.errorhandler(405)
     def handle_method_not_allowed(error):
         return _error_response(405, error_page_template=500)
+
+    @application.errorhandler(429)
+    def handle_ratelimit_reached(error):
+        return _error_response(429, error_page_template=500)
 
     @application.errorhandler(WerkzeugHTTPException)
     def handle_http_error(error):

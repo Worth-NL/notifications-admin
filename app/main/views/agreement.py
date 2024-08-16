@@ -4,6 +4,7 @@ from flask import abort, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from app import current_service
+from app.limiters import limiter, RateLimit
 from app.main import main
 from app.main.forms import AcceptAgreementForm
 from app.models.organisation import Organisation
@@ -14,6 +15,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/agreement")
 @user_has_permissions("manage_service")
+@RateLimit.USER_LIMIT
 def service_agreement(service_id):
     if not current_service.organisation:
         if current_service.organisation_type == Organisation.TYPE_NHS_GP:
@@ -29,12 +31,14 @@ def service_agreement(service_id):
 
 @main.route("/services/<uuid:service_id>/agreement.pdf")
 @user_has_permissions("manage_service")
+@RateLimit.USER_LIMIT
 def service_download_agreement(service_id):
     return send_file(**get_mou(current_service.organisation.crown_status_or_404))
 
 
 @main.route("/services/<uuid:service_id>/agreement/accept", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
+@RateLimit.USER_LIMIT
 def service_accept_agreement(service_id):
     if not current_service.organisation:
         abort(404)
@@ -54,6 +58,7 @@ def service_accept_agreement(service_id):
 
 @main.route("/services/<uuid:service_id>/agreement/confirm", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
+@RateLimit.USER_LIMIT
 def service_confirm_agreement(service_id):
     if not current_service.organisation or current_service.organisation.agreement_signed_version is None:
         abort(403)
@@ -72,6 +77,7 @@ def service_confirm_agreement(service_id):
 @main.route("/agreement/<variant>", endpoint="public_agreement")
 @main.route("/agreement/<variant>.pdf", endpoint="public_download_agreement")
 @hide_from_search_engines
+@limiter.exempt
 def public_agreement(variant):
     if variant not in {"crown", "non-crown"}:
         abort(404)

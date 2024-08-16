@@ -15,6 +15,7 @@ from app import (
     template_statistics_client,
 )
 from app.formatters import format_date_numeric, format_datetime_numeric
+from app.limiters import RateLimit
 from app.main import json_updates, main
 from app.statistics_utils import get_formatted_percentage
 from app.utils import (
@@ -31,12 +32,14 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/dashboard")
 @user_has_permissions("view_activity", "send_messages")
+@RateLimit.USER_LIMIT
 def old_service_dashboard(service_id):
     return redirect(url_for(".service_dashboard", service_id=service_id))
 
 
 @main.route("/services/<uuid:service_id>")
 @user_has_permissions()
+@RateLimit.USER_LIMIT
 def service_dashboard(service_id):
     if session.get("invited_user_id"):
         session.pop("invited_user_id", None)
@@ -54,18 +57,21 @@ def service_dashboard(service_id):
 
 @json_updates.route("/services/<uuid:service_id>/dashboard.json")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def service_dashboard_updates(service_id):
     return jsonify(**get_dashboard_partials(service_id))
 
 
 @main.route("/services/<uuid:service_id>/template-activity")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def template_history(service_id):
     return redirect(url_for("main.template_usage", service_id=service_id), code=301)
 
 
 @main.route("/services/<uuid:service_id>/template-usage")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def template_usage(service_id):
     year, current_financial_year = requested_and_current_financial_year(request)
     stats = template_statistics_client.get_monthly_template_usage_for_service(service_id, year)
@@ -109,6 +115,7 @@ def template_usage(service_id):
 
 @main.route("/services/<uuid:service_id>/usage")
 @user_has_permissions("manage_service", allow_org_user=True)
+@RateLimit.USER_LIMIT
 def usage(service_id):
     year, current_financial_year = requested_and_current_financial_year(request)
 
@@ -131,6 +138,7 @@ def usage(service_id):
 
 @main.route("/services/<uuid:service_id>/monthly")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def monthly(service_id):
     year, current_financial_year = requested_and_current_financial_year(request)
     return render_template(
@@ -150,6 +158,7 @@ def monthly(service_id):
 @main.route("/services/<uuid:service_id>/inbox")
 @user_has_permissions("view_activity")
 @service_has_permission("inbound_sms")
+@RateLimit.USER_LIMIT
 def inbox(service_id):
     return render_template(
         "views/dashboard/inbox.html",
@@ -161,12 +170,14 @@ def inbox(service_id):
 @json_updates.route("/services/<uuid:service_id>/inbox.json")
 @user_has_permissions("view_activity")
 @service_has_permission("inbound_sms")
+@RateLimit.USER_LIMIT
 def inbox_updates(service_id):
     return jsonify(get_inbox_partials(service_id))
 
 
 @main.route("/services/<uuid:service_id>/inbox.csv")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def inbox_download(service_id):
     return Response(
         Spreadsheet.from_rows(

@@ -6,6 +6,7 @@ from notifications_utils.url_safe_token import check_token
 
 from app import user_api_client
 from app.constants import PERMISSION_CAN_MAKE_SERVICES_LIVE
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import TwoFactorForm
 from app.models.user import InvitedOrgUser, InvitedUser, User
@@ -14,6 +15,7 @@ from app.utils.login import redirect_to_sign_in
 
 @main.route("/verify", methods=["GET", "POST"])
 @redirect_to_sign_in
+@RateLimit.NO_LIMIT
 def verify():
     user_id = session["user_details"]["id"]
 
@@ -30,6 +32,7 @@ def verify():
 
 
 @main.route("/verify-email/<token>")
+@RateLimit.NO_LIMIT
 def verify_email(token):
     try:
         token_data = check_token(

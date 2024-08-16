@@ -7,6 +7,7 @@ from werkzeug.datastructures import FileStorage
 
 from app import email_branding_client
 from app.event_handlers import create_update_email_branding_event
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import (
     AdminEditEmailBrandingForm,
@@ -26,6 +27,7 @@ from app.utils.user import user_is_platform_admin
 
 @main.route("/email-branding", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def email_branding():
     return render_template(
         "views/email-branding/select-branding.html", email_brandings=AllEmailBranding(), _search_form=SearchByNameForm()
@@ -41,6 +43,7 @@ def email_branding():
     endpoint="platform_admin_confirm_archive_email_branding",
 )
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_view_email_branding(branding_id):
     email_branding = EmailBranding.from_id(branding_id)
 
@@ -62,6 +65,7 @@ def platform_admin_view_email_branding(branding_id):
 @main.route("/email-branding/<uuid:branding_id>/edit", methods=["GET", "POST"])
 @main.route("/email-branding/<uuid:branding_id>/edit/<logo>", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_update_email_branding(branding_id, logo=None):
     email_branding = EmailBranding.from_id(branding_id)
 
@@ -130,6 +134,7 @@ def platform_admin_update_email_branding(branding_id, logo=None):
 
 @main.route("/email-branding/<uuid:branding_id>/archive", methods=["POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_archive_email_branding(branding_id):
     email_branding_client.archive_email_branding(branding_id=branding_id)
     return redirect(url_for(".email_branding"))
@@ -137,6 +142,7 @@ def platform_admin_archive_email_branding(branding_id):
 
 @main.route("/email-branding/create-government-identity/logo", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def create_email_branding_government_identity_logo():
     form = GovernmentIdentityCoatOfArmsOrInsignia()
 
@@ -214,6 +220,7 @@ def create_email_branding_government_identity_logo():
 @main.route("/email-branding/create", methods=["GET", "POST"])
 @main.route("/email-branding/create/<logo>", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_create_email_branding(logo=None):
     form = AdminEditEmailBrandingForm(
         name=request.args.get("name"),

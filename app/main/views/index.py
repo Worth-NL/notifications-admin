@@ -14,6 +14,7 @@ from notifications_utils.template import HTMLEmailTemplate
 
 from app import letter_branding_client, status_api_client
 from app.formatters import message_count
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import FieldWithNoneOption
 from app.main.views.pricing import CURRENT_SMS_RATE
@@ -27,6 +28,7 @@ main.register_blueprint(redirects)
 
 
 @main.route("/")
+@RateLimit.NO_LIMIT
 def index():
     if current_user and current_user.is_authenticated:
         return redirect(url_for("main.choose_account"))
@@ -41,6 +43,7 @@ def index():
 
 
 @main.route("/error/<int:status_code>")
+@RateLimit.NO_LIMIT
 def error(status_code):
     if status_code >= 500:
         abort(404)
@@ -48,21 +51,25 @@ def error(status_code):
 
 
 @main.route("/cookies")
+@RateLimit.NO_LIMIT
 def cookies():
     return render_template("views/cookies.html")
 
 
 @main.route("/privacy")
+@RateLimit.NO_LIMIT
 def privacy():
     return render_template("views/privacy.html")
 
 
 @main.route("/accessibility-statement")
+@RateLimit.NO_LIMIT
 def accessibility_statement():
     return render_template("views/accessibility_statement.html")
 
 
 @main.route("/design-patterns-content-guidance")
+@RateLimit.NO_LIMIT
 def design_content():
     return redirect("https://www.gov.uk/service-manual/design/sending-emails-and-text-messages", 301)
 
@@ -145,6 +152,7 @@ def letter_template():
 
 
 @main.route("/terms-of-use", endpoint="terms_of_use")
+@RateLimit.NO_LIMIT
 def terms_of_use():
     return render_template("views/terms-of-use.html")
 
@@ -176,6 +184,7 @@ def terms_of_use():
 
 
 @main.route("/using-notify")
+@RateLimit.NO_LIMIT
 def guidance_using_notify():
     return render_template(
         "views/guidance/using-notify/index.html",
@@ -184,6 +193,7 @@ def guidance_using_notify():
 
 
 @main.route("/using-notify/api-documentation")
+@RateLimit.NO_LIMIT
 def guidance_api_documentation():
     return render_template(
         "views/guidance/using-notify/api-documentation.html",
@@ -192,6 +202,7 @@ def guidance_api_documentation():
 
 
 @main.route("/using-notify/attach-pages")
+@RateLimit.NO_LIMIT
 def guidance_attach_pages():
     return render_template(
         "views/guidance/using-notify/attach-pages.html",
@@ -200,6 +211,7 @@ def guidance_attach_pages():
 
 
 @main.route("/using-notify/bulk-sending")
+@RateLimit.NO_LIMIT
 def guidance_bulk_sending():
     return render_template(
         "views/guidance/using-notify/bulk-sending.html",
@@ -215,6 +227,7 @@ def guidance_bulk_sending():
 
 @main.route("/using-notify/message-status")
 @main.route("/using-notify/message-status/<template_type:notification_type>")
+@RateLimit.NO_LIMIT
 def guidance_message_status(notification_type=None):
     if not notification_type:
         return redirect(url_for(".guidance_message_status", notification_type="email"))
@@ -226,6 +239,7 @@ def guidance_message_status(notification_type=None):
 
 
 @main.route("/using-notify/data-retention-period")
+@RateLimit.NO_LIMIT
 def guidance_data_retention_period():
     return render_template(
         "views/guidance/using-notify/data-retention-period.html",
@@ -234,6 +248,7 @@ def guidance_data_retention_period():
 
 
 @main.route("/using-notify/delivery-times")
+@RateLimit.NO_LIMIT
 def guidance_delivery_times():
     return render_template(
         "views/guidance/using-notify/delivery-times.html",
@@ -242,6 +257,7 @@ def guidance_delivery_times():
 
 
 @main.route("/using-notify/email-branding")
+@RateLimit.NO_LIMIT
 def guidance_email_branding():
     return render_template(
         "views/guidance/using-notify/email-branding.html",
@@ -250,6 +266,7 @@ def guidance_email_branding():
 
 
 @main.route("/using-notify/formatting")
+@RateLimit.NO_LIMIT
 def guidance_formatting():
     return render_template(
         "views/guidance/using-notify/formatting.html",
@@ -258,6 +275,7 @@ def guidance_formatting():
 
 
 @main.route("/using-notify/letter-branding")
+@RateLimit.NO_LIMIT
 def guidance_letter_branding():
     return render_template(
         "views/guidance/using-notify/letter-branding.html",
@@ -266,6 +284,7 @@ def guidance_letter_branding():
 
 
 @main.route("/using-notify/links-and-URLs")
+@RateLimit.NO_LIMIT
 def guidance_links_and_URLs():
     return render_template(
         "views/guidance/using-notify/links-and-URLs.html",
@@ -274,6 +293,7 @@ def guidance_links_and_URLs():
 
 
 @main.route("/using-notify/optional-content")
+@RateLimit.NO_LIMIT
 def guidance_optional_content():
     return render_template(
         "views/guidance/using-notify/optional-content.html",
@@ -282,6 +302,7 @@ def guidance_optional_content():
 
 
 @main.route("/using-notify/personalisation")
+@RateLimit.NO_LIMIT
 def guidance_personalisation():
     return render_template(
         "views/guidance/using-notify/personalisation.html",
@@ -290,6 +311,7 @@ def guidance_personalisation():
 
 
 @main.route("/using-notify/qr-codes")
+@RateLimit.NO_LIMIT
 def guidance_qr_codes():
     return render_template(
         "views/guidance/using-notify/qr-codes.html",
@@ -298,6 +320,7 @@ def guidance_qr_codes():
 
 
 @main.route("/using-notify/receive-text-messages")
+@RateLimit.NO_LIMIT
 def guidance_receive_text_messages():
     return render_template(
         "views/guidance/using-notify/receive-text-messages.html",
@@ -306,6 +329,7 @@ def guidance_receive_text_messages():
 
 
 @main.route("/using-notify/reply-to-email-address")
+@RateLimit.NO_LIMIT
 def guidance_reply_to_email_address():
     return render_template(
         "views/guidance/using-notify/reply-to-email-address.html",
@@ -314,6 +338,7 @@ def guidance_reply_to_email_address():
 
 
 @main.route("/using-notify/schedule-messages")
+@RateLimit.NO_LIMIT
 def guidance_schedule_messages():
     return render_template(
         "views/guidance/using-notify/schedule-messages.html",
@@ -330,6 +355,7 @@ def guidance_schedule_messages():
 
 
 @main.route("/using-notify/team-members-and-permissions")
+@RateLimit.NO_LIMIT
 def guidance_team_members_and_permissions():
     return render_template(
         "views/guidance/using-notify/team-members-permissions.html",
@@ -338,6 +364,7 @@ def guidance_team_members_and_permissions():
 
 
 @main.route("/using-notify/templates")
+@RateLimit.NO_LIMIT
 def guidance_templates():
     return render_template(
         "views/guidance/using-notify/templates.html",
@@ -346,6 +373,7 @@ def guidance_templates():
 
 
 @main.route("/using-notify/text-message-sender")
+@RateLimit.NO_LIMIT
 def guidance_text_message_sender():
     return render_template(
         "views/guidance/using-notify/text-message-sender.html",
@@ -354,6 +382,7 @@ def guidance_text_message_sender():
 
 
 @main.route("/using-notify/trial-mode")
+@RateLimit.NO_LIMIT
 def guidance_trial_mode():
     return render_template(
         "views/guidance/using-notify/trial-mode.html",
@@ -363,6 +392,7 @@ def guidance_trial_mode():
 
 
 @main.route("/using-notify/upload-a-letter")
+@RateLimit.NO_LIMIT
 def guidance_upload_a_letter():
     return render_template(
         "views/guidance/using-notify/upload-a-letter.html",
@@ -371,6 +401,7 @@ def guidance_upload_a_letter():
 
 
 @main.route("/using-notify/unsubscribe-links")
+@RateLimit.NO_LIMIT
 def guidance_unsubscribe_links():
     return render_template(
         "views/guidance/using-notify/unsubscribe-links.html",
@@ -382,6 +413,7 @@ def guidance_unsubscribe_links():
 
 
 @main.route("/docs/notify-pdf-letter-spec-latest.pdf")
+@RateLimit.NO_LIMIT
 def letter_spec():
     return redirect("https://docs.notifications.service.gov.uk" "/documentation/images/notify-pdf-letter-spec-v2.4.pdf")
 

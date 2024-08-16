@@ -5,6 +5,7 @@ from notifications_python_client.errors import HTTPError
 
 from app import letter_branding_client, logo_client
 from app.event_handlers import create_update_letter_branding_event
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import (
     AdminEditLetterBrandingForm,
@@ -18,6 +19,7 @@ from app.utils.user import user_is_platform_admin
 
 @main.route("/letter-branding", methods=["GET"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def letter_branding():
     return render_template(
         "views/letter-branding/select-letter-branding.html",
@@ -28,6 +30,7 @@ def letter_branding():
 
 @main.route("/letter-branding/<uuid:branding_id>", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def platform_admin_view_letter_branding(branding_id):
     letter_branding = LetterBranding.from_id(branding_id)
 
@@ -42,6 +45,7 @@ def platform_admin_view_letter_branding(branding_id):
 @main.route("/letter-branding/<uuid:branding_id>/edit", methods=["GET", "POST"])
 @main.route("/letter-branding/<uuid:branding_id>/edit/<path:logo>", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def update_letter_branding(branding_id, logo=None):
     letter_branding = LetterBranding.from_id(branding_id)
 
@@ -116,6 +120,7 @@ def update_letter_branding(branding_id, logo=None):
 @main.route("/letter-branding/create", methods=["GET", "POST"])
 @main.route("/letter-branding/create/<path:logo>", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def create_letter_branding(logo=None):
     file_upload_form = AdminEditLetterBrandingSVGUploadForm()
     letter_branding_details_form = AdminEditLetterBrandingForm()

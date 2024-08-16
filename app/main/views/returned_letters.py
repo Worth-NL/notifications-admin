@@ -1,6 +1,7 @@
 from flask import render_template
 
 from app import current_service, service_api_client
+from app.limiters import RateLimit
 from app.main import main
 from app.models.spreadsheet import Spreadsheet
 from app.utils.user import user_has_permissions
@@ -8,6 +9,7 @@ from app.utils.user import user_has_permissions
 
 @main.route("/services/<uuid:service_id>/returned-letters")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def returned_letter_summary(service_id):
     return render_template(
         "views/returned-letter-summary.html",
@@ -17,6 +19,7 @@ def returned_letter_summary(service_id):
 
 @main.route("/services/<uuid:service_id>/returned-letters/<simple_date:reported_at>")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def returned_letters(service_id, reported_at):
     page_size = 50
     returned_letters = service_api_client.get_returned_letters(service_id, reported_at)
@@ -34,6 +37,7 @@ def returned_letters(service_id, reported_at):
 
 @main.route("/services/<uuid:service_id>/returned-letters/<simple_date:reported_at>.csv")
 @user_has_permissions("view_activity")
+@RateLimit.USER_LIMIT
 def returned_letters_report(service_id, reported_at):
     returned_letters = service_api_client.get_returned_letters(service_id, reported_at)
     column_names = {

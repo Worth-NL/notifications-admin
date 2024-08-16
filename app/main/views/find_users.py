@@ -4,6 +4,7 @@ from notifications_python_client.errors import HTTPError
 
 from app import user_api_client
 from app.event_handlers import create_archive_user_event
+from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import AuthTypeForm
 from app.models.user import User
@@ -12,6 +13,7 @@ from app.utils.user import user_is_platform_admin
 
 @main.route("/users/<uuid:user_id>", methods=["GET"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def user_information(user_id):
     return render_template(
         "views/find-users/user-information.html",
@@ -21,6 +23,7 @@ def user_information(user_id):
 
 @main.route("/users/<uuid:user_id>/archive", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def archive_user(user_id):
     if request.method == "POST":
         user = User.from_id(user_id)
@@ -48,6 +51,7 @@ def archive_user(user_id):
 
 @main.route("/users/<uuid:user_id>/change_auth", methods=["GET", "POST"])
 @user_is_platform_admin
+@RateLimit.NO_LIMIT
 def change_user_auth(user_id):
     user = User.from_id(user_id)
     if user.webauthn_auth:

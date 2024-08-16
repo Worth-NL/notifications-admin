@@ -36,6 +36,7 @@ from app import (
 )
 from app.constants import QR_CODE_TOO_LONG, LetterLanguageOptions
 from app.formatters import character_count, message_count
+from app.limiters import RateLimit
 from app.main import main, no_cookie
 from app.main.forms import (
     CopyTemplateForm,
@@ -100,6 +101,7 @@ class LetterAttachmentFormError(Exception):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_template(service_id, template_id):
     template = current_service.get_template(
         template_id,
@@ -138,6 +140,7 @@ def view_template(service_id, template_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def choose_template(service_id, template_type="all", template_folder_id=None):
     template_folder = current_service.get_template_folder(template_folder_id)
     user_has_template_folder_permission = current_user.has_template_folder_permission(
@@ -258,6 +261,7 @@ def get_template_nav_items(template_folder_id):
 
 @no_cookie.route("/services/<uuid:service_id>/templates/<uuid:template_id>.<filetype>")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_letter_template_preview(service_id, template_id, filetype):
     if filetype not in ("pdf", "png"):
         abort(404)
@@ -317,6 +321,7 @@ def _view_template_version(service_id, template_id, version):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/version/<int:version>")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_template_version(service_id, template_id, version):
     return render_template(
         "views/templates/template_history.html",
@@ -326,6 +331,7 @@ def view_template_version(service_id, template_id, version):
 
 @no_cookie.route("/services/<uuid:service_id>/templates/<uuid:template_id>/version/<int:version>.<filetype>")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_letter_template_version_preview(service_id, template_id, version, filetype):
     template = current_service.get_template(template_id, version=version)
 
@@ -378,6 +384,7 @@ def _add_template_by_type(template_type, template_folder_id):
     "/services/<uuid:service_id>/templates/copy/from-service/<uuid:from_service>/from-folder/<uuid:from_folder>"
 )
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def choose_template_to_copy(
     service_id,
     from_service=None,
@@ -410,6 +417,7 @@ def choose_template_to_copy(
 
 @main.route("/services/<uuid:service_id>/templates/copy/<uuid:template_id>", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def copy_template(service_id, template_id):
     from_service_id = request.args.get("from_service")
     to_folder_id = request.args.get("to_folder_id")
@@ -500,6 +508,7 @@ def _get_template_copy_name(template, existing_templates):
     )
 )
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def action_blocked(service_id, notification_type, return_to, template_id=None):
     back_link = {
         "add_new_template": partial(url_for, ".choose_template", service_id=current_service.id),
@@ -520,6 +529,7 @@ def action_blocked(service_id, notification_type, return_to, template_id=None):
 
 @main.route("/services/<uuid:service_id>/templates/folders/<uuid:template_folder_id>/manage", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def manage_template_folder(service_id, template_folder_id):
     template_folder = current_service.get_template_folder_with_user_permission_or_403(template_folder_id, current_user)
     form = TemplateFolderForm(
@@ -549,6 +559,7 @@ def manage_template_folder(service_id, template_folder_id):
 
 @main.route("/services/<uuid:service_id>/templates/folders/<uuid:template_folder_id>/delete", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def delete_template_folder(service_id, template_folder_id):
     template_folder = current_service.get_template_folder_with_user_permission_or_403(template_folder_id, current_user)
     template_list = TemplateList(service=current_service, template_folder_id=template_folder_id)
@@ -597,6 +608,7 @@ def delete_template_folder(service_id, template_folder_id):
     methods=["GET", "POST"],
 )
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def add_service_template(service_id, template_type, template_folder_id=None):
     if template_type not in current_service.available_template_types:
         return redirect(
@@ -652,6 +664,7 @@ def abort_403_if_not_admin_user():
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/rename", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def rename_template(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
 
@@ -694,6 +707,7 @@ def abort_for_unauthorised_bilingual_letters_or_invalid_options(language: Option
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit", methods=["GET", "POST"])
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit/<language>", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def edit_service_template(service_id, template_id, language=None):
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
 
@@ -778,6 +792,7 @@ def edit_service_template(service_id, template_id, language=None):
     methods=["POST"],
 )
 @user_has_permissions()
+@RateLimit.USER_LIMIT
 def count_content_length(service_id, template_type):
     if template_type != "sms":
         abort(404)
@@ -823,6 +838,7 @@ def _get_fragment_count_message_for_template(template):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/delete", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def delete_service_template(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -870,6 +886,7 @@ def delete_service_template(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/redact", methods=["GET"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def confirm_redact_template(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
@@ -893,6 +910,7 @@ def confirm_redact_template(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/redact", methods=["POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def redact_template(service_id, template_id):
     service_api_client.redact_service_template(service_id, template_id)
 
@@ -909,6 +927,7 @@ def redact_template(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/versions")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_template_versions(service_id, template_id):
     page = get_page_from_request() or 1
     page_size = 25
@@ -957,6 +976,7 @@ def view_template_versions(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/set-template-sender", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def set_template_sender(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
     sender_details = get_template_sender_form_dict(service_id, template)
@@ -990,6 +1010,7 @@ def set_template_sender(service_id, template_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit-postage", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def edit_template_postage(service_id, template_id):
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
     if template.template_type != "letter":
@@ -1031,6 +1052,7 @@ def get_template_sender_form_dict(service_id, template):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/attach-pages", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def letter_template_attach_pages(service_id, template_id):
     template = current_service.get_template(template_id)
 
@@ -1091,12 +1113,14 @@ def letter_template_attach_pages(service_id, template_id):
 
 @no_cookie.route("/services/<uuid:service_id>/attachment/<uuid:attachment_id>.png")
 @user_has_permissions(allow_org_user=True)
+@RateLimit.USER_LIMIT
 def view_letter_attachment_preview(service_id, attachment_id):
     return TemplatePreview.get_png_for_letter_attachment_page(attachment_id, page=request.args.get("page"))
 
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/attach-pages/edit", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def letter_template_edit_pages(template_id, service_id):
     template = current_service.get_template(template_id)
 
@@ -1287,6 +1311,7 @@ def _save_letter_attachment(*, service_id, template_id, upload_id, original_file
 
 @no_cookie.route("/services/<uuid:service_id>/preview-invalid-attachment-image/<uuid:file_id>")
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def view_invalid_letter_attachment_as_preview(service_id, file_id):
     try:
         page = int(request.args.get("page"))
@@ -1330,6 +1355,7 @@ def _change_template_language(service_id, template, language: LetterLanguageOpti
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/change-language", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def letter_template_change_language(template_id, service_id):
     template = current_service.get_template(template_id)
 
@@ -1366,6 +1392,7 @@ def letter_template_change_language(template_id, service_id):
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/change-language/confirm", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
+@RateLimit.USER_LIMIT
 def letter_template_confirm_remove_welsh(template_id, service_id):
     template = current_service.get_template(template_id)
 

@@ -3,6 +3,7 @@ from fido2.webauthn import AuthenticatorData, CollectedClientData
 from flask import abort, current_app, flash, redirect, request, session, url_for
 from flask_login import current_user
 
+from app.limiters import RateLimit
 from app.main import main
 from app.models.user import User
 from app.models.webauthn_credential import RegistrationError, WebAuthnCredential
@@ -13,6 +14,7 @@ from app.utils.user import user_is_logged_in
 
 @main.route("/webauthn/register")
 @user_is_logged_in
+@RateLimit.USER_LIMIT
 def webauthn_begin_register():
     if not current_user.can_use_webauthn:
         abort(403)
@@ -36,6 +38,7 @@ def webauthn_begin_register():
 
 @main.route("/webauthn/register", methods=["POST"])
 @user_is_logged_in
+@RateLimit.USER_LIMIT
 def webauthn_complete_register():
     if "webauthn_registration_state" not in session:
         return cbor.encode("No registration in progress"), 400
@@ -62,6 +65,7 @@ def webauthn_complete_register():
 
 @main.route("/webauthn/authenticate", methods=["GET"])
 @redirect_to_sign_in
+@RateLimit.NO_LIMIT
 def webauthn_begin_authentication():
     """
     Initiate the authentication flow. This is called after the user clicks the "Check security key" button.
@@ -88,6 +92,7 @@ def webauthn_begin_authentication():
 
 @main.route("/webauthn/authenticate", methods=["POST"])
 @redirect_to_sign_in
+@RateLimit.NO_LIMIT
 def webauthn_complete_authentication():
     """
     Complete the authentication flow. This is called after the user taps on their security key.
