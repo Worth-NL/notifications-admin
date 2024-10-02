@@ -52,7 +52,7 @@ docutils==0.16
     # via awscli
 et-xmlfile==1.1.0
     # via openpyxl
-eventlet==0.34.2
+eventlet==0.37.0
     # via gunicorn
 fido2==1.1.0
     # via -r requirements.in
