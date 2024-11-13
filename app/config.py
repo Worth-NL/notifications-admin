@@ -132,6 +132,7 @@ class Development(Config):
     ANTIVIRUS_API_KEY = os.environ.get("ANTIVIRUS_API_KEY", "test-key")
     ANTIVIRUS_ENABLED = os.getenv("ANTIVIRUS_ENABLED") == "1"
 
+    ASSET_DOMAIN = os.getenv("ASSET_DOMAIN", "")
     ASSET_PATH = os.getenv("ASSET_PATH", "/static/")
 
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

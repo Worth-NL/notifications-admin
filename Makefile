@@ -30,6 +30,13 @@ bootstrap: generate-version-file ## Set up everything to run the app
 	source $(HOME)/.nvm/nvm.sh && nvm install && npm ci --no-audit
 	. environment.sh; source $(HOME)/.nvm/nvm.sh && npm run build
 
+.PHONY: bootstrap-with-asdf
+bootstrap-with-asdf: generate-version-file ## Set up everything to run the app without nvm
+	${PYTHON_EXECUTABLE_PREFIX}pip3 install -r requirements_for_test.txt
+
+	npm ci --no-audit
+	. environment.sh; npm run build
+
 .PHONY: bootstrap-with-docker
 bootstrap-with-docker: generate-version-file ## Build the image to run the app in Docker
 	docker build -f docker/Dockerfile --target test -t notifications-admin .
@@ -94,22 +101,22 @@ check-env-vars: ## Check mandatory environment variables
 	$(if ${DEPLOY_ENV},,$(error Must specify DEPLOY_ENV))
 	$(if ${DNS_NAME},,$(error Must specify DNS_NAME))
 
-.PHONY: preview
-preview: ## Set environment to preview
+.PHONY: tst
+tst: ## Set environment to test
 	$(eval export DEPLOY_ENV=preview)
-	$(eval export DNS_NAME="notify.works")
+	$(eval export DNS_NAME="admin.test.notifynl.nl")
 	@true
 
-.PHONY: staging
-staging: ## Set environment to staging
+.PHONY: acc
+acc: ## Set environment to acc
 	$(eval export DEPLOY_ENV=staging)
-	$(eval export DNS_NAME="staging-notify.works")
+	$(eval export DNS_NAME="admin.acc.notifynl.nl")
 	@true
 
-.PHONY: production
-production: ## Set environment to production
+.PHONY: prod
+prod: ## Set environment to production
 	$(eval export DEPLOY_ENV=production)
-	$(eval export DNS_NAME="notifications.service.gov.uk")
+	$(eval export DNS_NAME="admin.notifynl.nl")
 	@true
 
 .PHONY: cf-login
@@ -135,7 +142,7 @@ generate-manifest:
 
 .PHONY: upload-static ## Upload the static files to be served from S3
 upload-static:
-	aws s3 cp --region eu-west-1 --recursive --cache-control max-age=315360000,immutable ./app/static s3://${DNS_NAME}-static
+	aws s3 cp --region eu-central-1 --recursive --cache-control max-age=315360000,immutable ./app/static s3://${DNS_NAME}-static
 
 .PHONY: cf-deploy
 cf-deploy: cf-target ## Deploys the app to Cloud Foundry
