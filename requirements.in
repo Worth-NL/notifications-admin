@@ -38,3 +38,5 @@ sentry-sdk[flask]>=1.0.0,<2.0.0
 
 # WHS-004 Rate limiting recommendation from pentest
 Flask-Limiter[redis]==3.8.0
+
+Deprecated==1.2.15
