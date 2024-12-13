@@ -52,9 +52,7 @@ jobs:
           cache-dependency-path: package-lock.json
         name: Install NodeJS [${{ matrix.node-version }}] and setup cache
 
-      - uses: anna-money/github-actions-npm@v2
-        with:
-          target: ci
+      - run: npm ci
         name: Install application requirements (npm)
 
       - uses: astral-sh/ruff-action@v2
@@ -80,9 +78,7 @@ jobs:
         continue-on-error: true
         name: Run tests (pytest)
 
-      - uses: anna-money/github-actions-npm@v2
-        with:
-          target: test
+      - run: npm test
         name: Run tests (node)
 
   docker-build-and-push:
