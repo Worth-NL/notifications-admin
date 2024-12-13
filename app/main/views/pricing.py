@@ -18,13 +18,14 @@ def guidance_pricing():
 
 # @main.route("/pricing/text-messages")
 # def guidance_pricing_text_messages():
+#     sorted_international_rates = sorted(
+#         [(cc, country["names"], country["billable_units"]) for cc, country in INTERNATIONAL_BILLING_RATES.items()],
+#         key=lambda x: x[0],
+#     )
 #     return render_template(
 #         "views/guidance/pricing/text-message-pricing.html",
 #         sms_rate=CURRENT_SMS_RATE,
-#         international_sms_rates=sorted(
-#             [(cc, country["names"], country["billable_units"]) for cc, country in INTERNATIONAL_BILLING_RATES.items()],
-#             key=lambda x: x[0],
-#         ),
+#         international_sms_rates=sorted_international_rates,
 #         _search_form=SearchByNameForm(),
 #         navigation_links=pricing_nav(),
 #     )
