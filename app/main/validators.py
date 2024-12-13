@@ -43,7 +43,6 @@ class ValidGovEmail:
         if field.data == "":
             return
 
-
         # message = """
         #     Enter a public sector email address or
         #     <a class="govuk-link govuk-link--no-visited-state" href="{}">find out who can use Notify</a>
