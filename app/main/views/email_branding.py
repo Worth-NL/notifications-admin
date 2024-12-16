@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from flask import abort, current_app, flash, redirect, render_template, request, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from notifications_python_client.errors import HTTPError
 from werkzeug.datastructures import FileStorage
@@ -12,13 +12,11 @@ from app.main import main
 from app.main.forms import (
     AdminEditEmailBrandingForm,
     GovernmentIdentityCoatOfArmsOrInsignia,
-    GovernmentIdentityColour,
     SearchByNameForm,
 )
 from app.models.branding import (
     AllEmailBranding,
     EmailBranding,
-    get_government_identity_system_crests_or_insignia,
     get_insignia_asset_path,
 )
 from app.s3_client.logo_client import logo_client

@@ -18,9 +18,8 @@ from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import FieldWithNoneOption
 from app.main.views.pricing import CURRENT_SMS_RATE
-from app.main.views.sub_navigation_dictionaries import features_nav, using_notify_nav
+from app.main.views.sub_navigation_dictionaries import using_notify_nav
 from app.models.branding import EmailBranding
-from app.models.letter_rates import LetterRates
 from app.utils.templates import TemplatedLetterImageTemplate
 
 redirects = Blueprint("redirects", __name__)

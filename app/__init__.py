@@ -16,8 +16,6 @@ from flask import (
     session,
     url_for,
 )
-
-from app.limiters import init_limiters
 from flask_login import LoginManager, current_user
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
@@ -80,6 +78,7 @@ from app.formatters import (
     redact_mobile_number,
     valid_phone_number,
 )
+from app.limiters import init_limiters
 from app.models.organisation import Organisation
 from app.models.service import Service
 from app.models.user import AnonymousUser, User
@@ -129,7 +128,6 @@ from app.url_converters import (
 )
 from app.utils import format_provider
 from app.utils.user_id import get_user_id_from_flask_login_session
-
 
 login_manager = LoginManager()
 csrf = CSRFProtect()

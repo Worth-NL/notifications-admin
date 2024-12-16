@@ -1,4 +1,5 @@
 from flask import redirect
+
 from app.limiters import RateLimit
 from app.main import main
 

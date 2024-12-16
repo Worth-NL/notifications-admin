@@ -1,8 +1,8 @@
-from html import escape
 import weakref
 from contextlib import suppress
 from datetime import datetime, timedelta
 from functools import partial
+from html import escape
 from itertools import chain
 from numbers import Number
 

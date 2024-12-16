@@ -1061,9 +1061,11 @@ def create_service_templates(service_id, number_of_templates=6):
                 name=f"{template_type}_template_{template_number}",
                 type_=template_type,
                 content=f"{template_type} template {template_number} content",
-                subject=f"{template_type} template {template_number} subject"
-                if template_type in ["email", "letter"]
-                else None,
+                subject=(
+                    f"{template_type} template {template_number} subject"
+                    if template_type in ["email", "letter"]
+                    else None
+                ),
             )
         )
 

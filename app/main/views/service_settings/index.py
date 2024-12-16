@@ -68,7 +68,6 @@ from app.models.branding import (
     EmailBranding,
     LetterBranding,
 )
-from app.models.letter_rates import LetterRates
 from app.utils import DELIVERED_STATUSES, FAILURE_STATUSES, SENDING_STATUSES
 from app.utils.constants import SIGN_IN_METHOD_TEXT_OR_EMAIL
 from app.utils.services import service_has_or_is_expected_to_send_x_or_more_notifications
