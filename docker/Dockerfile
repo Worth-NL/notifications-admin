@@ -22,8 +22,7 @@ WORKDIR /usr/frontend
 COPY app app
 COPY package-lock.json package.json gulpfile.js ./
 
-RUN source ~/.nvm/nvm.sh \
-    && npm ci --no-audit \
+RUN npm ci --no-audit \
     && npm run build
 
 ##### Python Build Image #####################################################
