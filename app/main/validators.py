@@ -43,8 +43,6 @@ class ValidGovEmail:
         if field.data == "":
             return
 
-        from flask import url_for
-
         # message = """
         #     Enter a public sector email address or
         #     <a class="govuk-link govuk-link--no-visited-state" href="{}">find out who can use Notify</a>
