@@ -7,7 +7,7 @@ then
 elif [ "$1" == "web-local" ]
 then
   npm run build
-  python -m debugpy --wait-for-client --listen $DEBUG_PORT -m flask run --host 0.0.0.0 --port $PORT
+  python -m debugpy --listen 0.0.0.0:5678 -m flask run --host 0.0.0.0 --port $PORT
 
 else
   echo -e "'\033[31m'FATAL: missing argument'\033[0m'" && exit 1
