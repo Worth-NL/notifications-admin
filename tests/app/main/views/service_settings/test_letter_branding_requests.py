@@ -72,7 +72,7 @@ def test_letter_branding_options_page_when_no_branding_is_set(
             "app.organisations_client.get_organisation",
             return_value=organisation_json(id_=ORGANISATION_ID, name="NHS Org 1", organisation_type=organisation_type),
         )
-        mocker.patch("app.models.branding.LetterBrandingPool.client_method", side_effect=[letter_branding_pool])
+        mocker.patch("app.models.branding.LetterBrandingPool._get_items", side_effect=[letter_branding_pool])
 
     page = client_request.get(".letter_branding_options", service_id=SERVICE_ONE_ID)
 
@@ -87,6 +87,7 @@ def test_letter_branding_options_page_when_no_branding_is_set(
     button_text = normalize_spaces(page.select_one(".page-footer button").text)
     assert button_text == "Continue"
 
+    assert not page.select(".govuk-radios__item input[checked]")
     assert [
         (radio["value"], page.select_one(f"label[for={radio['id']}]").text.strip())
         for radio in page.select("input[type=radio]")
@@ -103,9 +104,27 @@ def test_letter_branding_options_page_when_branding_is_set_already(
     page = client_request.get(".letter_branding_options", service_id=SERVICE_ONE_ID)
     assert normalize_spaces(page.select_one("main p").text) == "Your letters currently have HM Government branding."
 
-    assert page.select_one("iframe")["src"] == url_for(
-        "main.letter_template", branding_style=fake_uuid, title="Preview of current letter branding"
+    assert page.select_one("main img")["src"] == url_for(
+        "no_cookie.letter_branding_preview_image",
+        branding_style=fake_uuid,
     )
+    assert page.select_one("main img")["alt"] == "Preview of current letter branding"
+
+
+def test_letter_branding_options_shows_query_param_branding_choice_selected(
+    client_request, service_one, organisation_one, mocker, mock_get_letter_branding_pool
+):
+    service_one["organisation"] = organisation_one
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_one,
+    )
+    page = client_request.get(".letter_branding_options", service_id=SERVICE_ONE_ID, branding_choice="1234")
+
+    checked_radio_button = page.select(".govuk-radios__item input[checked]")
+
+    assert len(checked_radio_button) == 1
+    assert checked_radio_button[0]["value"] == "1234"
 
 
 @pytest.mark.parametrize(
@@ -159,7 +178,7 @@ def test_letter_branding_options_redirects_to_branding_preview_for_a_branding_po
         _expected_redirect=url_for(
             "main.branding_option_preview",
             service_id=SERVICE_ONE_ID,
-            branding_option="1234",
+            branding_choice="1234",
             branding_type="letter",
         ),
     )
@@ -238,7 +257,7 @@ def test_letter_branding_options_redirects_to_nhs_page(
     service_one["organisation"] = organisation_one["id"]
     mocker.patch("app.organisations_client.get_organisation", return_value=organisation_one)
     mocker.patch(
-        "app.models.branding.LetterBrandingPool.client_method",
+        "app.models.branding.LetterBrandingPool._get_items",
         return_value=[{"name": "NHS", "id": LetterBranding.NHS_ID}],
     )
 
@@ -250,6 +269,7 @@ def test_letter_branding_options_redirects_to_nhs_page(
             "main.branding_nhs",
             service_id=SERVICE_ONE_ID,
             branding_type="letter",
+            branding_choice=LetterBranding.NHS_ID,
         ),
     )
 
@@ -318,13 +338,13 @@ def test_POST_letter_branding_request_creates_zendesk_ticket(
         "Homer Simpson",
     ]
     assert zendesk_ticket.subject == "Letter branding request - service one"
-    assert zendesk_ticket.ticket_type == "question"
+    assert zendesk_ticket.ticket_type == "task"
     assert zendesk_ticket.user_name == "Test User"
     assert zendesk_ticket.user_email == "test@user.gov.uk"
     assert zendesk_ticket.org_id == org_id
     assert zendesk_ticket.org_type == "central"
     assert zendesk_ticket.service_id == SERVICE_ONE_ID
-    assert zendesk_ticket.ticket_categories == ["notify_email_letter_branding"]
+    assert zendesk_ticket.notify_task_type == "notify_task_letter_branding"
 
 
 def test_GET_letter_branding_upload_branding_renders_form(
@@ -342,13 +362,19 @@ def test_GET_letter_branding_upload_branding_renders_form(
     file_input = form.select_one("input")
     abandon_flow_link = page.select("main a")[-1]
 
-    assert back_button["href"] == url_for("main.letter_branding_options", service_id=SERVICE_ONE_ID)
+    assert back_button["href"] == url_for(
+        "main.letter_branding_options",
+        service_id=SERVICE_ONE_ID,
+        branding_choice="something_else",
+    )
     assert form["method"] == "post"
     assert "Submit" in submit_button.text
     assert file_input["name"] == "branding"
 
     assert abandon_flow_link is not None
-    assert abandon_flow_link["href"] == url_for("main.letter_branding_request", service_id=SERVICE_ONE_ID)
+    assert abandon_flow_link["href"] == url_for(
+        "main.letter_branding_request", service_id=SERVICE_ONE_ID, branding_choice="something_else"
+    )
     assert abandon_flow_link.text == "I do not have a file to upload"
 
 
@@ -376,14 +402,19 @@ def test_GET_letter_branding_upload_branding_renders_form_without_prompt_if_user
     assert "branding is not set up yet" not in normalize_spaces(page.select_one("main").text)
 
 
-@pytest.mark.parametrize("query_params", [{"from_template": "1234-1234-1234"}, {}])
+@pytest.mark.parametrize(
+    "query_params",
+    [
+        {"from_template": "1234-1234-1234", "branding_choice": "something_else"},
+        {"branding_choice": "something_else"},
+    ],
+)
 def test_GET_letter_branding_upload_branding_passes_from_template_through_to_back_link(
     client_request, service_one, query_params
 ):
     page = client_request.get(
         "main.letter_branding_upload_branding",
         service_id=SERVICE_ONE_ID,
-        branding_choice="something_else",
         **query_params,
     )
     back_link = page.select("a.govuk-back-link")
@@ -451,12 +482,10 @@ def test_POST_letter_branding_upload_branding_scans_for_viruses(client_request, 
     )
 
     assert normalize_spaces(page.select_one("h1").text) == "Upload letter branding"
-    assert normalize_spaces(page.select_one(".error-message").text) == "Your file contains a virus"
+    assert normalize_spaces(page.select_one(".error-message").text) == "This file contains a virus"
 
 
-def test_POST_letter_branding_upload_branding_redirects_on_success(
-    client_request, mock_antivirus_virus_free, fake_uuid, mocker
-):
+def test_POST_letter_branding_upload_branding_redirects_on_success(client_request, mock_antivirus_virus_free, mocker):
     mock_save_temporary = mocker.patch(
         "app.main.views.service_settings.branding.logo_client.save_temporary_logo",
         return_value="temporary.svg",
@@ -488,8 +517,9 @@ def test_GET_letter_branding_set_name_renders(client_request, service_one):
         temp_filename="temp_something",
     )
 
-    assert page.select_one("iframe")["src"] == url_for(
-        "main.letter_template", title="Preview of new letter branding", filename="temp_something"
+    assert page.select_one("main img")["src"] == url_for(
+        "no_cookie.letter_branding_preview_image",
+        filename="temp_something",
     )
 
     assert normalize_spaces(page.select_one("h1").text) == "Preview your letter branding"
@@ -543,7 +573,6 @@ def test_POST_letter_branding_set_name_creates_branding_adds_to_pool_and_redirec
     service_one,
     mock_create_letter_branding,
     mock_get_organisation,
-    active_user_with_permissions,
     mock_update_service,
     fake_uuid,
     mocker,
@@ -603,7 +632,6 @@ def test_POST_letter_branding_set_name_creates_branding_and_redirects_if_service
     service_one,
     mock_create_letter_branding,
     mock_get_organisation,
-    active_user_with_permissions,
     mock_update_service,
     fake_uuid,
     mocker,
@@ -703,12 +731,14 @@ def test_letter_branding_option_preview_page_displays_preview_of_chosen_branding
     )
 
     page = client_request.get(
-        ".branding_option_preview", service_id=SERVICE_ONE_ID, branding_option="1234", branding_type="letter"
+        ".branding_option_preview", service_id=SERVICE_ONE_ID, branding_choice="1234", branding_type="letter"
     )
 
-    assert page.select_one("iframe")["src"] == url_for(
-        "main.letter_template", branding_style="1234", title="Preview of new letter branding"
+    assert page.select_one("main img")["src"] == url_for(
+        "no_cookie.letter_branding_preview_image",
+        branding_style="1234",
     )
+    assert page.select_one("main img")["alt"] == "Preview of new letter branding"
 
 
 def test_letter_branding_option_preview_page_redirects_to_branding_options_page_if_branding_option_not_found(
@@ -725,7 +755,7 @@ def test_letter_branding_option_preview_page_redirects_to_branding_options_page_
     client_request.get(
         ".branding_option_preview",
         service_id=SERVICE_ONE_ID,
-        branding_option="some-unknown-branding-id",
+        branding_choice="some-unknown-branding-id",
         branding_type="letter",
         _expected_status=302,
         _expected_redirect=url_for("main.letter_branding_options", service_id=SERVICE_ONE_ID),
@@ -733,7 +763,6 @@ def test_letter_branding_option_preview_page_redirects_to_branding_options_page_
 
 
 def test_letter_branding_option_preview_changes_letter_branding_when_user_confirms(
-    mocker,
     service_one,
     organisation_one,
     client_request,
@@ -742,6 +771,7 @@ def test_letter_branding_option_preview_changes_letter_branding_when_user_confir
     mock_get_letter_branding_pool,
     mock_update_service,
     mock_get_service_data_retention,
+    mocker,
 ):
     organisation_one["organisation_type"] = "central"
     service_one["organisation"] = organisation_one
@@ -754,7 +784,7 @@ def test_letter_branding_option_preview_changes_letter_branding_when_user_confir
     page = client_request.post(
         ".branding_option_preview",
         service_id=SERVICE_ONE_ID,
-        branding_option="1234",
+        branding_choice="1234",
         branding_type="letter",
         _follow_redirects=True,
     )
@@ -780,9 +810,11 @@ def test_letter_branding_nhs_page_displays_preview(
         branding_type="letter",
     )
 
-    assert page.select_one("iframe")["src"] == url_for(
-        "main.letter_template", branding_style=LetterBranding.NHS_ID, title="Preview of new letter branding"
+    assert page.select_one("main img")["src"] == url_for(
+        "no_cookie.letter_branding_preview_image",
+        branding_style=LetterBranding.NHS_ID,
     )
+    assert page.select_one("main img")["alt"] == "Preview of new letter branding"
     assert x.called
     assert mock_get_letter_branding_pool.called
 
@@ -798,13 +830,12 @@ def test_letter_branding_nhs_page_returns_404_if_service_not_nhs(
         ".branding_nhs",
         service_id=SERVICE_ONE_ID,
         branding_type="letter",
-        branding_option="some-unknown-branding-id",
+        branding_choice="some-unknown-branding-id",
         _expected_status=404,
     )
 
 
 def test_letter_branding_nhs_changes_letter_branding_when_user_confirms(
-    mocker,
     service_one,
     organisation_one,
     client_request,
@@ -812,6 +843,7 @@ def test_letter_branding_nhs_changes_letter_branding_when_user_confirms(
     single_sms_sender,
     mock_get_letter_branding_pool,
     mock_update_service,
+    mocker,
 ):
     organisation_one["organisation_type"] = "nhs_central"
     service_one["organisation"] = organisation_one

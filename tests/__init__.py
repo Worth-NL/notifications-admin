@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from itertools import repeat
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -326,6 +327,7 @@ def template_json(
     letter_welsh_subject=None,
     letter_welsh_content=None,
     updated_at=None,
+    has_unsubscribe_link=None,
 ):
     template = {
         "id": id_,
@@ -336,7 +338,6 @@ def template_json(
         "version": version,
         "updated_at": updated_at or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f"),
         "archived": archived,
-        "process_type": "normal",
         "service_letter_contact": service_letter_contact,
         "reply_to": reply_to,
         "reply_to_text": reply_to_text,
@@ -347,6 +348,7 @@ def template_json(
         "letter_languages": letter_languages or "english" if type_ == "letter" else None,
         "letter_welsh_subject": letter_welsh_subject,
         "letter_welsh_content": letter_welsh_content,
+        "has_unsubscribe_link": has_unsubscribe_link,
     }
     if content is None:
         template["content"] = "template content"
@@ -414,7 +416,7 @@ def inbound_sms_json():
                 "notify_number": "07900000002",
                 "content": f"message-{index + 1}",
                 "created_at": (datetime.utcnow() - timedelta(minutes=60 * hours_ago, seconds=index)).isoformat(),
-                "id": sample_uuid(),
+                "id": str(uuid.uuid4()),
             }
             for index, hours_ago, phone_number in (
                 (0, 1, "447900900000"),
@@ -461,7 +463,7 @@ def job_json(
     notifications_sent=1,
     notifications_requested=1,
     job_status="finished",
-    scheduled_for="",
+    scheduled_for=None,
     processing_started=None,
 ):
     if job_id is None:
@@ -469,7 +471,7 @@ def job_json(
     if template_id is None:
         template_id = "5d729fbd-239c-44ab-b498-75a985f3198f"
     if created_at is None:
-        created_at = str(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f%z"))
+        created_at = str(datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z"))
     data = {
         "id": job_id,
         "service": service_id,
@@ -494,11 +496,9 @@ def job_json(
             created_by["name"],
             created_by["email_address"],
         ),
+        "processing_started": processing_started,
+        "scheduled_for": scheduled_for,
     }
-    if scheduled_for:
-        data.update(scheduled_for=scheduled_for)
-    if processing_started:
-        data.update(processing_started=processing_started)
     return data
 
 
@@ -533,7 +533,7 @@ def notification_json(  # noqa: C901
     if sent_at is None:
         sent_at = str(datetime.utcnow().time())
     if created_at is None:
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
     if updated_at is None:
         updated_at = str((datetime.utcnow() + timedelta(minutes=1)).time())
     if status is None:
@@ -553,10 +553,17 @@ def notification_json(  # noqa: C901
     if job:
         job_payload = {"id": job["id"], "original_file_name": job["original_file_name"]}
 
+    def _get_notification_id(index):
+        if index < 16:
+            return "{}{}{}{}{}{}{}{}-{}{}{}{}-{}{}{}{}-{}{}{}{}-{}{}{}{}{}{}{}{}{}{}{}{}".format(
+                *repeat(hex(index)[2:], 32)
+            )
+        return str(uuid.uuid4())
+
     data = {
         "notifications": [
             {
-                "id": sample_uuid(),
+                "id": _get_notification_id(i),
                 "to": to,
                 "template": template,
                 "job": job_payload,
@@ -637,11 +644,10 @@ def validate_route_permission(
     mocker.patch("app.user_api_client.check_verify_code", return_value=(True, ""))
     mocker.patch("app.service_api_client.get_services", return_value={"data": []})
     mocker.patch("app.service_api_client.update_service", return_value=service)
-    mocker.patch("app.service_api_client.update_service_with_properties", return_value=service)
     mocker.patch("app.user_api_client.get_user", return_value=usr)
     mocker.patch("app.user_api_client.get_user_by_email", return_value=usr)
     mocker.patch("app.service_api_client.get_service", return_value={"data": service})
-    mocker.patch("app.models.user.Users.client_method", return_value=[usr])
+    mocker.patch("app.models.user.Users._get_items", return_value=[usr])
     mocker.patch("app.job_api_client.has_jobs", return_value=False)
     with notify_admin.test_request_context():
         with notify_admin.test_client() as client:
@@ -667,7 +673,6 @@ def validate_route_permission_with_client(mocker, client, method, response_code,
     mocker.patch("app.user_api_client.check_verify_code", return_value=(True, ""))
     mocker.patch("app.service_api_client.get_services", return_value={"data": []})
     mocker.patch("app.service_api_client.update_service", return_value=service)
-    mocker.patch("app.service_api_client.update_service_with_properties", return_value=service)
     mocker.patch("app.user_api_client.get_user", return_value=usr)
     mocker.patch("app.user_api_client.get_user_by_email", return_value=usr)
     mocker.patch("app.service_api_client.get_service", return_value={"data": service})
@@ -698,8 +703,8 @@ def assert_url_expected(actual, expected):
             assert parse_qs(expected_parts.query) == parse_qs(actual_parts.query)
         else:
             assert getattr(actual_parts, attribute) == getattr(expected_parts, attribute), (
-                "Expected redirect: {}\nActual redirect: {}"
-            ).format(expected, actual)
+                f"Expected redirect: {expected}\nActual redirect: {actual}"
+            )
 
 
 def find_element_by_tag_and_partial_text(page, tag, string):

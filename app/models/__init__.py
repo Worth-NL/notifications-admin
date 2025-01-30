@@ -19,13 +19,18 @@ class SortingAndEqualityMixin(ABC):
         sorted. For example 'email_address' or 'created_at' to sort on
         instance.email_address or instance.created_at respectively.
         """
-        pass
 
     def __repr__(self):
         return f"{self.__class__.__name__}(<{self.id}>)"
 
     def __lt__(self, other):
-        return (getattr(self, self.__sort_attribute__).lower()) < (getattr(other, self.__sort_attribute__).lower())
+        self_attr = getattr(self, self.__sort_attribute__)
+        other_attr = getattr(other, self.__sort_attribute__)
+
+        if isinstance(self_attr, str) and isinstance(other_attr, str):
+            return self_attr.lower() < other_attr.lower()
+
+        return self_attr < other_attr
 
     def __eq__(self, other):
         return self.id == other.id
@@ -38,9 +43,10 @@ class JSONModel(SerialisedModel, SortingAndEqualityMixin):
     def __init__(self, _dict):
         # in the case of a bad request _dict may be `None`
         self._dict = _dict or {}
-        for property in self.ALLOWED_PROPERTIES:
+        for property, type_ in self.__annotations__.items():
             if property in self._dict:
-                setattr(self, property, self._dict[property])
+                value = self.coerce_value_to_type(self._dict[property], type_)
+                setattr(self, property, value)
 
     def __bool__(self):
         return self._dict != {}
@@ -55,11 +61,11 @@ class JSONModel(SerialisedModel, SortingAndEqualityMixin):
 class ModelList(SerialisedModelCollection):
     @property
     @abstractmethod
-    def client_method(self):
+    def _get_items(self):
         pass
 
     def __init__(self, *args):
-        self.items = self.client_method(*args)
+        self.items = self._get_items(*args)
 
 
 class PaginatedModelList(ModelList):
@@ -70,7 +76,7 @@ class PaginatedModelList(ModelList):
             self.current_page = int(page)
         except TypeError:
             self.current_page = 1
-        response = self.client_method(
+        response = self._get_items(
             *args,
             **kwargs,
             page=self.current_page,

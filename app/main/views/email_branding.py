@@ -63,19 +63,15 @@ def platform_admin_view_email_branding(branding_id):
 
 
 @main.route("/email-branding/<uuid:branding_id>/edit", methods=["GET", "POST"])
-@main.route("/email-branding/<uuid:branding_id>/edit/<logo>", methods=["GET", "POST"])
 @user_is_platform_admin
 @RateLimit.NO_LIMIT
-def platform_admin_update_email_branding(branding_id, logo=None):
+def platform_admin_update_email_branding(branding_id):
     email_branding = EmailBranding.from_id(branding_id)
 
     form = AdminEditEmailBrandingForm(obj=email_branding)
 
-    # TODO: remove the `logo`-based URL path
-    # `logo_key` here can either be a temporary logo key which has been uploaded but not saved,
-    # or a reference to the existing logo if nothing has been uploaded to overwrite
-    logo_key = request.args.get("logo_key", logo or email_branding.logo)
-    logo_changed = ("logo_key" in request.args) or logo
+    logo_key = request.args.get("logo_key", email_branding.logo)
+    logo_changed = "logo_key" in request.args
 
     if form.validate_on_submit():
         if form.file.data:
@@ -218,10 +214,9 @@ def create_email_branding_government_identity_logo():
 
 
 @main.route("/email-branding/create", methods=["GET", "POST"])
-@main.route("/email-branding/create/<logo>", methods=["GET", "POST"])
 @user_is_platform_admin
 @RateLimit.NO_LIMIT
-def platform_admin_create_email_branding(logo=None):
+def platform_admin_create_email_branding():
     form = AdminEditEmailBrandingForm(
         name=request.args.get("name"),
         text=request.args.get("text"),
@@ -229,8 +224,7 @@ def platform_admin_create_email_branding(logo=None):
         brand_type=request.args.get("brand_type", "org"),
     )
 
-    # TODO: remove the `logo`-based URL path
-    temporary_logo_key = request.args.get("logo_key", logo)
+    temporary_logo_key = request.args.get("logo_key")
 
     if form.validate_on_submit():
         if form.file.data:

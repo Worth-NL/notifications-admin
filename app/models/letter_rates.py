@@ -1,19 +1,25 @@
+from datetime import datetime
+from typing import Any
+
 from app.models import JSONModel, ModelList
 from app.notify_client.letter_rate_api_client import letter_rate_api_client
 
 
 class LetterRate(JSONModel):
-    ALLOWED_PROPERTIES = {"sheet_count", "rate", "post_class", "last_updated"}
+    sheet_count: int
+    rate: float
+    post_class: Any
+    start_date: datetime
+
     __sort_attribute__ = "rate"
 
     @property
     def rate_in_pennies(self):
-        return int(float(self.rate) * 100)
+        return int(round(self.rate * 100))
 
 
 class LetterRates(ModelList):
     model = LetterRate
-    client_method = letter_rate_api_client.get_letter_rates
 
     post_classes = {
         # The API doesn’t store names or a sort order for the classes
@@ -27,13 +33,17 @@ class LetterRates(ModelList):
         "europe": "International",
     }
 
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return letter_rate_api_client.get_letter_rates(*args, **kwargs)
+
     @property
     def rates(self):
         return tuple(rate.rate_in_pennies for rate in self)
 
     @property
     def sheet_counts(self):
-        return sorted(set(rate.sheet_count for rate in self))
+        return sorted({rate.sheet_count for rate in self})
 
     @property
     def last_updated(self):

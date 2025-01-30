@@ -3,10 +3,16 @@ from flask_login import current_user
 from markupsafe import Markup
 from notifications_utils.safe_string import make_string_safe
 
-from app import api_key_api_client, current_service, notification_api_client, service_api_client
+from app import (
+    api_key_api_client,
+    current_service,
+    service_api_client,
+)
+
 from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import CallbackForm, CreateKeyForm, GuestList
+from app.models.notification import APINotifications
 from app.notify_client.api_key_api_client import (
     KEY_TYPE_NORMAL,
     KEY_TYPE_TEAM,
@@ -25,7 +31,7 @@ def api_integration(service_id):
     return render_template(
         "views/api/index.html",
         callbacks_link=callbacks_link,
-        api_notifications=notification_api_client.get_api_notifications_for_service(service_id),
+        api_notifications=APINotifications(service_id),
     )
 
 
@@ -54,7 +60,7 @@ def guest_list(service_id):
         return redirect(url_for(".api_integration", service_id=service_id))
     if not form.errors:
         form.populate(**service_api_client.get_guest_list(service_id))
-    return render_template("views/api/guest-list.html", form=form)
+    return render_template("views/api/guest-list.html", form=form, error_summary_enabled=True)
 
 
 @main.route("/services/<uuid:service_id>/api/keys")

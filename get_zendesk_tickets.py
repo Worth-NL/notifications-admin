@@ -2,6 +2,7 @@
 This script can be used to retrieve Zendesk tickets.
 This can be run locally if you set the ZENDESK_API_KEY. Or the script can be run from a flask shell from a ssh session.
 """
+
 # flake8: noqa: T001 (print)
 
 import csv
@@ -39,14 +40,14 @@ def get_tickets():
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         while next_page:
-            print(next_page)
+            print(next_page)  # noqa
             response = requests.get(
                 next_page,
                 headers={"Content-type": "application/json"},
                 auth=(f"{NOTIFY_ZENDESK_EMAIL}/token", ZENDESK_API_KEY),
             )
             data = response.json()
-            print(data)
+            print(data)  # noqa
             for row in data["results"]:
                 service_url = [
                     x
@@ -83,14 +84,14 @@ def get_tickets_without_service_id():
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         while next_page:
-            print(next_page)
+            print(next_page)  # noqa
             response = requests.get(
                 next_page,
                 headers={"Content-type": "application/json"},
                 auth=(f"{NOTIFY_ZENDESK_EMAIL}/token", ZENDESK_API_KEY),
             )
             data = response.json()
-            print(data)
+            print(data)  # noqa
             for row in data["results"]:
                 service_url = [
                     x
@@ -127,14 +128,14 @@ def get_tickets_with_description():
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         while next_page:
-            print(next_page)
+            print(next_page)  # noqa
             response = requests.get(
                 next_page,
                 headers={"Content-type": "application/json"},
                 auth=(f"{NOTIFY_ZENDESK_EMAIL}/token", ZENDESK_API_KEY),
             )
             data = response.json()
-            print(data)
+            print(data)  # noqa
             for row in data["results"]:
                 writer.writerow(
                     {

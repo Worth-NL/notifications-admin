@@ -1,3 +1,10 @@
+from contextvars import ContextVar
+
+from flask import current_app
+from notifications_utils.local_vars import LazyLocalGetter
+from werkzeug.local import LocalProxy
+
+from app import memo_resetters
 from app.extensions import redis_client
 from app.notify_client import NotifyAdminAPIClient, _attach_current_user, cache
 
@@ -8,6 +15,7 @@ class JobApiClient(NotifyAdminAPIClient):
         "pending",
         "in progress",
         "finished",
+        "finished all notifications created",
         "cancelled",
         "sending limits exceeded",
         "ready to send",
@@ -15,8 +23,11 @@ class JobApiClient(NotifyAdminAPIClient):
     }
     SCHEDULED_JOB_STATUS = "scheduled"
     CANCELLED_JOB_STATUS = "cancelled"
+    FINISHED_JOB_STATUS = "finished"
+    FINISHED_ALL_NOTIFICATIONS_CREATED_JOB_STATUS = "finished all notifications created"
     NON_CANCELLED_JOB_STATUSES = JOB_STATUSES - {CANCELLED_JOB_STATUS}
     NON_SCHEDULED_JOB_STATUSES = JOB_STATUSES - {SCHEDULED_JOB_STATUS, CANCELLED_JOB_STATUS}
+    FINISHED_JOB_STATUSES = {FINISHED_JOB_STATUS, FINISHED_ALL_NOTIFICATIONS_CREATED_JOB_STATUS}
 
     def get_job(self, service_id, job_id):
         params = {}
@@ -111,4 +122,10 @@ class JobApiClient(NotifyAdminAPIClient):
         return self.post(url=f"/service/{service_id}/job/{job_id}/cancel-letter-job", data={})
 
 
-job_api_client = JobApiClient()
+_job_api_client_context_var: ContextVar[JobApiClient] = ContextVar("job_api_client")
+get_job_api_client: LazyLocalGetter[JobApiClient] = LazyLocalGetter(
+    _job_api_client_context_var,
+    lambda: JobApiClient(current_app),
+)
+memo_resetters.append(lambda: get_job_api_client.clear())
+job_api_client = LocalProxy(get_job_api_client)

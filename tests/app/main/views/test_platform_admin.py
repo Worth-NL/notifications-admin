@@ -1,11 +1,9 @@
 import datetime
 import uuid
-from functools import partial
 from unittest.mock import ANY, call
 
 import pytest
 from flask import url_for
-from freezegun import freeze_time
 
 from app.main.views.platform_admin import (
     create_global_stats,
@@ -18,179 +16,16 @@ from tests import service_json
 from tests.conftest import SERVICE_ONE_ID, SERVICE_TWO_ID, normalize_spaces
 
 
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "main.platform_admin",
-        "main.live_services",
-        "main.trial_services",
-    ],
-)
-def test_should_redirect_if_not_logged_in(client_request, endpoint):
+def test_should_redirect_if_not_logged_in(client_request):
     client_request.logout()
     client_request.get(
-        endpoint,
-        _expected_redirect=url_for("main.sign_in", next=url_for(endpoint)),
-    )
-
-
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "main.platform_admin",
         "main.platform_admin_search",
-        "main.live_services",
-        "main.trial_services",
-    ],
-)
-def test_should_403_if_not_platform_admin(
-    client_request,
-    endpoint,
-):
-    client_request.get(endpoint, _expected_status=403)
-
-
-@pytest.mark.parametrize(
-    "endpoint, expected_services_shown",
-    [
-        ("main.live_services", 1),
-        ("main.trial_services", 1),
-    ],
-)
-def test_should_render_platform_admin_page(
-    client_request, platform_admin_user, mock_get_detailed_services, endpoint, expected_services_shown
-):
-    client_request.login(platform_admin_user)
-    page = client_request.get(endpoint)
-    assert [normalize_spaces(column.text) for column in page.select("tbody tr")[1].select("td")] == [
-        "0 emails sent",
-        "0 text messages sent",
-        "0 letters sent",
-    ]
-    mock_get_detailed_services.assert_called_once_with(
-        {"detailed": True, "include_from_test_key": True, "only_active": False}
+        _expected_redirect=url_for("main.sign_in", next=url_for("main.platform_admin_search")),
     )
 
 
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "main.live_services",
-        "main.trial_services",
-    ],
-)
-@pytest.mark.parametrize(
-    "partial_url_for, inc",
-    [
-        (partial(url_for), True),
-        (partial(url_for, include_from_test_key="y", start_date="", end_date=""), True),
-        (partial(url_for, start_date="", end_date=""), False),
-    ],
-)
-def test_live_trial_services_toggle_including_from_test_key(
-    partial_url_for, client_request, platform_admin_user, mock_get_detailed_services, endpoint, inc
-):
-    client_request.login(platform_admin_user)
-    client_request.get_url(partial_url_for(endpoint))
-    mock_get_detailed_services.assert_called_once_with(
-        {
-            "detailed": True,
-            "only_active": False,
-            "include_from_test_key": inc,
-        }
-    )
-
-
-@pytest.mark.parametrize("endpoint", ["main.live_services", "main.trial_services"])
-def test_live_trial_services_with_date_filter(
-    client_request, platform_admin_user, mock_get_detailed_services, endpoint
-):
-    client_request.login(platform_admin_user)
-    page = client_request.get(
-        endpoint,
-        start_date="2016-12-20",
-        end_date="2016-12-28",
-    )
-
-    assert "Platform admin" in page.text
-    mock_get_detailed_services.assert_called_once_with(
-        {
-            "include_from_test_key": False,
-            "end_date": datetime.date(2016, 12, 28),
-            "start_date": datetime.date(2016, 12, 20),
-            "detailed": True,
-            "only_active": False,
-        }
-    )
-
-
-@pytest.mark.parametrize(
-    "endpoint, expected_big_numbers",
-    [
-        (
-            "main.live_services",
-            (
-                "55 emails sent 5 failed – 5.0%",
-                "110 text messages sent 10 failed – 5.0%",
-                "15 letters sent 3 failed – 20.0%",
-            ),
-        ),
-        (
-            "main.trial_services",
-            (
-                "6 emails sent 1 failed – 10.0%",
-                "11 text messages sent 1 failed – 5.0%",
-                "30 letters sent 10 failed – 33.3%",
-            ),
-        ),
-    ],
-)
-def test_should_show_total_on_live_trial_services_pages(
-    client_request,
-    platform_admin_user,
-    mock_get_detailed_services,
-    endpoint,
-    fake_uuid,
-    expected_big_numbers,
-):
-    services = [
-        service_json(fake_uuid, "My Service 1", [], restricted=False),
-        service_json(fake_uuid, "My Service 2", [], restricted=True),
-    ]
-    services[0]["statistics"] = create_stats(
-        emails_requested=100,
-        emails_delivered=50,
-        emails_failed=5,
-        sms_requested=200,
-        sms_delivered=100,
-        sms_failed=10,
-        letters_requested=15,
-        letters_delivered=12,
-        letters_failed=3,
-    )
-
-    services[1]["statistics"] = create_stats(
-        emails_requested=10,
-        emails_delivered=5,
-        emails_failed=1,
-        sms_requested=20,
-        sms_delivered=10,
-        sms_failed=1,
-        letters_requested=30,
-        letters_delivered=20,
-        letters_failed=10,
-    )
-
-    mock_get_detailed_services.return_value = {"data": services}
-
-    client_request.login(platform_admin_user)
-    page = client_request.get(endpoint)
-
-    assert (
-        normalize_spaces(page.select(".big-number-with-status")[0].text),
-        normalize_spaces(page.select(".big-number-with-status")[1].text),
-        normalize_spaces(page.select(".big-number-with-status")[2].text),
-    ) == expected_big_numbers
+def test_should_403_if_not_platform_admin(client_request):
+    client_request.get("main.platform_admin_search", _expected_status=403)
 
 
 def test_create_global_stats_sets_failure_rates(fake_uuid):
@@ -272,112 +107,6 @@ def test_format_stats_by_service_returns_correct_values(fake_uuid):
     assert ret[0]["stats"]["letter"]["requested"] == 40
     assert ret[0]["stats"]["letter"]["delivered"] == 20
     assert ret[0]["stats"]["letter"]["failed"] == 7
-
-
-@pytest.mark.parametrize("endpoint, restricted", [("main.trial_services", True), ("main.live_services", False)])
-def test_should_show_email_and_sms_stats_for_all_service_types(
-    endpoint,
-    restricted,
-    client_request,
-    platform_admin_user,
-    mock_get_detailed_services,
-    fake_uuid,
-):
-    services = [service_json(fake_uuid, "My Service", [], restricted=restricted)]
-    services[0]["statistics"] = create_stats(
-        emails_requested=10, emails_delivered=3, emails_failed=5, sms_requested=50, sms_delivered=7, sms_failed=11
-    )
-
-    mock_get_detailed_services.return_value = {"data": services}
-    client_request.login(platform_admin_user)
-    page = client_request.get(endpoint)
-
-    mock_get_detailed_services.assert_called_once_with(
-        {"detailed": True, "include_from_test_key": True, "only_active": ANY}
-    )
-
-    table = page.select_one("table")
-    service_row_group = table.select_one("tbody").select("tr")
-    email_stats = service_row_group[1].select(".big-number-number")[0]
-    sms_stats = service_row_group[1].select(".big-number-number")[1]
-
-    assert normalize_spaces(email_stats.text) == "10"
-    assert normalize_spaces(sms_stats.text) == "50"
-
-
-@pytest.mark.parametrize(
-    "endpoint, restricted", [("main.live_services", False), ("main.trial_services", True)], ids=["live", "trial"]
-)
-def test_should_show_archived_services_last(
-    endpoint,
-    client_request,
-    platform_admin_user,
-    mock_get_detailed_services,
-    restricted,
-):
-    services = [
-        service_json(name="C", restricted=restricted, active=False, created_at="2002-02-02 12:00:00"),
-        service_json(name="B", restricted=restricted, active=True, created_at="2001-01-01 12:00:00"),
-        service_json(name="A", restricted=restricted, active=True, created_at="2003-03-03 12:00:00"),
-    ]
-    services[0]["statistics"] = create_stats()
-    services[1]["statistics"] = create_stats()
-    services[2]["statistics"] = create_stats()
-
-    mock_get_detailed_services.return_value = {"data": services}
-    client_request.login(platform_admin_user)
-    page = client_request.get(endpoint)
-
-    mock_get_detailed_services.assert_called_once_with(
-        {"detailed": True, "include_from_test_key": True, "only_active": ANY}
-    )
-
-    services = page.select("table tbody tr:first-child")
-    assert len(services) == 3
-    assert normalize_spaces(services[0].td.text) == "A"
-    assert normalize_spaces(services[1].td.text) == "B"
-    assert normalize_spaces(services[2].td.text) == "C Archived"
-
-
-@pytest.mark.parametrize("endpoint, restricted", [("main.trial_services", True), ("main.live_services", False)])
-def test_should_order_services_by_usage_with_inactive_last(
-    endpoint,
-    restricted,
-    client_request,
-    platform_admin_user,
-    mock_get_detailed_services,
-    fake_uuid,
-):
-    services = [
-        service_json(fake_uuid, "My Service 1", [], restricted=restricted),
-        service_json(fake_uuid, "My Service 2", [], restricted=restricted),
-        service_json(fake_uuid, "My Service 3", [], restricted=restricted, active=False),
-    ]
-    services[0]["statistics"] = create_stats(
-        emails_requested=100, emails_delivered=25, emails_failed=25, sms_requested=100, sms_delivered=25, sms_failed=25
-    )
-
-    services[1]["statistics"] = create_stats(
-        emails_requested=200, emails_delivered=50, emails_failed=50, sms_requested=200, sms_delivered=50, sms_failed=50
-    )
-
-    services[2]["statistics"] = create_stats(
-        emails_requested=200, emails_delivered=50, emails_failed=50, sms_requested=200, sms_delivered=50, sms_failed=50
-    )
-
-    mock_get_detailed_services.return_value = {"data": services}
-    client_request.login(platform_admin_user)
-    page = client_request.get(endpoint)
-
-    mock_get_detailed_services.assert_called_once_with(
-        {"detailed": True, "include_from_test_key": True, "only_active": ANY}
-    )
-
-    services = page.select("table tbody tr:first-child")
-    assert len(services) == 3
-    assert normalize_spaces(services[0].td.text) == "My Service 2"
-    assert normalize_spaces(services[1].td.text) == "My Service 1"
-    assert normalize_spaces(services[2].td.text) == "My Service 3 Archived"
 
 
 def test_sum_service_usage_is_sum_of_all_activity(fake_uuid):
@@ -498,143 +227,6 @@ def test_get_tech_failure_status_box_data_removes_percentage_data():
     assert "percentage" not in tech_failure_data
 
 
-def test_platform_admin_with_start_and_end_dates_provided(
-    mocker,
-    client_request,
-    platform_admin_user,
-):
-    start_date = "2018-01-01"
-    end_date = "2018-06-01"
-    api_args = {"start_date": datetime.date(2018, 1, 1), "end_date": datetime.date(2018, 6, 1)}
-
-    mocker.patch("app.main.views.platform_admin.make_columns")
-    aggregate_stats_mock = mocker.patch(
-        "app.main.views.platform_admin.platform_stats_api_client.get_aggregate_platform_stats"
-    )
-    complaint_count_mock = mocker.patch("app.main.views.platform_admin.complaint_api_client.get_complaint_count")
-
-    client_request.login(platform_admin_user)
-    client_request.get(
-        "main.platform_admin",
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-    aggregate_stats_mock.assert_called_with(api_args)
-    complaint_count_mock.assert_called_with(api_args)
-
-
-@freeze_time("2018-6-11")
-def test_platform_admin_with_only_a_start_date_provided(
-    mocker,
-    client_request,
-    platform_admin_user,
-):
-    start_date = "2018-01-01"
-    api_args = {"start_date": datetime.date(2018, 1, 1), "end_date": datetime.datetime.utcnow().date()}
-
-    mocker.patch("app.main.views.platform_admin.make_columns")
-    aggregate_stats_mock = mocker.patch(
-        "app.main.views.platform_admin.platform_stats_api_client.get_aggregate_platform_stats"
-    )
-    complaint_count_mock = mocker.patch("app.main.views.platform_admin.complaint_api_client.get_complaint_count")
-
-    client_request.login(platform_admin_user)
-    client_request.get(
-        "main.platform_admin",
-        start_date=start_date,
-    )
-
-    aggregate_stats_mock.assert_called_with(api_args)
-    complaint_count_mock.assert_called_with(api_args)
-
-
-def test_platform_admin_without_dates_provided(
-    mocker,
-    client_request,
-    platform_admin_user,
-):
-    api_args = {}
-
-    mocker.patch("app.main.views.platform_admin.make_columns")
-    aggregate_stats_mock = mocker.patch(
-        "app.main.views.platform_admin.platform_stats_api_client.get_aggregate_platform_stats"
-    )
-    complaint_count_mock = mocker.patch("app.main.views.platform_admin.complaint_api_client.get_complaint_count")
-
-    client_request.login(platform_admin_user)
-    client_request.get("main.platform_admin")
-
-    aggregate_stats_mock.assert_called_with(api_args)
-    complaint_count_mock.assert_called_with(api_args)
-
-
-def test_platform_admin_displays_stats_in_right_boxes_and_with_correct_styling(
-    mocker,
-    client_request,
-    platform_admin_user,
-):
-    platform_stats = {
-        "email": {
-            "failures": {
-                "permanent-failure": 3,
-                "technical-failure": 0,
-                "temporary-failure": 0,
-                "virus-scan-failed": 0,
-            },
-            "test-key": 0,
-            "total": 145,
-        },
-        "sms": {
-            "failures": {
-                "permanent-failure": 0,
-                "technical-failure": 1,
-                "temporary-failure": 0,
-                "virus-scan-failed": 0,
-            },
-            "test-key": 5,
-            "total": 168,
-        },
-        "letter": {
-            "failures": {
-                "permanent-failure": 0,
-                "technical-failure": 0,
-                "temporary-failure": 1,
-                "virus-scan-failed": 1,
-            },
-            "test-key": 0,
-            "total": 500,
-        },
-    }
-    mocker.patch(
-        "app.main.views.platform_admin.platform_stats_api_client.get_aggregate_platform_stats",
-        return_value=platform_stats,
-    )
-    mocker.patch("app.main.views.platform_admin.complaint_api_client.get_complaint_count", return_value=15)
-
-    client_request.login(platform_admin_user)
-    page = client_request.get("main.platform_admin")
-
-    # Email permanent failure status box - number is correct
-    assert "3 permanent failures" in page.select(".big-number-status")[1].text
-    # Email complaints status box - link exists and number is correct
-    assert page.select_one("a", string="15 complaints")
-    # SMS total box - number is correct
-    assert page.select("span.big-number-number")[1].text.strip() == "168"
-    # Test SMS box - number is correct
-    assert "5" in page.select("div.govuk-grid-column-one-third")[4].text
-    # SMS technical failure status box - number is correct and failure class is used
-    assert (
-        "1 technical failures"
-        in page.select("div.govuk-grid-column-one-third")[1].select_one("div.big-number-status-failing").text
-    )
-    # Letter virus scan failure status box - number is correct and failure class is used
-    assert (
-        "1 virus scan failures"
-        in page.select("div.govuk-grid-column-one-third")[2].select_one("div.big-number-status-failing").text
-    )
-
-
 def test_platform_admin_show_submit_returned_letters_page(
     client_request,
     platform_admin_user,
@@ -644,11 +236,10 @@ def test_platform_admin_show_submit_returned_letters_page(
 
 
 def test_platform_admin_submit_returned_letters(
-    mocker,
     client_request,
     platform_admin_user,
+    mocker,
 ):
-    redis = mocker.patch("app.main.views.platform_admin.redis_client")
     mock_client = mocker.patch("app.letter_jobs_client.submit_returned_letters")
 
     client_request.login(platform_admin_user)
@@ -661,16 +252,12 @@ def test_platform_admin_submit_returned_letters(
     )
 
     mock_client.assert_called_once_with(["REF1", "REF2"])
-    assert redis.delete_by_pattern.call_args_list == [
-        call("service-????????-????-????-????-????????????-returned-letters-statistics"),
-        call("service-????????-????-????-????-????????????-returned-letters-summary"),
-    ]
 
 
 def test_platform_admin_submit_empty_returned_letters(
-    mocker,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     mock_client = mocker.patch("app.letter_jobs_client.submit_returned_letters")
 
@@ -706,7 +293,9 @@ def test_clear_cache_shows_form(
         "email_branding",
         "letter_branding",
         "organisation",
-        "letter_rates",
+        "text_message_and_letter_rates",
+        "unsubscribe_request_reports",
+        "service_join_request",
     }
 
 
@@ -750,21 +339,37 @@ def test_clear_cache_shows_form(
             "Removed 26 objects across 13 key formats for service, organisation",
         ),
         (
-            ["letter_rates"],
+            ["text_message_and_letter_rates"],
             [
                 call("letter-rates"),
+                call("sms-rate"),
             ],
-            "Removed 2 objects across 1 key formats for letter_rates",
+            "Removed 4 objects across 2 key formats for text message and letter rates",
+        ),
+        (
+            ["unsubscribe_request_reports"],
+            [
+                call("service-????????-????-????-????-????????????-unsubscribe-request-reports-summary"),
+                call("service-????????-????-????-????-????????????-unsubscribe-request-statistics"),
+            ],
+            "Removed 4 objects across 2 key formats for unsubscribe request reports",
+        ),
+        (
+            ["service_join_request"],
+            [
+                call("service-join-request-????????-????-????-????-????????????"),
+            ],
+            "Removed 2 objects across 1 key formats for service join request",
         ),
     ),
 )
 def test_clear_cache_submits_and_tells_you_how_many_things_were_deleted(
     client_request,
     platform_admin_user,
-    mocker,
     model_type,
     expected_calls,
     expected_confirmation,
+    mocker,
 ):
     redis = mocker.patch("app.main.views.platform_admin.redis_client")
     redis.delete_by_pattern.return_value = 2
@@ -863,11 +468,11 @@ def test_get_live_services_report(
     report = response.get_data(as_text=True)
     assert report.strip() == (
         "Service ID,Organisation,Organisation type,Service name,Consent to research,Main contact,Contact email,"
-        + "Contact mobile,Live date,SMS volume intent,Email volume intent,Letter volume intent,SMS sent this year,"
-        + "Emails sent this year,Letters sent this year,Free sms allowance\r\n"
-        + "1,Forest,Ecosystem,jessie the oak tree,True,Forest fairy,forest.fairy@digital.cabinet-office.gov.uk,"
-        + "+447700900986,29-03-2014,100,50,20,300,1200,0,100\r\n"
-        + "2,Forest,Ecosystem,james the pine tree,,,,,,,60,0,0,0,0,200"
+        "Contact mobile,Live date,SMS volume intent,Email volume intent,Letter volume intent,SMS sent this year,"
+        "Emails sent this year,Letters sent this year,Free sms allowance\r\n"
+        "1,Forest,Ecosystem,jessie the oak tree,True,Forest fairy,forest.fairy@digital.cabinet-office.gov.uk,"
+        "+447700900986,29-03-2014,100,50,20,300,1200,0,100\r\n"
+        "2,Forest,Ecosystem,james the pine tree,,,,,,,60,0,0,0,0,200"
     )
 
 
@@ -886,9 +491,9 @@ def test_get_notifications_sent_by_service_shows_date_form(
 
 
 def test_get_notifications_sent_by_service_validates_form(
-    mocker,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     mock_get_stats_from_api = mocker.patch("app.main.views.platform_admin.notification_api_client")
 
@@ -958,21 +563,21 @@ def test_get_billing_report_calls_api_and_download_data(client_request, platform
 
     assert response.get_data(as_text=True) == (
         "organisation_id,organisation_name,service_id,service_name,sms_cost,sms_chargeable_units,"
-        + "total_letters,letter_cost,letter_breakdown,purchase_order_number,contact_names,contact_email_addresses,"
-        + "billing_reference\r\n"
-        + "7832a1be-a1f0-4f2a-982f-05adfd3d6354,"
-        + "Org for a - with sms and letter,"
-        + "48e82ac0-c8c4-4e46-8712-c83c35a94006,"
-        + "a - with sms and letter,"
-        + "0,"
-        + "0,"
-        + "8,"
-        + "3.4,"
-        + '"6 second class letters at 45p'
-        + "\n"
-        + '2 first class letters at 35p",'
-        + 'PO1234,"Anne, Marie, Josh","billing@example.com, accounts@example.com",Notify2020'
-        + "\r\n"
+        "total_letters,letter_cost,letter_breakdown,purchase_order_number,contact_names,contact_email_addresses,"
+        "billing_reference\r\n"
+        "7832a1be-a1f0-4f2a-982f-05adfd3d6354,"
+        "Org for a - with sms and letter,"
+        "48e82ac0-c8c4-4e46-8712-c83c35a94006,"
+        "a - with sms and letter,"
+        "0,"
+        "0,"
+        "8,"
+        "3.4,"
+        '"6 second class letters at 45p'
+        "\n"
+        '2 first class letters at 35p",'
+        'PO1234,"Anne, Marie, Josh","billing@example.com, accounts@example.com",Notify2020'
+        "\r\n"
     )
 
 
@@ -1048,11 +653,11 @@ class TestGetDvlaBillingReport:
 
 
 def test_get_notifications_sent_by_service_calls_api_and_downloads_data(
-    mocker,
     client_request,
     platform_admin_user,
     service_one,
     service_two,
+    mocker,
 ):
     api_data = [
         ["2019-01-01", SERVICE_ONE_ID, service_one["name"], "email", 191, 0, 0, 14, 0, 0],
@@ -1079,10 +684,10 @@ def test_get_notifications_sent_by_service_calls_api_and_downloads_data(
     )
     assert response.get_data(as_text=True) == (
         "date_created,service_id,service_name,notification_type,count_sending,count_delivered,"
-        + "count_technical_failure,count_temporary_failure,count_permanent_failure,count_sent\r\n"
-        + "2019-01-01,596364a0-858e-42c8-9062-a8fe822260eb,service one,email,191,0,0,14,0,0\r\n"
-        + "2019-01-01,596364a0-858e-42c8-9062-a8fe822260eb,service one,sms,42,0,0,8,0,0\r\n"
-        + "2019-01-01,147ad62a-2951-4fa1-9ca0-093cd1a52c52,service two,email,3,1,0,2,0,0\r\n"
+        "count_technical_failure,count_temporary_failure,count_permanent_failure,count_sent\r\n"
+        "2019-01-01,596364a0-858e-42c8-9062-a8fe822260eb,service one,email,191,0,0,14,0,0\r\n"
+        "2019-01-01,596364a0-858e-42c8-9062-a8fe822260eb,service one,sms,42,0,0,8,0,0\r\n"
+        "2019-01-01,147ad62a-2951-4fa1-9ca0-093cd1a52c52,service two,email,3,1,0,2,0,0\r\n"
     )
 
 
@@ -1128,19 +733,19 @@ def test_get_volumes_by_service_report_calls_api_and_download_data(client_reques
 
     assert response.get_data(as_text=True) == (
         "organisation id,organisation name,service id,service name,free allowance,sms notifications,"
-        + "sms chargeable units,email totals,letter totals,letter cost,letter sheet totals\r\n"
-        + "7832a1be-a1f0-4f2a-982f-05adfd3d6354,"
-        + "Org name,"
-        + "48e82ac0-c8c4-4e46-8712-c83c35a94006,"
-        + "service name,"
-        + "10000,"
-        + "10,"
-        + "20,"
-        + "8,"
-        + "10,"
-        + "4.5,"
-        + "10"
-        + "\r\n"
+        "sms chargeable units,email totals,letter totals,letter cost,letter sheet totals\r\n"
+        "7832a1be-a1f0-4f2a-982f-05adfd3d6354,"
+        "Org name,"
+        "48e82ac0-c8c4-4e46-8712-c83c35a94006,"
+        "service name,"
+        "10000,"
+        "10,"
+        "20,"
+        "8,"
+        "10,"
+        "4.5,"
+        "10"
+        "\r\n"
     )
 
 
@@ -1182,14 +787,14 @@ def test_get_daily_volumes_report_calls_api_and_download_data(client_request, pl
 
     assert response.get_data(as_text=True) == (
         "day,sms totals,sms fragment totals,sms chargeable units,email totals,letter totals,letter sheet totals\r\n"
-        + "2019-01-01,"
-        + "20,"
-        + "40,"
-        + "60,"
-        + "100,"
-        + "10,"
-        + "20"
-        + "\r\n"
+        "2019-01-01,"
+        "20,"
+        "40,"
+        "60,"
+        "100,"
+        "10,"
+        "20"
+        "\r\n"
     )
 
 
@@ -1226,14 +831,7 @@ def test_get_daily_sms_provider_volumes_report_calls_api_and_download_data(clien
     )
 
     assert response.get_data(as_text=True) == (
-        "day,provider,sms totals,sms fragment totals,sms chargeable units,sms cost\r\n"
-        + "2019-01-01,"
-        + "foo,"
-        + "20,"
-        + "40,"
-        + "60,"
-        + "80"
-        + "\r\n"
+        "day,provider,sms totals,sms fragment totals,sms chargeable units,sms cost\r\n2019-01-01,foo,20,40,60,80\r\n"
     )
 
 
@@ -1245,7 +843,7 @@ class TestPlatformAdminSearch:
         client_request.login(platform_admin_user)
         client_request.get(".platform_admin_search")
 
-    def test_can_search_for_user(self, mocker, client_request, platform_admin_user, active_caseworking_user):
+    def test_can_search_for_user(self, client_request, platform_admin_user, active_caseworking_user, mocker):
         mocker.patch(
             "app.main.views.platform_admin.user_api_client.find_users_by_full_or_partial_email",
             return_value={"data": [active_caseworking_user]},
@@ -1269,7 +867,7 @@ class TestPlatformAdminSearch:
         assert found_user_links[0].text == "caseworker@example.gov.uk"
         assert found_user_links[0].get("href") == "/users/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6"
 
-    def test_can_search_for_services(self, mocker, client_request, platform_admin_user, service_one, service_two):
+    def test_can_search_for_services(self, client_request, platform_admin_user, service_one, service_two, mocker):
         mocker.patch(
             "app.main.views.platform_admin.user_api_client.find_users_by_full_or_partial_email",
             return_value={"data": []},
@@ -1295,7 +893,7 @@ class TestPlatformAdminSearch:
         assert found_service_links[1].text == "service two"
         assert found_service_links[1].get("href") == "/services/147ad62a-2951-4fa1-9ca0-093cd1a52c52"
 
-    def test_can_search_for_organisations(self, mocker, client_request, platform_admin_user, organisation_one):
+    def test_can_search_for_organisations(self, client_request, platform_admin_user, organisation_one, mocker):
         mocker.patch(
             "app.main.views.platform_admin.user_api_client.find_users_by_full_or_partial_email",
             return_value={"data": []},
@@ -1321,13 +919,13 @@ class TestPlatformAdminSearch:
 
     def test_shows_results_from_all_categories(
         self,
-        mocker,
         client_request,
         platform_admin_user,
         active_caseworking_user,
         service_one,
         service_two,
         organisation_one,
+        mocker,
     ):
         mocker.patch(
             "app.main.views.platform_admin.user_api_client.find_users_by_full_or_partial_email",
@@ -1420,7 +1018,7 @@ class TestPlatformAdminSearch:
             ),
         ),
     )
-    def test_find_uuid_redirects(self, mocker, client_request, platform_admin_user, api_response, expected_redirect):
+    def test_find_uuid_redirects(self, client_request, platform_admin_user, api_response, expected_redirect, mocker):
         mocker.patch(
             "app.main.views.platform_admin.user_api_client.find_users_by_full_or_partial_email",
             return_value={"data": []},
@@ -1440,7 +1038,7 @@ class TestPlatformAdminSearch:
             _expected_redirect=expected_redirect,
         )
 
-    def test_error_summary(self, mocker, client_request, platform_admin_user):
+    def test_error_summary(self, client_request, platform_admin_user, mocker):
         client_request.login(platform_admin_user)
 
         page = client_request.post(".platform_admin_search", _data={"search": ""}, _expected_status=200)

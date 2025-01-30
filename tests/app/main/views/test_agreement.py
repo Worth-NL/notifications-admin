@@ -78,9 +78,7 @@ class MockS3Object:
 def test_show_agreement_page(
     client_request,
     mocker,
-    fake_uuid,
     mock_get_service_organisation,
-    mock_has_jobs,
     agreement_signed,
     crown,
     expected_back_link,
@@ -111,9 +109,6 @@ def test_show_agreement_page(
 )
 def test_unknown_gps_and_trusts_are_redirected(
     client_request,
-    mocker,
-    fake_uuid,
-    mock_has_jobs,
     service_one,
     org_type,
     expected_endpoint,
@@ -138,13 +133,13 @@ def test_unknown_gps_and_trusts_are_redirected(
             True,
             200,
             "crown.pdf",
-            "GOV.UK Notify data sharing and financial agreement.pdf",
+            "GOV.UK Notify data processing and financial agreement.pdf",
         ),
         (
             False,
             200,
             "non-crown.pdf",
-            "GOV.UK Notify data sharing and financial agreement (non-crown).pdf",
+            "GOV.UK Notify data processing and financial agreement (non-crown).pdf",
         ),
         (
             None,
@@ -186,9 +181,7 @@ def test_download_service_agreement(
 
 def test_show_accept_agreement_page(
     client_request,
-    mocker,
     mock_get_service_organisation,
-    mock_get_organisation,
 ):
     page = client_request.get("main.service_accept_agreement", service_id=SERVICE_ONE_ID)
 
@@ -301,20 +294,37 @@ def test_accept_agreement_page_populates(
                 "version": "1.2",
                 "who": "someone-else",
                 "on_behalf_of_name": "",
-                "on_behalf_of_email": "test@example.com",
+                "on_behalf_of_email": "test@example.gov.uk",
             },
             [
                 "Error: Enter the name of the person accepting the agreement",
             ],
         ),
+        (
+            {
+                "version": "1.2",
+                "who": "someone-else",
+                "on_behalf_of_name": "Firstname Lastname",
+                "on_behalf_of_email": "test@example.com",
+            },
+            [
+                (
+                    "Error: Enter a public sector email address or "
+                    '<a class="govuk-link govuk-link--no-visited-state" href="/features/who-can-use-notify">'
+                    "find out who can use Notify"
+                    "</a>"
+                )
+            ],
+        ),
     ),
 )
 def test_accept_agreement_page_validates(
-    mocker,
     client_request,
     mock_get_service_organisation,
+    mock_get_organisations,
     data,
     expected_errors,
+    mocker,
 ):
     page = client_request.post(
         "main.service_accept_agreement",
@@ -322,7 +332,9 @@ def test_accept_agreement_page_validates(
         _data=data,
         _expected_status=200,
     )
-    assert [error.text.strip() for error in page.select(".govuk-error-message, .error-message")] == expected_errors
+    assert [
+        normalize_spaces(error.text) for error in page.select(".govuk-error-message, .error-message")
+    ] == expected_errors
 
 
 @pytest.mark.parametrize(
@@ -333,13 +345,13 @@ def test_accept_agreement_page_validates(
                 "version": "1.2",
                 "who": "someone-else",
                 "on_behalf_of_name": "Firstname Lastname",
-                "on_behalf_of_email": "test@example.com",
+                "on_behalf_of_email": "test@example.gov.uk",
             },
             call(
                 ORGANISATION_ID,
                 agreement_signed_version=1.2,
                 agreement_signed_on_behalf_of_name="Firstname Lastname",
-                agreement_signed_on_behalf_of_email_address="test@example.com",
+                agreement_signed_on_behalf_of_email_address="test@example.gov.uk",
                 cached_service_ids=None,
             ),
         ),
@@ -348,7 +360,7 @@ def test_accept_agreement_page_validates(
                 "version": "1.2",
                 "who": "me",
                 "on_behalf_of_name": "Firstname Lastname",
-                "on_behalf_of_email": "test@example.com",
+                "on_behalf_of_email": "test@example.gov.uk",
             },
             call(
                 ORGANISATION_ID,
@@ -376,12 +388,12 @@ def test_accept_agreement_page_validates(
     ),
 )
 def test_accept_agreement_page_persists(
-    mocker,
     client_request,
     mock_get_service_organisation,
     mock_update_organisation,
     data,
     expected_persisted,
+    mocker,
 ):
     client_request.post(
         "main.service_accept_agreement",
@@ -404,7 +416,7 @@ def test_accept_agreement_page_persists(
             None,
             (
                 "I confirm that I have the legal authority to accept the "
-                "GOV.UK Notify data sharing and financial agreement (version "
+                "GOV.UK Notify data processing and financial agreement (version "
                 "1.2) and that Test Organisation will be bound by it."
             ),
         ),
@@ -413,7 +425,7 @@ def test_accept_agreement_page_persists(
             "test@example.com",
             (
                 "I confirm that I have the legal authority to accept the "
-                "GOV.UK Notify data sharing and financial agreement (version "
+                "GOV.UK Notify data processing and financial agreement (version "
                 "1.2) on behalf of Firstname Lastname (test@example.com) and "
                 "that Test Organisation will be bound by it."
             ),

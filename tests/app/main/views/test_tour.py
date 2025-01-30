@@ -91,13 +91,13 @@ def test_should_404_if_no_mobile_number_for_tour_start(
 
 
 def test_should_403_if_user_does_not_have_send_permissions_for_tour_start(
-    mocker,
     notify_admin,
     client_request,
     api_user_active,
     mock_get_service_template_with_multiple_placeholders,
     service_one,
     fake_uuid,
+    mocker,
 ):
     validate_route_permission(
         mocker,
@@ -151,7 +151,7 @@ def test_should_show_empty_text_box(
 
     page = client_request.get("main.tour_step", service_id=SERVICE_ONE_ID, template_id=fake_uuid, step_index=1)
 
-    textbox = page.select_one("[data-notify-module=autofocus][data-force-focus=True] .govuk-input")
+    textbox = page.select_one("[data-notify-module=autofocus] .govuk-input")
     assert "value" not in textbox
     assert textbox["name"] == "placeholder_value"
     assert textbox["class"] == [
@@ -207,7 +207,6 @@ def test_should_404_for_get_tour_step_0(
 
 @pytest.mark.parametrize("method", ["GET", "POST"])
 def test_should_403_if_user_does_not_have_send_permissions_for_tour_step(
-    mocker,
     notify_admin,
     client_request,
     api_user_active,
@@ -215,6 +214,7 @@ def test_should_403_if_user_does_not_have_send_permissions_for_tour_step(
     service_one,
     fake_uuid,
     method,
+    mocker,
 ):
     validate_route_permission(
         mocker,
@@ -360,6 +360,9 @@ def test_post_tour_step_raises_validation_error_for_form_error(
         _data={"placeholder_value": ""},
         _expected_status=200,  # should this be 400
     )
+
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
 
     assert normalize_spaces(page.select(".govuk-error-message")[0].text) == "Error: Cannot be empty"
 
@@ -569,10 +572,6 @@ def test_shows_link_to_end_tour(
 
 def test_go_to_dashboard_after_tour_link(
     client_request,
-    mocker,
-    api_user_active,
-    mock_login,
-    mock_get_service,
     mock_has_permissions,
     mock_delete_service_template,
     fake_uuid,

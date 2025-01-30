@@ -187,19 +187,12 @@
       return changed;
     };
 
-    this.$singleNotificationChannel = (document.querySelector('div[id=add_new_template_form]')).getAttribute("data-channel");
-    this.$singleChannelService = (document.querySelector('div[id=add_new_template_form]')).getAttribute("data-service");
-
     this.actionButtonClicked = function(event) {
       event.preventDefault();
       this.currentState = $(event.currentTarget).val();
 
-      if (event.currentTarget.value === 'add-new-template' && this.$singleNotificationChannel) {
-        window.location = "/services/" + this.$singleChannelService + "/templates/add-" + this.$singleNotificationChannel;
-      } else {
-        if (this.stateChanged()) {
+      if (this.stateChanged()) {
           this.render();
-        }
       }
     };
 
@@ -289,7 +282,7 @@
       // make sticky JS recalculate its cache of the element's position
       GOVUK.stickAtBottomWhenScrolling.recalculate();
 
-      if (currentStateObj && ('setFocus' in currentStateObj)) {
+      if (currentStateObj && ('setFocus' in currentStateObj) && !this.formHasError()) {
         scrollTop = $(window).scrollTop();
         currentStateObj.setFocus();
         $(window).scrollTop(scrollTop);
@@ -327,6 +320,10 @@
         </div>
       </div>
     `).get(0);
+
+    this.formHasError = function() {
+      return Boolean(document.querySelector('.govuk-error-summary'));
+    };
   };
 
 })(window.GOVUK.NotifyModules);

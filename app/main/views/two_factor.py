@@ -1,5 +1,3 @@
-import json
-
 from flask import (
     abort,
     current_app,
@@ -9,7 +7,6 @@ from flask import (
     session,
     url_for,
 )
-from flask_login import current_user
 from itsdangerous import SignatureExpired
 from notifications_utils.url_safe_token import check_token
 
@@ -17,12 +14,13 @@ from app import user_api_client
 from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import TwoFactorForm
+from app.models.token import Token
 from app.models.user import User
 from app.utils.login import (
     email_needs_revalidating,
     log_in_user,
+    redirect_if_logged_in,
     redirect_to_sign_in,
-    redirect_when_logged_in,
 )
 
 
@@ -33,39 +31,37 @@ def two_factor_email_sent():
     return render_template("views/two-factor-email.html", title=title, redirect_url=request.args.get("next"))
 
 
-@main.route("/email-auth/<token>", methods=["GET"])
+@main.route("/email-auth/<string:token>", methods=["GET"])
 @RateLimit.NO_LIMIT
 def two_factor_email_interstitial(token):
     return render_template("views/email-link-interstitial.html")
 
 
-@main.route("/email-auth/<token>", methods=["POST"])
+@main.route("/email-auth/<string:token>", methods=["POST"])
 @RateLimit.NO_LIMIT
+@redirect_if_logged_in
 def two_factor_email(token):
     redirect_url = request.args.get("next")
-    if current_user.is_authenticated:
-        return redirect_when_logged_in(platform_admin=current_user.platform_admin)
 
     # checks url is valid, and hasn't timed out
     try:
-        token_data = json.loads(
-            check_token(
-                token,
-                current_app.config["SECRET_KEY"],
-                current_app.config["DANGEROUS_SALT"],
-                current_app.config["EMAIL_2FA_EXPIRY_SECONDS"],
-            )
+        token_data = check_token(
+            token,
+            current_app.config["SECRET_KEY"],
+            current_app.config["DANGEROUS_SALT"],
+            current_app.config["EMAIL_2FA_EXPIRY_SECONDS"],
         )
     except SignatureExpired:
         return render_template("views/email-link-invalid.html", redirect_url=redirect_url)
 
-    user_id = token_data["user_id"]
+    token = Token(token_data)
+
     # checks if code was already used
-    logged_in, msg = user_api_client.check_verify_code(user_id, token_data["secret_code"], "email")
+    logged_in, msg = user_api_client.check_verify_code(token.user_id, token.secret_code, "email")
 
     if not logged_in:
         return render_template("views/email-link-invalid.html", redirect_url=redirect_url)
-    return log_in_user(user_id)
+    return log_in_user(token.user_id)
 
 
 @main.route("/two-factor-sms", methods=["GET", "POST"])

@@ -36,6 +36,7 @@ from app.main.forms import (
     AdminPreviewBrandingForm,
     AdminServiceAddDataRetentionForm,
     AdminServiceEditDataRetentionForm,
+    AdminServiceInboundNumberArchive,
     AdminServiceInboundNumberForm,
     AdminServiceMessageLimitForm,
     AdminServiceRateLimitForm,
@@ -61,7 +62,6 @@ from app.main.forms import (
     SMSPrefixForm,
     YesNoSettingForm,
 )
-from app.main.views.pricing import CURRENT_SMS_RATE
 from app.models.branding import (
     AllEmailBranding,
     AllLetterBranding,
@@ -69,6 +69,8 @@ from app.models.branding import (
     LetterBranding,
 )
 from app.models.letter_rates import LetterRates
+from app.models.organisation import Organisation
+from app.models.sms_rate import SMSRate
 from app.utils import DELIVERED_STATUSES, FAILURE_STATUSES, SENDING_STATUSES
 from app.utils.constants import SIGN_IN_METHOD_TEXT_OR_EMAIL
 from app.utils.services import service_has_or_is_expected_to_send_x_or_more_notifications
@@ -83,6 +85,7 @@ PLATFORM_ADMIN_SERVICE_PERMISSIONS = {
     "email_auth": {"title": "Email authentication"},
     "extra_email_formatting": {"title": "Extra email formatting options", "requires": "email"},
     "extra_letter_formatting": {"title": "Extra letter formatting options", "requires": "letter"},
+    "sms_to_uk_landlines": {"title": "Sending SMS to UK landlines"},
 }
 
 THANKS_FOR_BRANDING_REQUEST_MESSAGE = (
@@ -168,7 +171,7 @@ def service_data_retention(service_id):
         current_service, num_notifications=1_000_000
     )
     single_retention_period = current_service.get_consistent_data_retention_period()
-    form_kwargs = dict(days_of_retention=single_retention_period) if single_retention_period else dict()
+    form_kwargs = {"days_of_retention": single_retention_period} if single_retention_period else {}
     form = SetServiceDataRetentionForm(**form_kwargs)
     if not current_service.trial_mode and not high_volume_service and form.validate_on_submit():
         service_api_client.set_service_data_retention(
@@ -231,13 +234,15 @@ def submit_request_to_go_live(service_id):
 
     if current_service.organisation.can_approve_own_go_live_requests:
         subject = f"Self approve go live request - {current_service.name}"
+        notify_task_type = "notify_task_go_live_request_self_approve"
     else:
         subject = f"Request to go live - {current_service.name}"
+        notify_task_type = "notify_task_go_live_request"
 
     ticket = NotifySupportTicket(
         subject=subject,
         message=ticket_message,
-        ticket_type=NotifySupportTicket.TYPE_QUESTION,
+        ticket_type=NotifySupportTicket.TYPE_TASK,
         notify_ticket_type=NotifyTicketType.NON_TECHNICAL,
         user_name=current_user.name,
         user_email=current_user.email_address,
@@ -245,7 +250,8 @@ def submit_request_to_go_live(service_id):
         org_id=current_service.organisation_id,
         org_type=current_service.organisation_type,
         service_id=current_service.id,
-        ticket_categories=["notify_go_live_request"],
+        notify_task_type=notify_task_type,
+        user_created_at=current_user.created_at,
     )
     zendesk_client.send_ticket_to_zendesk(ticket)
 
@@ -300,7 +306,7 @@ def service_switch_count_as_live(service_id):
     )
 
 
-@main.route("/services/<uuid:service_id>/service-settings/permissions/<permission>", methods=["GET", "POST"])
+@main.route("/services/<uuid:service_id>/service-settings/permissions/<string:permission>", methods=["GET", "POST"])
 @user_is_platform_admin
 def service_set_permission(service_id, permission):
     if permission not in PLATFORM_ADMIN_SERVICE_PERMISSIONS:
@@ -338,7 +344,7 @@ def archive_service(service_id):
             f"‘{current_service.name}’ was deleted",
             "default_with_tick",
         )
-        return redirect(url_for(".choose_account"))
+        return redirect(url_for(".your_services"))
     else:
         flash(
             Markup(
@@ -453,7 +459,6 @@ def service_verify_reply_to_address(service_id, notification_id):
         service_id=service_id,
         notification_id=notification_id,
         partials=get_service_verify_reply_to_address_partials(service_id, notification_id),
-        verb=("Change" if replace else "Add"),
         replace=replace,
         is_default=is_default,
     )
@@ -689,13 +694,56 @@ def service_receive_text_messages_start(service_id):
     return render_template("views/service-settings/receive-text-messages-start.html")
 
 
-@main.route("/services/<uuid:service_id>/service-settings/receive-text-messages/stop", methods=["GET"])
+@main.route("/services/<uuid:service_id>/service-settings/receive-text-messages/stop", methods=["GET", "POST"])
 @user_has_permissions("manage_service")
 def service_receive_text_messages_stop(service_id):
     if not current_service.has_permission("inbound_sms"):
         return redirect(url_for(".service_receive_text_messages", service_id=service_id))
 
-    return render_template("views/service-settings/receive-text-messages-stop.html")
+    form = AdminServiceInboundNumberArchive()
+    inbound_number = current_service.inbound_number
+
+    if form.validate_on_submit():
+        archive = form.removal_options.data == "true"
+
+        try:
+            service_api_client.remove_service_inbound_sms(service_id, archive)
+            return redirect(
+                url_for(
+                    ".service_receive_text_messages_stop_success", service_id=service_id, inbound_number=inbound_number
+                )
+            )
+
+        except Exception as e:
+            current_app.logger.error(
+                "Error removing inbound number %s for service %s: %s", inbound_number, service_id, e
+            )
+            form.removal_options.errors.append("Failed to remove number from service")
+
+    recent_use_date = None
+
+    if current_user.platform_admin:
+        resp = service_api_client.get_most_recent_inbound_number_usage_date(service_id)
+        recent_use_date = resp["most_recent_date"]
+
+    return render_template(
+        "views/service-settings/receive-text-messages-stop.html",
+        form=form,
+        current_user=current_user,
+        recent_use_date=recent_use_date,
+    )
+
+
+@main.route("/services/<uuid:service_id>/service-settings/receive-text-messages/stop/success", methods=["GET"])
+@user_has_permissions("manage_service")
+def service_receive_text_messages_stop_success(service_id):
+    inbound_number = request.args.get("inbound_number", None)
+
+    return render_template(
+        "views/service-settings/receive-text-messages-stop-success.html",
+        current_service=current_service,
+        inbound_number=inbound_number,
+    )
 
 
 @main.route("/services/<uuid:service_id>/service-settings/set-letters", methods=["GET"])
@@ -726,7 +774,7 @@ def service_set_channel(service_id, channel):
     return render_template(
         f"views/service-settings/set-{channel}.html",
         form=form,
-        sms_rate=CURRENT_SMS_RATE,
+        sms_rate=SMSRate(),
         # letter_rates=LetterRates().rates,
     )
 
@@ -1044,25 +1092,23 @@ def set_per_minute_rate_limit(service_id):
     return render_template("views/service-settings/set-rate-limit.html", form=form, error_summary_enabled=True)
 
 
-@main.route("/services/<uuid:service_id>/service-settings/set-<notification_type>-branding", methods=["GET", "POST"])
+@main.route(
+    "/services/<uuid:service_id>/service-settings/set-<branding_type:branding_type>-branding",
+    methods=["GET", "POST"],
+)
 @user_is_platform_admin
-def service_set_branding(service_id, notification_type):
-    notification_type = notification_type.lower()
-
-    if notification_type == "email":
+def service_set_branding(service_id, branding_type):
+    if branding_type == "email":
         form = AdminSetEmailBrandingForm(
             all_branding_options=AllEmailBranding().as_id_and_name,
             current_branding=current_service.email_branding_id,
         )
 
-    elif notification_type == "letter":
+    elif branding_type == "letter":
         form = AdminSetLetterBrandingForm(
             all_branding_options=AllLetterBranding().as_id_and_name,
             current_branding=current_service.letter_branding_id,
         )
-
-    else:
-        abort(404)
 
     if form.validate_on_submit():
         # As of 2022-12-02 we only get to this point (eg a POST on this endpoint) if JavaScript fails for the user on
@@ -1072,7 +1118,7 @@ def service_set_branding(service_id, notification_type):
             url_for(
                 ".service_preview_branding",
                 service_id=service_id,
-                notification_type=notification_type,
+                branding_type=branding_type,
                 branding_style=form.branding_style.data,
             )
         )
@@ -1081,30 +1127,25 @@ def service_set_branding(service_id, notification_type):
         "views/service-settings/set-branding.html",
         form=form,
         _search_form=SearchByNameForm(),
-        notification_type=notification_type,
+        branding_type=branding_type,
     )
 
 
 @main.route(
-    "/services/<uuid:service_id>/service-settings/set-<notification_type>-branding/add-to-branding-pool-step",
+    "/services/<uuid:service_id>/service-settings/set-<branding_type:branding_type>-branding/add-to-branding-pool-step",
     methods=["GET", "POST"],
 )
 @user_is_platform_admin
-def service_set_branding_add_to_branding_pool_step(service_id, notification_type):
+def service_set_branding_add_to_branding_pool_step(service_id, branding_type):
     branding_id = request.args.get("branding_id")
-    notification_type = notification_type.lower()
-    branding_type = f"{notification_type}_branding"
 
-    if notification_type == "email":
+    if branding_type == "email":
         branding = EmailBranding.from_id(branding_id)
         add_brandings_to_pool = organisations_client.add_brandings_to_email_branding_pool
 
-    elif notification_type == "letter":
+    elif branding_type == "letter":
         branding = LetterBranding.from_id(branding_id)
         add_brandings_to_pool = organisations_client.add_brandings_to_letter_branding_pool
-
-    else:
-        abort(404)
 
     branding_name = branding.name
     org_id = current_service.organisation.id
@@ -1113,16 +1154,16 @@ def service_set_branding_add_to_branding_pool_step(service_id, notification_type
 
     if form.validate_on_submit():
         # The service’s branding gets updated either way
-        current_service.update(**{branding_type: branding_id})
-        message = f"The {notification_type} branding has been set to {branding_name}"
+        current_service.update(**{f"{branding_type}_branding": branding_id})
+        message = f"The {branding_type} branding has been set to {branding_name}"
 
         # If the platform admin chose "yes" the branding is added to the organisation's branding pool
         if form.add_to_pool.data == "yes":
             branding_ids = [branding_id]
             add_brandings_to_pool(org_id, branding_ids)
             message = (
-                f"The {notification_type} branding has been set to {branding_name} and it has been "
-                f"added to {current_service.organisation.name}'s {notification_type} branding pool"
+                f"The {branding_type} branding has been set to {branding_name} and it has been "
+                f"added to {current_service.organisation.name}'s {branding_type} branding pool"
             )
 
         flash(message, "default_with_tick")
@@ -1130,7 +1171,7 @@ def service_set_branding_add_to_branding_pool_step(service_id, notification_type
 
     return render_template(
         "views/service-settings/set-branding-add-to-branding-pool-step.html",
-        back_link=url_for(".service_set_branding", service_id=current_service.id, notification_type=notification_type),
+        back_link=url_for(".service_set_branding", service_id=current_service.id, branding_type=branding_type),
         form=form,
         branding_name=branding_name,
         error_summary_enabled=True,
@@ -1138,22 +1179,18 @@ def service_set_branding_add_to_branding_pool_step(service_id, notification_type
 
 
 @main.route(
-    "/services/<uuid:service_id>/service-settings/preview-<notification_type>-branding", methods=["GET", "POST"]
+    "/services/<uuid:service_id>/service-settings/preview-<branding_type:branding_type>-branding",
+    methods=["GET", "POST"],
 )
 @user_is_platform_admin
-def service_preview_branding(service_id, notification_type):
+def service_preview_branding(service_id, branding_type):
     branding_style = request.args.get("branding_style")
-    notification_type = notification_type.lower()
-    branding_type = f"{notification_type}_branding"
 
-    if notification_type == "email":
+    if branding_type == "email":
         service_branding_pool = current_service.email_branding_pool
 
-    elif notification_type == "letter":
+    elif branding_type == "letter":
         service_branding_pool = current_service.letter_branding_pool
-
-    else:
-        abort(404)
 
     form = AdminPreviewBrandingForm(branding_style=branding_style)
 
@@ -1167,20 +1204,20 @@ def service_preview_branding(service_id, notification_type):
                 url_for(
                     "main.service_set_branding_add_to_branding_pool_step",
                     service_id=service_id,
-                    notification_type=notification_type,
+                    branding_type=branding_type,
                     branding_id=branding_id,
                 )
             )
 
-        current_service.update(**{branding_type: branding_id})
+        current_service.update(**{f"{branding_type}_branding": branding_id})
         return redirect(url_for(".service_settings", service_id=service_id))
 
     return render_template(
         "views/service-settings/preview-branding.html",
         form=form,
         service_id=service_id,
-        notification_type=notification_type,
-        action=url_for("main.service_preview_branding", service_id=service_id, notification_type=notification_type),
+        notification_type=branding_type,
+        action=url_for("main.service_preview_branding", service_id=service_id, branding_type=branding_type),
     )
 
 
@@ -1197,6 +1234,13 @@ def link_service_to_organisation(service_id):
     if form.validate_on_submit():
         if form.organisations.data != current_service.organisation_id:
             organisations_client.update_service_organisation(service_id, form.organisations.data)
+
+            # if it's a GP in trial mode, we need to set their daily sms_message_limit to 0
+            organisation = Organisation.from_id(form.organisations.data)
+            if current_service.trial_mode and organisation.organisation_type == Organisation.TYPE_NHS_GP:
+                current_service.update(sms_message_limit=0)
+
+            current_service.update(has_active_go_live_request=False)
         return redirect(url_for(".service_settings", service_id=service_id))
 
     return render_template(

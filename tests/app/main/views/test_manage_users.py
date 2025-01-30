@@ -1,11 +1,17 @@
 import copy
 import uuid
+from datetime import datetime
 
 import pytest
 from flask import url_for
+from flask_login import current_user
 
 import app
+from app.formatters import format_date_short
+from app.utils.constants import SERVICE_JOIN_REQUEST_APPROVED, SERVICE_JOIN_REQUEST_REJECTED
 from app.utils.user import is_gov_user
+from app.utils.user_permissions import translate_permissions_from_ui_to_db
+from tests import organisation_json
 from tests.conftest import (
     ORGANISATION_ID,
     ORGANISATION_TWO_ID,
@@ -15,6 +21,7 @@ from tests.conftest import (
     create_active_user_manage_template_permissions,
     create_active_user_view_permissions,
     create_active_user_with_permissions,
+    create_user,
     normalize_spaces,
     sample_uuid,
 )
@@ -126,7 +133,6 @@ def test_should_show_overview_page(
     mocker,
     mock_get_invites_for_service,
     mock_get_template_folders,
-    mock_has_no_jobs,
     service_one,
     user,
     expected_self_text,
@@ -140,7 +146,7 @@ def test_should_show_overview_page(
     other_user["id"] = "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz"
 
     mock_get_users = mocker.patch(
-        "app.models.user.Users.client_method",
+        "app.models.user.Users._get_items",
         return_value=[
             current_user,
             other_user,
@@ -183,7 +189,7 @@ def test_should_show_change_details_link(
 
     mocker.patch("app.user_api_client.get_user", return_value=current_user)
     mocker.patch(
-        "app.models.user.Users.client_method",
+        "app.models.user.Users._get_items",
         return_value=[
             current_user,
             other_user,
@@ -213,14 +219,13 @@ def test_should_show_live_search_if_more_than_7_users(
     mocker,
     mock_get_invites_for_service,
     mock_get_template_folders,
-    mock_has_no_jobs,
     active_user_with_permissions,
     active_user_view_permissions,
     number_of_users,
 ):
     mocker.patch("app.user_api_client.get_user", return_value=active_user_with_permissions)
-    mocker.patch("app.models.user.InvitedUsers.client_method", return_value=[])
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions] * number_of_users)
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions] * number_of_users)
 
     page = client_request.get("main.manage_users", service_id=SERVICE_ONE_ID)
 
@@ -258,7 +263,7 @@ def test_should_show_caseworker_on_overview_page(
     other_user["email_address"] = "zzzzzzz@example.gov.uk"
 
     mocker.patch(
-        "app.models.user.Users.client_method",
+        "app.models.user.Users._get_items",
         return_value=[
             current_user,
             other_user,
@@ -397,15 +402,15 @@ def test_manage_users_page_links_to_user_profile_page_for_platform_admins(
 
 
 def test_manage_users_page_does_not_links_to_user_profile_page_if_user_only_invited(
-    mocker,
     client_request,
     active_user_with_permissions,
     service_one,
     mock_get_invites_for_service,
     mock_get_template_folders,
+    mocker,
 ):
     active_user_with_permissions["platform_admin"] = True
-    mocker.patch("app.models.user.Users.client_method", return_value=[])
+    mocker.patch("app.models.user.Users._get_items", return_value=[])
     client_request.login(active_user_with_permissions)
     page = client_request.get("main.manage_users", service_id=service_one["id"])
     user_links = page.select("h2.user-list-item-heading a")
@@ -590,7 +595,6 @@ def test_should_not_show_page_for_non_team_member(
 )
 def test_edit_user_permissions(
     client_request,
-    mocker,
     mock_get_users_by_service,
     mock_get_invites_for_service,
     mock_set_user_permissions,
@@ -617,7 +621,6 @@ def test_edit_user_permissions(
 
 def test_edit_user_folder_permissions(
     client_request,
-    mocker,
     service_one,
     mock_get_users_by_service,
     mock_get_invites_for_service,
@@ -646,7 +649,7 @@ def test_edit_user_folder_permissions(
         "main.edit_user_permissions",
         service_id=SERVICE_ONE_ID,
         user_id=fake_uuid,
-        _data=dict(folder_permissions=["folder-id-1", "folder-id-3"]),
+        _data={"folder_permissions": ["folder-id-1", "folder-id-3"]},
         _expected_status=302,
         _expected_redirect=url_for(
             "main.manage_users",
@@ -710,7 +713,6 @@ def test_cant_edit_user_folder_permissions_for_platform_admin_users(
 
 def test_cant_edit_non_member_user_permissions(
     client_request,
-    mocker,
     mock_get_users_by_service,
     mock_set_user_permissions,
 ):
@@ -875,7 +877,6 @@ def test_should_show_page_for_inviting_user_with_email_prefilled(
     active_user_with_permissions,
     active_user_with_permission_to_other_service,
     mock_get_organisation_by_domain,
-    mock_get_organisation,
     mock_get_invites_for_service,
 ):
     service_one["organisation"] = ORGANISATION_ID
@@ -893,19 +894,19 @@ def test_should_show_page_for_inviting_user_with_email_prefilled(
         # in the page title
         _test_page_title=False,
     )
-    assert normalize_spaces(page.select_one("title").text).startswith("Invite a team member")
-    assert normalize_spaces(page.select_one("h1").text) == "Invite Service Two User"
+    assert normalize_spaces(page.select_one("title").text).startswith("Let someone join your service")
+    assert normalize_spaces(page.select_one("h1").text) == "Let Service Two User join your service"
     assert normalize_spaces(page.select_one("main .govuk-body").text) == "service-two-user@test.gov.uk"
     assert not page.select("input#email_address") or page.select("input[type=email]")
 
 
 def test_should_show_page_if_prefilled_user_is_already_a_team_member(
-    mocker,
     client_request,
     mock_get_template_folders,
     fake_uuid,
     active_user_with_permissions,
     active_caseworking_user,
+    mocker,
 ):
     mocker.patch(
         "app.models.user.user_api_client.get_user",
@@ -931,13 +932,13 @@ def test_should_show_page_if_prefilled_user_is_already_a_team_member(
 
 
 def test_should_show_page_if_prefilled_user_is_already_invited(
-    mocker,
     client_request,
     mock_get_template_folders,
     fake_uuid,
     active_user_with_permissions,
     active_user_with_permission_to_other_service,
     mock_get_invites_for_service,
+    mocker,
 ):
     active_user_with_permission_to_other_service["email_address"] = "user_1@testnotify.gov.uk"
     client_request.login(active_user_with_permissions)
@@ -954,13 +955,12 @@ def test_should_show_page_if_prefilled_user_is_already_invited(
     assert normalize_spaces(page.select_one("title").text).startswith("This person has already received an invite")
     assert normalize_spaces(page.select_one("h1").text) == "This person has already received an invite"
     assert normalize_spaces(page.select_one("main .govuk-body").text) == (
-        "Service Two User has not accepted their invitation to " "‘service one’ yet. You do not need to do anything."
+        "Service Two User has not accepted their invitation to ‘service one’ yet. You do not need to do anything."
     )
     assert not page.select("form")
 
 
 def test_should_403_if_trying_to_prefill_email_address_for_user_with_no_organisation(
-    mocker,
     client_request,
     service_one,
     mock_get_template_folders,
@@ -969,6 +969,7 @@ def test_should_403_if_trying_to_prefill_email_address_for_user_with_no_organisa
     active_user_with_permission_to_other_service,
     mock_get_invites_for_service,
     mock_get_no_organisation_by_domain,
+    mocker,
 ):
     service_one["organisation"] = ORGANISATION_ID
     client_request.login(active_user_with_permissions)
@@ -985,7 +986,6 @@ def test_should_403_if_trying_to_prefill_email_address_for_user_with_no_organisa
 
 
 def test_should_403_if_trying_to_prefill_email_address_for_user_from_other_organisation(
-    mocker,
     client_request,
     service_one,
     mock_get_template_folders,
@@ -994,6 +994,7 @@ def test_should_403_if_trying_to_prefill_email_address_for_user_from_other_organ
     active_user_with_permission_to_other_service,
     mock_get_invites_for_service,
     mock_get_organisation_by_domain,
+    mocker,
 ):
     service_one["organisation"] = ORGANISATION_TWO_ID
     client_request.login(active_user_with_permissions)
@@ -1042,8 +1043,8 @@ def test_invite_user(
     sample_invite["email_address"] = email_address
 
     assert is_gov_user(email_address) == gov_user
-    mocker.patch("app.models.user.InvitedUsers.client_method", return_value=[sample_invite])
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions])
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[sample_invite])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions])
     mocker.patch("app.invite_api_client.create_invite", return_value=sample_invite)
     page = client_request.post(
         "main.invite_user",
@@ -1130,8 +1131,8 @@ def test_invite_user_with_email_auth_service(
     sample_invite["email_address"] = "test@example.gov.uk"
 
     assert is_gov_user(email_address) is gov_user
-    mocker.patch("app.models.user.InvitedUsers.client_method", return_value=[sample_invite])
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions])
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[sample_invite])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions])
     mocker.patch("app.invite_api_client.create_invite", return_value=sample_invite)
 
     page = client_request.post(
@@ -1167,7 +1168,6 @@ def test_cancel_invited_user_cancels_user_invitations(
     client_request,
     mock_get_invites_for_service,
     sample_invite,
-    active_user_with_permissions,
     mock_get_users_by_service,
     mock_get_template_folders,
     mocker,
@@ -1245,8 +1245,8 @@ def test_manage_users_shows_invited_user(
     expected_text,
 ):
     sample_invite["status"] = invite_status
-    mocker.patch("app.models.user.InvitedUsers.client_method", return_value=[sample_invite])
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions])
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[sample_invite])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions])
 
     page = client_request.get("main.manage_users", service_id=SERVICE_ONE_ID)
     assert page.select_one("h1").string.strip() == "Team members"
@@ -1263,8 +1263,8 @@ def test_manage_users_does_not_show_accepted_invite(
     invited_user_id = uuid.uuid4()
     sample_invite["id"] = invited_user_id
     sample_invite["status"] = "accepted"
-    mocker.patch("app.models.user.InvitedUsers.client_method", return_value=[sample_invite])
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions])
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[sample_invite])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions])
 
     page = client_request.get("main.manage_users", service_id=SERVICE_ONE_ID)
 
@@ -1276,7 +1276,6 @@ def test_manage_users_does_not_show_accepted_invite(
 
 def test_user_cant_invite_themselves(
     client_request,
-    mocker,
     active_user_with_permissions,
     mock_create_invite,
     mock_get_template_folders,
@@ -1303,8 +1302,6 @@ def test_no_permission_manage_users_page(
     mock_get_users_by_service,
     mock_get_invites_for_service,
     mock_get_template_folders,
-    api_user_active,
-    mocker,
 ):
     resp_text = client_request.get("main.manage_users", service_id=service_one["id"])
     assert url_for(".invite_user", service_id=service_one["id"]) not in resp_text
@@ -1352,7 +1349,6 @@ def test_manage_user_page_doesnt_show_folder_hint_if_service_has_no_folders(
     mock_get_template_folders,
     mock_get_users_by_service,
     mock_get_invites_for_service,
-    api_user_active,
 ):
     service_one["permissions"] = ["edit_folder_permissions"]
     mock_get_template_folders.return_value = []
@@ -1411,7 +1407,9 @@ def test_can_invite_user_as_platform_admin(
     mock_get_template_folders,
     mocker,
 ):
-    mocker.patch("app.models.user.Users.client_method", return_value=[active_user_with_permissions])
+    mocker.patch("app.models.user.Users._get_items", return_value=[active_user_with_permissions])
+
+    client_request.login(platform_admin_user)
 
     page = client_request.get(
         "main.manage_users",
@@ -1494,7 +1492,6 @@ def test_edit_user_email_can_change_any_email_address_to_a_gov_email_address(
     active_user_with_permissions,
     mock_get_user_by_email_not_found,
     mock_get_users_by_service,
-    mock_update_user_attribute,
     mock_get_organisations,
     original_email_address,
 ):
@@ -1519,7 +1516,6 @@ def test_edit_user_email_can_change_a_non_gov_email_address_to_another_non_gov_e
     active_user_with_permissions,
     mock_get_user_by_email_not_found,
     mock_get_users_by_service,
-    mock_update_user_attribute,
     mock_get_organisations,
 ):
     active_user_with_permissions["email_address"] = "old@example.com"
@@ -1543,7 +1539,6 @@ def test_edit_user_email_cannot_change_a_gov_email_address_to_a_non_gov_email_ad
     active_user_with_permissions,
     mock_get_user_by_email_not_found,
     mock_get_users_by_service,
-    mock_update_user_attribute,
     mock_get_organisations,
 ):
     page = client_request.post(
@@ -1621,7 +1616,7 @@ def test_confirm_edit_user_email_changes_user_email(
     # We want active_user_with_permissions (the current user) to update the email address for api_user_active
     # By default both users would have the same id, so we change the id of api_user_active
     api_user_active["id"] = str(uuid.uuid4())
-    mocker.patch("app.models.user.Users.client_method", return_value=[api_user_active, active_user_with_permissions])
+    mocker.patch("app.models.user.Users._get_items", return_value=[api_user_active, active_user_with_permissions])
     # get_user gets called twice - first to check if current user can see the page, then to see if the team member
     # whose email address we're changing belongs to the service
     mocker.patch("app.user_api_client.get_user", side_effect=[active_user_with_permissions, api_user_active])
@@ -1673,7 +1668,6 @@ def test_edit_user_permissions_page_displays_redacted_mobile_number_and_change_l
     mock_get_users_by_service,
     mock_get_template_folders,
     service_one,
-    mocker,
 ):
     page = client_request.get(
         "main.edit_user_permissions",
@@ -1705,7 +1699,7 @@ def test_edit_user_permissions_with_delete_query_shows_banner(
 
 
 def test_edit_user_mobile_number_page(
-    client_request, active_user_with_permissions, mock_get_users_by_service, service_one, mocker
+    client_request, active_user_with_permissions, mock_get_users_by_service, service_one
 ):
     page = client_request.get(
         "main.edit_user_mobile_number",
@@ -1745,8 +1739,6 @@ def test_edit_user_mobile_number_redirects_to_manage_users_if_number_not_changed
     active_user_with_permissions,
     mock_get_users_by_service,
     service_one,
-    mocker,
-    mock_get_user,
 ):
     client_request.post(
         "main.edit_user_mobile_number",
@@ -1766,8 +1758,6 @@ def test_confirm_edit_user_mobile_number_page(
     active_user_with_permissions,
     mock_get_users_by_service,
     service_one,
-    mocker,
-    mock_get_user,
 ):
     new_number = "07554080636"
     with client_request.session_transaction() as session:
@@ -1793,14 +1783,16 @@ def test_confirm_edit_user_mobile_number_page_redirects_if_session_empty(
     active_user_with_permissions,
     mock_get_users_by_service,
     service_one,
-    mocker,
-    mock_get_user,
 ):
     page = client_request.get(
         "main.confirm_edit_user_mobile_number",
         service_id=SERVICE_ONE_ID,
         user_id=active_user_with_permissions["id"],
-        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.edit_user_mobile_number",
+            service_id=SERVICE_ONE_ID,
+            user_id=active_user_with_permissions["id"],
+        ),
     )
     assert "Confirm change of mobile number" not in page.text
 
@@ -1812,7 +1804,7 @@ def test_confirm_edit_user_mobile_number_changes_user_mobile_number(
     # By default both users would have the same id, so we change the id of api_user_active
     api_user_active["id"] = str(uuid.uuid4())
 
-    mocker.patch("app.models.user.Users.client_method", return_value=[api_user_active, active_user_with_permissions])
+    mocker.patch("app.models.user.Users._get_items", return_value=[api_user_active, active_user_with_permissions])
     # get_user gets called twice - first to check if current user can see the page, then to see if the team member
     # whose mobile number we're changing belongs to the service
     mocker.patch("app.user_api_client.get_user", side_effect=[active_user_with_permissions, api_user_active])
@@ -1855,3 +1847,796 @@ def test_confirm_edit_user_mobile_number_doesnt_change_user_mobile_for_non_team_
         user_id=USER_ONE_ID,
         _expected_status=404,
     )
+
+
+def service_join_request_get_data(request_id, status, mock_requester, status_changed_by, mock_contacted_service_users):
+    return {
+        "id": request_id,
+        "requester": {
+            "id": mock_requester.get("id"),
+            "name": mock_requester.get("name"),
+            "belongs_to_service": [],
+            "email_address": mock_requester.get("email_address"),
+        },
+        "service_id": SERVICE_ONE_ID,
+        "created_at": datetime.utcnow(),
+        "status": status,
+        "status_changed_at": datetime.utcnow(),
+        "status_changed_by": (
+            {"id": status_changed_by.get("id"), "name": status_changed_by.get("name"), "belongs_to_service": []}
+            if status_changed_by
+            else None
+        ),
+        "reason": "",
+        "contacted_service_users": mock_contacted_service_users,
+    }
+
+
+@pytest.fixture(scope="function")
+def mock_get_service_join_request_status_data(mocker, mock_requester, mock_service_user, status):
+    mocker.patch("app.notify_client.current_user", side_effect=mock_service_user)
+
+    def _get(request_id):
+        mock_contacted_service_users = [mock_service_user["id"], sample_uuid()]
+        return service_join_request_get_data(
+            request_id, status, mock_requester, mock_service_user, mock_contacted_service_users
+        )
+
+    return mocker.patch("app.service_api_client.get_service_join_requests", side_effect=_get)
+
+
+@pytest.fixture(scope="function")
+def mock_get_service_join_request_not_logged_in_user(mocker):
+    mock_requester = create_active_user_empty_permissions(True)
+    mock_service_user = create_active_user_with_permissions(True)
+
+    def _get(request_id):
+        mock_contacted_service_users = [mock_service_user["id"]]
+        return service_join_request_get_data(
+            request_id, SERVICE_JOIN_REQUEST_REJECTED, mock_requester, mock_service_user, mock_contacted_service_users
+        )
+
+    return mocker.patch("app.service_api_client.get_service_join_requests", side_effect=_get)
+
+
+@pytest.fixture(scope="function")
+def mock_get_service_join_request_user_already_joined(mocker):
+    mock_requester = create_active_user_empty_permissions(True)
+    mock_service_user = create_active_user_with_permissions(True)
+
+    def _get(request_id):
+        mock_contacted_service_users = [mock_service_user["id"], sample_uuid()]
+        mock_request_data = service_join_request_get_data(
+            request_id, "pending", mock_requester, None, mock_contacted_service_users
+        )
+        mock_request_data["requester"]["belongs_to_service"] = [SERVICE_ONE_ID]
+        return mock_request_data
+
+    return mocker.patch("app.service_api_client.get_service_join_requests", side_effect=_get)
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+        ),
+    ],
+)
+def test_service_join_request_pending(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    mock_get_organisation_by_domain,
+    service_one,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        "main.service_join_request_approve",
+        service_id=SERVICE_ONE_ID,
+        request_id=sample_uuid(),
+    )
+    assert f"{mock_requester['name']} wants to join your service" in page.text.strip()
+    assert f"{mock_requester['name']} wants to join your service" in page.select_one("h1").text.strip()
+    assert (
+        f"Do you want to let {mock_requester['name']} join ‘{service_one['name']}’?"
+        in page.select_one("legend").text.strip()
+    )
+
+    radio_buttons = page.select("input[name=join_service_approve_request]")
+    values = {button["value"] for button in radio_buttons}
+
+    assert values == {SERVICE_JOIN_REQUEST_APPROVED, SERVICE_JOIN_REQUEST_REJECTED}
+
+    assert normalize_spaces(page.select("form button")[0].text) == "Continue"
+
+
+@pytest.mark.parametrize(
+    "endpoint, mock_requester, mock_service_user, status",
+    [
+        (
+            "main.service_join_request_approve",
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            SERVICE_JOIN_REQUEST_APPROVED,
+        ),
+        (
+            "main.service_join_request_choose_permissions",
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            SERVICE_JOIN_REQUEST_APPROVED,
+        ),
+    ],
+)
+def test_service_join_request_approved(
+    endpoint,
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        endpoint,
+        service_id=SERVICE_ONE_ID,
+        request_id=sample_uuid(),
+    )
+    assert f"{mock_requester['name']} has already joined your service" in page.text.strip()
+    assert f"{mock_requester['name']} has already joined your service" in page.select_one("h1").text.strip()
+
+    today_date = format_date_short(datetime.utcnow())
+    assert f"{mock_service_user['name']} approved this request on {today_date}" in page.select_one("p").text.strip()
+
+
+@pytest.mark.parametrize(
+    "endpoint, mock_requester, mock_service_user, status",
+    [
+        (
+            "main.service_join_request_approve",
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            SERVICE_JOIN_REQUEST_REJECTED,
+        ),
+        (
+            "main.service_join_request_choose_permissions",
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            SERVICE_JOIN_REQUEST_REJECTED,
+        ),
+    ],
+)
+def test_service_join_request_rejected(
+    endpoint,
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        endpoint,
+        service_id=SERVICE_ONE_ID,
+        request_id=sample_uuid(),
+    )
+    assert f"{mock_requester['name']} join your service" in page.text.strip()
+    assert f"{mock_requester['name']} join your service" in page.select_one("h1").text.strip()
+
+    today_date = format_date_short(datetime.utcnow())
+    assert (
+        f"{mock_service_user['name']} already refused this request on {today_date}" in page.select_one("p").text.strip()
+    )
+
+
+@pytest.mark.parametrize(
+    "endpoint, service_one_id",
+    [
+        (
+            "main.service_join_request_approve",
+            SERVICE_ONE_ID,
+        ),
+        (
+            "main.service_join_request_choose_permissions",
+            SERVICE_ONE_ID,
+        ),
+    ],
+)
+def test_service_join_request_already_joined(
+    endpoint,
+    service_one_id,
+    client_request,
+    mocker,
+    service_one,
+    mock_get_organisation_by_domain,
+    mock_get_service_join_request_user_already_joined,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        endpoint,
+        service_id=service_one_id,
+        request_id=sample_uuid(),
+    )
+    assert "This person is already a team member" in page.text.strip()
+    assert "This person is already a team member" in page.select_one("h1").text.strip()
+    assert "Test User With Empty Permissions is already member of ‘service one’." in page.select_one("p").text.strip()
+
+
+@pytest.mark.parametrize(
+    "endpoint, service_one_id",
+    [
+        (
+            "main.service_join_request_approve",
+            SERVICE_ONE_ID,
+        ),
+        (
+            "main.service_join_request_choose_permissions",
+            SERVICE_ONE_ID,
+        ),
+    ],
+)
+def test_service_join_request_should_return_403_when_approver_is_not_logged_in_user(
+    endpoint,
+    client_request,
+    mocker,
+    service_one_id,
+    service_one,
+    mock_get_organisation_by_domain,
+    mock_get_service_join_request_not_logged_in_user,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    client_request.get(
+        endpoint,
+        service_id=service_one_id,
+        request_id=sample_uuid(),
+        _expected_status=403,
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+        ),
+    ],
+)
+def test_service_join_request_redirects_to_choose_permissions_on_approve(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    request_id = sample_uuid()
+    client_request.post(
+        "main.service_join_request_approve",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={
+            "join_service_approve_request": SERVICE_JOIN_REQUEST_APPROVED,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.service_join_request_choose_permissions",
+            service_id=SERVICE_ONE_ID,
+            request_id=request_id,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+        ),
+    ],
+)
+def test_service_join_request_shows_rejected_message_on_reject(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    mock_get_service_join_request_status_data,
+):
+    request_id = sample_uuid()
+    mock_update_service_join_requests = mocker.patch(
+        "app.service_api_client.update_service_join_requests",
+        return_value={},
+    )
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.post(
+        "main.service_join_request_approve",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={
+            "join_service_approve_request": SERVICE_JOIN_REQUEST_REJECTED,
+        },
+        _follow_redirects=True,
+    )
+
+    assert f"Tell {mock_requester['name']} you have refused their request" in page.text.strip()
+    assert f"Tell {mock_requester['name']} you have refused their request" in page.select_one("h1").text.strip()
+    assert (
+        f"To let {mock_requester['name']} know that they cannot join your service, "
+        f"email them directly at {mock_requester['email_address']}" in page.select_one("p").text.strip()
+    )
+
+    mock_update_service_join_requests.assert_called_once_with(
+        request_id,
+        mock_requester["id"],
+        SERVICE_ONE_ID,
+        status=SERVICE_JOIN_REQUEST_REJECTED,
+        status_changed_by_id=current_user.id,
+    )
+    assert mock_update_service_join_requests.called
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [(create_active_user_empty_permissions(True), create_active_user_with_permissions(True), "pending")],
+)
+def test_service_join_request_choose_permissions(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+    mock_get_template_folders,
+):
+    request_id = sample_uuid()
+
+    mock_get_template_folders.return_value = [
+        {"id": "folder-id-1", "name": "f1", "parent_id": None, "users_with_permission": []},
+        {"id": "folder-id-2", "name": "f2", "parent_id": None, "users_with_permission": []},
+    ]
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        "main.service_join_request_choose_permissions",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+    )
+
+    assert f"Choose permissions for {mock_requester['name']}" in page.text.strip()
+    assert f"Choose permissions for {mock_requester['name']}" in page.select_one("h1").text.strip()
+    assert f"{mock_requester['email_address']}" in page.select_one("p").text.strip()
+
+    permission_checkboxes = page.select("input[name='permissions_field']")
+    assert permission_checkboxes[0]["value"] == "view_activity"
+    assert permission_checkboxes[1]["value"] == "send_messages"
+    assert permission_checkboxes[2]["value"] == "manage_templates"
+    assert permission_checkboxes[3]["value"] == "manage_service"
+    assert permission_checkboxes[4]["value"] == "manage_api_keys"
+
+    folder_checkboxes = page.select("input[name='folder_permissions']")
+    assert len(folder_checkboxes) == 2
+    assert [item["value"] for item in page.select("input[name=folder_permissions]")] == [
+        "folder-id-1",
+        "folder-id-2",
+    ]
+
+    assert normalize_spaces(page.select("form button")[0].text) == "Save"
+
+
+@pytest.mark.parametrize(
+    "service_has_email_auth, auth_options_hidden",
+    [
+        (False, True),
+        (True, False),
+    ],
+)
+def test_join_a_service_with_no_email_auth_hides_auth_type_options(
+    client_request,
+    service_has_email_auth,
+    auth_options_hidden,
+    service_one,
+    mock_get_template_folders,
+    mock_get_organisation_by_domain,
+    fake_uuid,
+    mocker,
+):
+    requester = create_active_user_empty_permissions(True)
+
+    mocker.patch(
+        "app.service_api_client.get_service_join_requests",
+        return_value=service_join_request_get_data(fake_uuid, "pending", requester, None, [fake_uuid]),
+    )
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    if service_has_email_auth:
+        service_one["permissions"].append("email_auth")
+
+    page = client_request.get(
+        "main.service_join_request_choose_permissions",
+        service_id=service_one["id"],
+        request_id=fake_uuid,
+    )
+    assert (page.select_one("input[name=login_authentication]") is None) == auth_options_hidden
+
+
+@pytest.mark.parametrize(
+    "sms_option_disabled, mobile_number, expected_label",
+    [
+        (
+            True,
+            None,
+            """
+            Text message code
+            Not available because this team member has not added a phone number to their profile
+            """,
+        ),
+        (
+            False,
+            "07700 900762",
+            """
+            Text message code
+            """,
+        ),
+    ],
+)
+def test_join_a_service_user_with_no_mobile_number_cant_be_set_to_sms_auth(
+    client_request,
+    mock_get_template_folders,
+    sms_option_disabled,
+    mobile_number,
+    expected_label,
+    service_one,
+    fake_uuid,
+    mock_get_organisation_by_domain,
+    mocker,
+):
+    requester = create_user(mobile_number=mobile_number)
+
+    mocker.patch(
+        "app.service_api_client.get_service_join_requests",
+        return_value=service_join_request_get_data(fake_uuid, "pending", {}, None, [fake_uuid]),
+    )
+
+    service_one["organisation"] = ORGANISATION_ID
+    service_one["permissions"].append("email_auth")
+
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    mocker.patch("app.user_api_client.get_user", return_value=requester)
+
+    page = client_request.get(
+        "main.service_join_request_choose_permissions",
+        service_id=SERVICE_ONE_ID,
+        request_id=fake_uuid,
+    )
+
+    sms_auth_radio_button = page.select_one('input[value="sms_auth"]')
+    assert sms_auth_radio_button.has_attr("disabled") == sms_option_disabled
+    assert normalize_spaces(page.select_one("label[for=login_authentication-0]").parent.text) == normalize_spaces(
+        expected_label
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [(create_active_user_empty_permissions(True), create_active_user_with_permissions(True), "pending")],
+)
+def test_service_join_request_choose_permissions_on_save(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+    mock_get_template_folders,
+):
+    request_id = sample_uuid()
+
+    selected_permissions = ["send_messages", "view_activity", "manage_service"]
+
+    mock_get_template_folders.return_value = [
+        {"id": "folder-id-1", "name": "f1", "parent_id": None, "users_with_permission": []},
+        {"id": "folder-id-2", "name": "f2", "parent_id": None, "users_with_permission": []},
+    ]
+
+    mock_update_service_join_requests = mocker.patch(
+        "app.service_api_client.update_service_join_requests",
+        return_value={},
+    )
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    client_request.post(
+        "main.service_join_request_choose_permissions",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={"permissions_field": selected_permissions, "folder_permissions": ["folder-id-1", "folder-id-2"]},
+        _expected_status=302,
+        _expected_redirect=url_for("main.manage_users", service_id=SERVICE_ONE_ID),
+    )
+
+    mock_update_service_join_requests.assert_called_once_with(
+        request_id,
+        mock_requester["id"],
+        SERVICE_ONE_ID,
+        permissions=translate_permissions_from_ui_to_db(selected_permissions),
+        status=SERVICE_JOIN_REQUEST_APPROVED,
+        status_changed_by_id=current_user.id,
+        folder_permissions=["folder-id-1", "folder-id-2"],
+        auth_type="sms_auth",
+    )
+    assert mock_update_service_join_requests.called
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status, auth_type",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+            "email_auth",
+        ),
+        (create_active_user_empty_permissions(True), create_active_user_with_permissions(True), "pending", "sms_auth"),
+    ],
+)
+def test_service_join_request_choose_auth_type_on_save(
+    client_request,
+    service_one,
+    mock_get_organisation_by_domain,
+    mock_requester,
+    mock_service_user,
+    status,
+    auth_type,
+    mock_get_service_join_request_status_data,
+    mock_get_template_folders,
+    mocker,
+):
+    request_id = sample_uuid()
+
+    selected_permissions = ["send_messages", "view_activity", "manage_service"]
+
+    mock_update_service_join_requests = mocker.patch("app.service_api_client.update_service_join_requests")
+
+    service_one["permissions"].append("email_auth")
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    client_request.post(
+        "main.service_join_request_choose_permissions",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={"permissions_field": selected_permissions, "folder_permissions": [], "login_authentication": auth_type},
+        _expected_status=302,
+        _expected_redirect=url_for("main.manage_users", service_id=SERVICE_ONE_ID),
+    )
+
+    mock_update_service_join_requests.assert_called_once_with(
+        request_id,
+        mock_requester["id"],
+        SERVICE_ONE_ID,
+        permissions=translate_permissions_from_ui_to_db(selected_permissions),
+        status=SERVICE_JOIN_REQUEST_APPROVED,
+        status_changed_by_id=current_user.id,
+        folder_permissions=[],
+        auth_type=auth_type,
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [(create_active_user_empty_permissions(True), create_active_user_with_permissions(True), "pending")],
+)
+def test_service_join_request_refused(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    request_id = sample_uuid()
+    mock_update_service_join_requests = mocker.patch(
+        "app.service_api_client.update_service_join_requests",
+        return_value={},
+    )
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.get(
+        "main.service_join_request_refused",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+    )
+
+    mock_update_service_join_requests.assert_called_once_with(
+        request_id,
+        mock_requester["id"],
+        SERVICE_ONE_ID,
+        status=SERVICE_JOIN_REQUEST_REJECTED,
+        status_changed_by_id=current_user.id,
+    )
+
+    assert mock_update_service_join_requests.called
+
+    assert f"Tell {mock_requester['name']} you have refused their request" in page.text.strip()
+    assert f"Tell {mock_requester['name']} you have refused their request" in page.select_one("h1").text.strip()
+    assert (
+        f"To let {mock_requester['name']} know that they cannot join your service, "
+        f"email them directly at {mock_requester['email_address']}" in page.select_one("p.govuk-body").text.strip()
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+        ),
+    ],
+)
+def test_service_join_request_redirects_to_refused_on_reject(
+    client_request,
+    mocker,
+    mock_requester,
+    mock_service_user,
+    service_one,
+    mock_get_organisation_by_domain,
+    status,
+    mock_get_service_join_request_status_data,
+):
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    request_id = sample_uuid()
+
+    client_request.post(
+        "main.service_join_request_approve",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={
+            "join_service_approve_request": SERVICE_JOIN_REQUEST_REJECTED,
+        },
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.service_join_request_refused",
+            _method="GET",
+            service_id=SERVICE_ONE_ID,
+            request_id=request_id,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "mock_requester, mock_service_user, status",
+    [
+        (
+            create_active_user_empty_permissions(True),
+            create_active_user_with_permissions(True),
+            "pending",
+        ),
+    ],
+)
+def test_service_join_request_approved_flash_message(
+    client_request,
+    service_one,
+    mock_get_organisation_by_domain,
+    mock_requester,
+    mock_get_service_join_request_status_data,
+    mock_get_template_folders,
+    api_user_active,
+    mocker,
+):
+    request_id = sample_uuid()
+    mocker.patch("app.user_api_client.get_user", return_value=mock_requester)
+    mocker.patch("app.models.user.InvitedUsers._get_items", return_value=[])
+    mocker.patch("app.user_api_client.get_users_for_service", return_value=[api_user_active])
+
+    mocker.patch("app.service_api_client.update_service_join_requests")
+
+    service_one["organisation"] = ORGANISATION_ID
+    mocker.patch(
+        "app.organisations_client.get_organisation",
+        return_value=organisation_json(id_=ORGANISATION_ID, can_ask_to_join_a_service=True),
+    )
+
+    page = client_request.post(
+        "main.service_join_request_choose_permissions",
+        service_id=SERVICE_ONE_ID,
+        request_id=request_id,
+        _data={"permissions_field": ["send_messages"], "folder_permissions": [], "login_authentication": "email_auth"},
+        _follow_redirects=True,
+    )
+
+    flash_banner = normalize_spaces(page.select_one("div.banner-default-with-tick").text)
+    assert flash_banner == f"{mock_requester['name']} has joined this service"

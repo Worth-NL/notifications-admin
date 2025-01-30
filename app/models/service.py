@@ -1,4 +1,5 @@
-from typing import Optional
+from datetime import datetime
+from typing import Any
 
 from flask import abort, current_app
 from notifications_utils.serialised_model import SerialisedModelCollection
@@ -9,6 +10,7 @@ from app.models.branding import EmailBranding, LetterBranding
 from app.models.contact_list import ContactLists
 from app.models.job import ImmediateJobs, PaginatedJobs, PaginatedUploads, ScheduledJobs
 from app.models.organisation import Organisation
+from app.models.unsubscribe_requests_report import UnsubscribeRequestsReports
 from app.models.user import InvitedUsers, User, Users
 from app.notify_client.api_key_api_client import api_key_api_client
 from app.notify_client.billing_api_client import billing_api_client
@@ -19,37 +21,42 @@ from app.notify_client.organisations_api_client import organisations_client
 from app.notify_client.service_api_client import service_api_client
 from app.notify_client.template_folder_api_client import template_folder_api_client
 from app.utils import get_default_sms_sender
-from app.utils.constants import SIGN_IN_METHOD_TEXT, SIGN_IN_METHOD_TEXT_OR_EMAIL
+from app.utils.constants import (
+    SERVICE_JOIN_REQUEST_APPROVED,
+    SERVICE_JOIN_REQUEST_CANCELLED,
+    SERVICE_JOIN_REQUEST_PENDING,
+    SERVICE_JOIN_REQUEST_REJECTED,
+    SIGN_IN_METHOD_TEXT,
+    SIGN_IN_METHOD_TEXT_OR_EMAIL,
+)
 from app.utils.templates import get_template as get_template_as_rich_object
 
 
 class Service(JSONModel):
-    ALLOWED_PROPERTIES = {
-        "active",
-        "billing_contact_email_addresses",
-        "billing_contact_names",
-        "billing_reference",
-        "contact_link",
-        "count_as_live",
-        "custom_email_sender_name",
-        "email_sender_local_part",
-        "go_live_at",
-        "has_active_go_live_request",
-        "id",
-        "inbound_api",
-        "email_message_limit",
-        "sms_message_limit",
-        "letter_message_limit",
-        "rate_limit",
-        "name",
-        "notes",
-        "prefix_sms",
-        "purchase_order_number",
-        "service_callback_api",
-        "volume_email",
-        "volume_sms",
-        "volume_letter",
-    }
+    active: bool
+    billing_contact_email_addresses: str
+    billing_contact_names: str
+    billing_reference: str
+    contact_link: str
+    count_as_live: bool
+    custom_email_sender_name: str
+    email_sender_local_part: str
+    go_live_at: datetime
+    has_active_go_live_request: bool
+    id: Any
+    inbound_api: Any
+    email_message_limit: int
+    sms_message_limit: int
+    letter_message_limit: int
+    rate_limit: int
+    name: str
+    notes: str
+    prefix_sms: bool
+    purchase_order_number: str
+    service_callback_api: Any
+    volume_email: int
+    volume_sms: int
+    volume_letter: int
 
     __sort_attribute__ = "name"
 
@@ -68,6 +75,7 @@ class Service(JSONModel):
         "international_letters",
         "international_sms",
         "upload_document",
+        "sms_to_uk_landlines",
     )
 
     @classmethod
@@ -75,8 +83,12 @@ class Service(JSONModel):
         return cls(service_api_client.get_service(service_id)["data"])
 
     @property
-    def permissions(self):
+    def _permissions(self):
         return self._dict.get("permissions", self.TEMPLATE_TYPES)
+
+    @property
+    def permissions(self):
+        raise NotImplementedError('Use Service.has_permission("…") instead')
 
     @property
     def billing_details(self):
@@ -107,7 +119,7 @@ class Service(JSONModel):
         )
 
     def force_permission(self, permission, on=False):
-        permissions, permission = set(self.permissions), {permission}
+        permissions, permission = set(self._permissions), {permission}
 
         return self.update_permissions(
             permissions | permission if on else permissions - permission,
@@ -127,7 +139,7 @@ class Service(JSONModel):
     def has_permission(self, permission):
         if permission not in self.ALL_PERMISSIONS:
             raise KeyError(f"{permission} is not a service permission")
-        return permission in self.permissions
+        return permission in self._permissions
 
     def get_page_of_jobs(self, page):
         return PaginatedJobs(self.id, page=page)
@@ -229,7 +241,6 @@ class Service(JSONModel):
 
     def get_template_with_user_permission_or_403(self, template_id, user, **kwargs):
         template = self.get_template(template_id, **kwargs)
-
         self.get_template_folder_with_user_permission_or_403(template.get_raw("folder"), user)
 
         return template
@@ -432,7 +443,7 @@ class Service(JSONModel):
             "days_of_retention", current_app.config["ACTIVITY_STATS_LIMIT_DAYS"]
         )
 
-    def get_consistent_data_retention_period(self) -> Optional[int]:
+    def get_consistent_data_retention_period(self) -> int | None:
         """If the service's data retention periods are all the same, returns that period. Otherwise returns None."""
         consistent_data_retention = (
             self.get_days_of_retention("email")
@@ -606,7 +617,7 @@ class Service(JSONModel):
 
     @property
     def sign_in_method(self) -> str:
-        if "email_auth" in self.permissions:
+        if self.has_permission("email_auth"):
             return SIGN_IN_METHOD_TEXT_OR_EMAIL
 
         return SIGN_IN_METHOD_TEXT
@@ -615,6 +626,61 @@ class Service(JSONModel):
     def email_sender_name(self) -> str:
         return self.custom_email_sender_name or self.name
 
+    @property
+    def unsubscribe_request_reports_summary(self):
+        return UnsubscribeRequestsReports(self.id)
+
+    @property
+    def unsubscribe_requests_statistics(self) -> dict:
+        return service_api_client.get_unsubscribe_request_statistics(self.id)
+
+    @property
+    def unsubscribe_requests_count(self) -> int:
+        return self.unsubscribe_requests_statistics["unsubscribe_requests_count"]
+
+    @property
+    def datetime_of_latest_unsubscribe_request(self) -> str | None:
+        return self.unsubscribe_requests_statistics["datetime_of_latest_unsubscribe_request"]
+
 
 class Services(SerialisedModelCollection):
     model = Service
+
+
+class ServiceJoinRequest(JSONModel):
+    id: Any
+    requester: Any
+    service_id: Any
+    created_at: datetime
+    status_changed_at: datetime
+    status_changed_by: Any
+    reason: str
+    status: str
+    contacted_service_users: list[str]
+    requested_service: Any
+    permissions: list[str]
+
+    __sort_attribute__ = "id"
+
+    @property
+    def is_pending(self):
+        return self.status == SERVICE_JOIN_REQUEST_PENDING
+
+    @property
+    def is_approved(self):
+        return self.status == SERVICE_JOIN_REQUEST_APPROVED
+
+    @property
+    def is_rejected(self):
+        return self.status == SERVICE_JOIN_REQUEST_REJECTED
+
+    @property
+    def is_cancelled(self):
+        return self.status == SERVICE_JOIN_REQUEST_CANCELLED
+
+    @classmethod
+    def from_id(cls, request_id):
+        return cls(service_api_client.get_service_join_requests(request_id))
+
+    def update(self, **kwargs):
+        return service_api_client.update_service_join_requests(self.id, self.requester["id"], self.service_id, **kwargs)

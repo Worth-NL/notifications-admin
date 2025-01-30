@@ -39,6 +39,7 @@ def test_overview_page_change_links_for_regular_user(client_request):
     assert page.select_one(f'a[href="{url_for("main.user_profile_mobile_number")}"]')
     assert page.select_one(f'a[href="{url_for("main.user_profile_password")}"]')
     assert page.select_one(f'a[href="{url_for("main.user_profile_take_part_in_user_research")}"]')
+    assert page.select_one(f'a[href="{url_for("main.user_profile_get_emails_about_new_features")}"]')
 
     # only platform admins see this
     assert not page.select_one(f'a[href="{url_for("main.user_profile_security_keys")}"]')
@@ -46,7 +47,7 @@ def test_overview_page_change_links_for_regular_user(client_request):
 
 
 def test_overview_page_shows_disable_for_platform_admin(client_request, platform_admin_user, mocker):
-    mocker.patch("app.models.webauthn_credential.WebAuthnCredentials.client_method")
+    mocker.patch("app.models.webauthn_credential.WebAuthnCredentials._get_items")
     client_request.login(platform_admin_user)
     page = client_request.get("main.user_profile")
     assert page.select_one("h1").text.strip() == "Your profile"
@@ -66,17 +67,17 @@ def test_overview_page_shows_disable_for_platform_admin(client_request, platform
     ],
 )
 def test_overview_page_shows_security_keys_if_user_they_can_use_webauthn(
-    mocker,
     client_request,
     platform_admin_user,
     webauthn_credential,
     key_count,
     expected_row_text,
+    mocker,
 ):
     client_request.login(platform_admin_user)
     credentials = [webauthn_credential for _ in range(key_count)]
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=credentials,
     )
     page = client_request.get("main.user_profile")
@@ -85,7 +86,7 @@ def test_overview_page_shows_security_keys_if_user_they_can_use_webauthn(
 
 
 def test_should_show_name_page(client_request):
-    page = client_request.get(("main.user_profile_name"))
+    page = client_request.get("main.user_profile_name")
     assert page.select_one("h1").text.strip() == "Change your name"
 
 
@@ -113,7 +114,6 @@ def test_should_show_email_page(
 
 def test_should_redirect_after_email_change(
     client_request,
-    mock_login,
     mock_email_is_not_already_in_use,
 ):
     client_request.post(
@@ -232,7 +232,7 @@ def test_should_redirect_to_user_profile_when_user_confirms_email_link(
 def test_should_show_mobile_number_page(
     client_request,
 ):
-    page = client_request.get(("main.user_profile_mobile_number"))
+    page = client_request.get("main.user_profile_mobile_number")
     assert "Change your mobile number" in page.text
     assert "Delete your number" not in page.text
 
@@ -246,12 +246,10 @@ def test_change_your_mobile_number_page_shows_delete_link_if_user_on_email_auth(
     assert "Delete your number" in page.text
 
 
-def test_change_your_mobile_number_page_doesnt_show_delete_link_if_user_has_no_mobile_number(
-    client_request, api_user_active_email_auth, mocker
-):
+def test_change_your_mobile_number_page_doesnt_show_delete_link_if_user_has_no_mobile_number(client_request, mocker):
     user = create_user(id=fake_uuid, auth_type="email_auth", mobile_number=None)
     mocker.patch("app.user_api_client.get_user", return_value=user)
-    page = client_request.get(("main.user_profile_mobile_number"))
+    page = client_request.get("main.user_profile_mobile_number")
     assert "Change your mobile number" in page.text
     assert "Delete your number" not in page.text
 
@@ -395,7 +393,7 @@ def test_should_redirect_after_mobile_number_confirm(
 def test_should_show_password_page(
     client_request,
 ):
-    page = client_request.get(("main.user_profile_password"))
+    page = client_request.get("main.user_profile_password")
 
     assert page.select_one("h1").text.strip() == "Change your password"
 
@@ -497,16 +495,16 @@ def test_user_doesnt_see_security_keys_unless_they_can_use_webauthn(client_reque
 
 @freeze_time("2022-10-10")
 def test_should_show_security_keys_page(
-    mocker,
     client_request,
     platform_admin_user,
     webauthn_credential,
     webauthn_credential_2,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential, webauthn_credential_2],
     )
 
@@ -529,33 +527,33 @@ def test_should_show_security_keys_page(
 
 
 def test_get_key_from_list_of_keys(
-    mocker,
     webauthn_credential,
     webauthn_credential_2,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential, webauthn_credential_2],
     )
     assert WebAuthnCredentials(fake_uuid).by_id(webauthn_credential["id"]) == WebAuthnCredential(webauthn_credential)
 
 
 def test_should_show_manage_security_key_page(
-    mocker,
     client_request,
     platform_admin_user,
     webauthn_credential,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
     page = client_request.get(".user_profile_manage_security_key", key_id=webauthn_credential["id"])
-    assert page.select_one("h1").text.strip() == f'Manage ‘{webauthn_credential["name"]}’'
+    assert page.select_one("h1").text.strip() == f"Manage ‘{webauthn_credential['name']}’"
 
     assert page.select_one(".govuk-back-link").text.strip() == "Back"
     assert page.select_one(".govuk-back-link")["href"] == url_for(".user_profile_security_keys")
@@ -564,12 +562,16 @@ def test_should_show_manage_security_key_page(
 
 
 def test_manage_security_key_page_404s_when_key_not_found(
-    mocker, client_request, platform_admin_user, webauthn_credential, webauthn_credential_2
+    client_request,
+    platform_admin_user,
+    webauthn_credential,
+    webauthn_credential_2,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential_2],
     )
     client_request.get(
@@ -616,7 +618,7 @@ def test_should_redirect_after_change_of_security_key_name(
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
@@ -643,7 +645,7 @@ def test_user_profile_manage_security_key_should_not_call_api_if_key_name_stays_
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
@@ -663,20 +665,20 @@ def test_user_profile_manage_security_key_should_not_call_api_if_key_name_stays_
 
 
 def test_shows_delete_link_for_security_key(
-    mocker,
     client_request,
     platform_admin_user,
     webauthn_credential,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
     page = client_request.get(".user_profile_manage_security_key", key_id=webauthn_credential["id"])
-    assert page.select_one("h1").text.strip() == f'Manage ‘{webauthn_credential["name"]}’'
+    assert page.select_one("h1").text.strip() == f"Manage ‘{webauthn_credential['name']}’"
 
     link = page.select_one(".page-footer a")
     assert normalize_spaces(link.text) == "Delete"
@@ -687,7 +689,7 @@ def test_confirm_delete_security_key(client_request, platform_admin_user, webaut
     client_request.login(platform_admin_user)
 
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
@@ -726,7 +728,7 @@ def test_delete_security_key_handles_last_credential_error(
 ):
     client_request.login(platform_admin_user)
     mocker.patch(
-        "app.models.webauthn_credential.WebAuthnCredentials.client_method",
+        "app.models.webauthn_credential.WebAuthnCredentials._get_items",
         return_value=[webauthn_credential],
     )
 
@@ -755,7 +757,7 @@ def test_get_user_profile_take_part_in_user_research(
 ):
     active_user_with_permissions["take_part_in_research"] = take_part_in_research
     client_request.login(active_user_with_permissions)
-    page = client_request.get(("main.user_profile_take_part_in_user_research"))
+    page = client_request.get("main.user_profile_take_part_in_user_research")
     assert "Take part in user research" in page.text
     radios = page.select("input.govuk-radios__input")
     assert len(radios) == 2
@@ -776,6 +778,38 @@ def test_post_user_profile_take_part_in_user_research(client_request, mocker, ac
         _data={"enabled": False},
         _expected_status=302,
         _expected_redirect=url_for("main.user_profile"),
-    ),
+    )
 
     mock_update_consent.assert_called_once_with(active_user_with_permissions["id"], take_part_in_research=False)
+
+
+@pytest.mark.parametrize("receives_new_features_email", [True, False])
+def test_get_user_profile_get_emails_about_new_features(
+    client_request, active_user_with_permissions, receives_new_features_email
+):
+    active_user_with_permissions["receives_new_features_email"] = receives_new_features_email
+    client_request.login(active_user_with_permissions)
+    page = client_request.get("main.user_profile_get_emails_about_new_features")
+    assert "Get emails about new features" in page.text
+    radios = page.select("input.govuk-radios__input")
+    assert len(radios) == 2
+
+    checked_radio = page.select(".govuk-radios__item input[checked]")
+    assert len(checked_radio) == 1
+    assert checked_radio[0]["value"] == str(receives_new_features_email)
+
+
+def test_post_user_profile_get_emails_about_new_features(client_request, mocker, active_user_with_permissions):
+    active_user_with_permissions["receives_new_features_email"] = True
+    client_request.login(active_user_with_permissions)
+
+    mock_update = mocker.patch("app.user_api_client.update_user_attribute")
+
+    client_request.post(
+        ".user_profile_get_emails_about_new_features",
+        _data={"enabled": False},
+        _expected_status=302,
+        _expected_redirect=url_for("main.user_profile"),
+    )
+
+    mock_update.assert_called_once_with(active_user_with_permissions["id"], receives_new_features_email=False)

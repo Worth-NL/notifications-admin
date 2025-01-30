@@ -1,8 +1,16 @@
 {% extends "govuk_frontend_jinja/template.html"%}
-{% from "components/cookie-banner.html" import cookie_banner %}
+
+{% set cspNonce = request.csp_nonce %}
 
 {% block headIcons %}
+
   <link rel="shortcut icon" sizes="16x16 32x32 48x48" href="{{ asset_url('images/favicon-overheid.ico') }}" type="image/x-icon" />
+  <!-- TODO: alphagov-merge - check if we have these or if we need to add them ->
+  <link rel="icon" sizes="48x48" href="{{ asset_url('images/favicon.ico') }}">
+  <link rel="icon" sizes="any" href="{{ asset_url('images/favicon.svg') }}" type="image/svg+xml">
+  <link rel="mask-icon" href="{{ asset_url('images/govuk-icon-mask.svg') }}" color="#0b0c0c">
+  <link rel="apple-touch-icon" href="{{ asset_url('images/govuk-icon-180.png') }}">
+  <link rel="manifest" href="{{ asset_url('manifest.json') }}"> -->
 {% endblock %}
 
 {% block head %}
@@ -35,10 +43,6 @@
 {% block bodyStart %}
   {% block extra_javascripts_before_body %}
   {% endblock %}
-
-  {% block cookie_message %}
-    {{ cookie_banner() }}
-  {% endblock %}
 {% endblock %}
 
 {% block header %}
@@ -47,8 +51,7 @@
     "productName": "NotifyNL",
     "navigation": header_navigation.visible_header_nav(),
     "navigationClasses": "govuk-header__navigation--end",
-    "assetsPath": asset_path + "images",
-    "useTudorCrown": True
+    "assetsPath": asset_path + "images"
   }) }}
 {% endblock %}
 
@@ -136,7 +139,7 @@
 {% block bodyEnd %}
   {% block extra_javascripts %}
   {% endblock %}
-  <!--[if gt IE 8]><!-->
+
+  <script type="module" src="{{ asset_url('javascripts/all-esm.mjs') }}"></script>
   <script type="text/javascript" src="{{ asset_url('javascripts/all.js') }}"></script>
-  <!--<![endif]-->
 {% endblock %}

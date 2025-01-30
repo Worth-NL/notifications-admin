@@ -12,6 +12,7 @@ from tests.conftest import SERVICE_ONE_ID, do_mock_get_page_counts_for_letter, s
 def test_get_upload_letter(client_request):
     page = client_request.get("main.upload_letter", service_id=SERVICE_ONE_ID)
 
+    assert "Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
     assert page.select_one("h1").text == "Upload a letter"
     assert page.select_one("input.file-upload-field")
     assert page.select_one("input.file-upload-field")["accept"] == ".pdf"
@@ -27,18 +28,18 @@ def test_get_upload_letter(client_request):
     ),
 )
 def test_post_upload_letter_redirects_for_valid_file(
-    mocker,
     active_user_with_permissions,
     service_one,
     client_request,
     fake_uuid,
     extra_permissions,
     expected_allow_international,
+    mocker,
 ):
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     antivirus_mock = mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mock_sanitise = mocker.patch(
-        "app.template_previews.TemplatePreview.sanitise_letter",
+        "app.template_preview_client.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -105,11 +106,11 @@ def test_post_upload_letter_redirects_for_valid_file(
 
 
 def test_post_upload_letter_shows_letter_preview_for_valid_file(
-    mocker,
     active_user_with_permissions,
     service_one,
     client_request,
     fake_uuid,
+    mocker,
 ):
     letter_template = {
         "service": SERVICE_ONE_ID,
@@ -124,7 +125,7 @@ def test_post_upload_letter_shows_letter_preview_for_valid_file(
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mocker.patch(
-        "app.template_previews.TemplatePreview.sanitise_letter",
+        "app.template_preview_client.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -174,11 +175,11 @@ def test_post_upload_letter_shows_letter_preview_for_valid_file(
 
 
 def test_upload_international_letter_shows_preview_with_no_choice_of_postage(
-    mocker,
     active_user_with_permissions,
     service_one,
     client_request,
     fake_uuid,
+    mocker,
 ):
     letter_template = {
         "service": SERVICE_ONE_ID,
@@ -192,7 +193,7 @@ def test_upload_international_letter_shows_preview_with_no_choice_of_postage(
 
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch(
-        "app.template_previews.TemplatePreview.sanitise_letter",
+        "app.template_preview_client.sanitise_letter",
         return_value=Mock(
             content="The sanitised content",
             json=lambda: {"file": "VGhlIHNhbml0aXNlZCBjb250ZW50", "recipient_address": "The Queen"},
@@ -257,103 +258,202 @@ def test_letter_attachment_pages_404_for_non_letter_template(
     )
 
 
-@pytest.mark.parametrize(
-    "endpoint,kwargs",
-    [
-        ("main.upload_letter", {"service_id": SERVICE_ONE_ID}),
-        ("main.letter_template_attach_pages", {"service_id": SERVICE_ONE_ID, "template_id": sample_uuid()}),
-    ],
-)
-def test_uploading_a_pdf_shows_error_when_file_is_not_a_pdf(
-    client_request, service_one, mocker, endpoint, kwargs, mock_get_service_letter_template
+def test_uploading_a_letter_shows_error_when_file_is_not_a_pdf(
+    client_request, service_one, mocker, mock_get_service_letter_template
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
 
     with open("tests/non_spreadsheet_files/actually_a_png.csv", "rb") as file:
-        page = client_request.post(endpoint, **kwargs, _data={"file": file}, _expected_status=400)
-    assert page.select_one(".banner-dangerous h1").text == "Wrong file type"
-    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
-    assert page.select_one("input[type=file]")["accept"] == ".pdf"
+        page = client_request.post(
+            "main.upload_letter", service_id=SERVICE_ONE_ID, _data={"file": file}, _expected_status=400
+        )
+
+    assert "Error: Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
+    assert "The file must be a PDF" in error_summary.text
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Choose file"
 
 
-@pytest.mark.parametrize(
-    "endpoint,kwargs",
-    [
-        ("main.upload_letter", {"service_id": SERVICE_ONE_ID}),
-        ("main.letter_template_attach_pages", {"service_id": SERVICE_ONE_ID, "template_id": sample_uuid()}),
-    ],
-)
-def test_uploading_a_pdf_shows_error_when_no_file_uploaded(
-    client_request, service_one, endpoint, kwargs, mock_get_service_letter_template
+def test_uploading_a_letter_shows_error_when_no_file_uploaded(
+    client_request, service_one, mock_get_service_letter_template
 ):
-    page = client_request.post(endpoint, **kwargs, _data={"file": ""}, _expected_status=400)
-    assert page.select_one(".banner-dangerous p").text == "You need to choose a file to upload"
-    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+    page = client_request.post(
+        "main.upload_letter", service_id=SERVICE_ONE_ID, _data={"file": ""}, _expected_status=400
+    )
+
+    assert "Error: Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
+    assert "You need to choose a file to upload" in error_summary.text
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Choose file"
 
 
-@pytest.mark.parametrize(
-    "endpoint,kwargs",
-    [
-        ("main.upload_letter", {"service_id": SERVICE_ONE_ID}),
-        ("main.letter_template_attach_pages", {"service_id": SERVICE_ONE_ID, "template_id": sample_uuid()}),
-    ],
-)
-def test_uploading_a_pdf_shows_error_when_file_contains_virus(
-    mocker, client_request, service_one, endpoint, kwargs, mock_get_service_letter_template
+def test_uploading_a_letter_shows_error_when_file_contains_virus(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=False)
     mock_s3_backup = mocker.patch("app.main.views.uploads.backup_original_letter_to_s3")
 
     with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
-        page = client_request.post(endpoint, **kwargs, _data={"file": file}, _expected_status=400)
-    assert page.select_one(".banner-dangerous h1").text == "There is a problem"
-    assert page.select_one(".banner-dangerous p").text == "Your file contains a virus"
-    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+        page = client_request.post(
+            "main.upload_letter", service_id=SERVICE_ONE_ID, _data={"file": file}, _expected_status=400
+        )
+
+    assert "Error: Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
+    assert "This file contains a virus" in error_summary.text
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Choose file"
     mock_s3_backup.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    "endpoint,kwargs",
-    [
-        ("main.upload_letter", {"service_id": SERVICE_ONE_ID}),
-        ("main.letter_template_attach_pages", {"service_id": SERVICE_ONE_ID, "template_id": sample_uuid()}),
-    ],
-)
-def test_uploading_a_pdf_errors_when_file_is_too_big(
-    mocker, client_request, service_one, endpoint, kwargs, mock_get_service_letter_template
+def test_uploading_a_letter_errors_when_file_is_too_big(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
 
     with open("tests/test_pdf_files/big.pdf", "rb") as file:
-        page = client_request.post(endpoint, **kwargs, _data={"file": file}, _expected_status=400)
-    assert page.select_one(".banner-dangerous h1").text == "There is a problem"
-    assert page.select_one(".banner-dangerous p").text == "File must be smaller than 2MB"
-    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+        page = client_request.post(
+            "main.upload_letter", service_id=SERVICE_ONE_ID, _data={"file": file}, _expected_status=400
+        )
+
+    assert "Error: Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
+    assert "The file must be smaller than 2MB" in error_summary.text
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Choose file"
 
 
-@pytest.mark.parametrize(
-    "endpoint,kwargs",
-    [
-        ("main.upload_letter", {"service_id": SERVICE_ONE_ID}),
-        ("main.letter_template_attach_pages", {"service_id": SERVICE_ONE_ID, "template_id": sample_uuid()}),
-    ],
-)
-def test_post_choose_upload_file_when_file_is_malformed(
-    mocker, client_request, service_one, endpoint, kwargs, mock_get_service_letter_template
+def test_post_choose_upload_letter_when_file_is_malformed(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
 ):
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
 
     with open("tests/test_pdf_files/no_eof_marker.pdf", "rb") as file:
-        page = client_request.post(endpoint, **kwargs, _data={"file": file}, _expected_status=400)
+        page = client_request.post(
+            "main.upload_letter", service_id=SERVICE_ONE_ID, _data={"file": file}, _expected_status=400
+        )
+
+    assert "Error: Upload a letter – service one – GOV.UK Notify" in normalize_spaces(page.select_one("title").text)
+    error_summary = page.select_one(".govuk-error-summary")
+    assert "There is a problem" in error_summary.text
+    assert "Notify cannot read this PDF - save a new copy and try again" in error_summary.text
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Choose file"
+
+
+def test_uploading_a_letter_attachment_shows_error_when_file_is_not_a_pdf(
+    client_request, service_one, mocker, mock_get_service_letter_template
+):
+    mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
+
+    with open("tests/non_spreadsheet_files/actually_a_png.csv", "rb") as file:
+        page = client_request.post(
+            "main.letter_template_attach_pages",
+            service_id=SERVICE_ONE_ID,
+            template_id=sample_uuid(),
+            _data={"file": file},
+            _expected_status=400,
+        )
+    assert normalize_spaces(page.select_one(".govuk-error-summary__body").text) == "The file must be a PDF"
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+    assert page.select_one("input[type=file]")["accept"] == ".pdf"
+
+
+def test_uploading_a_letter_attachment_shows_error_when_no_file_uploaded(
+    client_request, service_one, mock_get_service_letter_template
+):
+    page = client_request.post(
+        "main.letter_template_attach_pages",
+        service_id=SERVICE_ONE_ID,
+        template_id=sample_uuid(),
+        _data={"file": ""},
+        _expected_status=400,
+    )
+    assert normalize_spaces(page.select_one(".govuk-error-summary__body").text) == "You need to choose a file to upload"
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+
+
+def test_uploading_a_letter_attachment_shows_error_when_file_contains_virus(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
+):
+    mocker.patch("app.extensions.antivirus_client.scan", return_value=False)
+    mock_s3_backup = mocker.patch("app.main.views.uploads.backup_original_letter_to_s3")
+
+    with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
+        page = client_request.post(
+            "main.letter_template_attach_pages",
+            service_id=SERVICE_ONE_ID,
+            template_id=sample_uuid(),
+            _data={"file": file},
+            _expected_status=400,
+        )
+    assert normalize_spaces(page.select_one(".govuk-error-summary__body").text) == "This file contains a virus"
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+    mock_s3_backup.assert_not_called()
+
+
+def test_uploading_a_letter_attachment_errors_when_file_is_too_big(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
+):
+    mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
+
+    with open("tests/test_pdf_files/big.pdf", "rb") as file:
+        page = client_request.post(
+            "main.letter_template_attach_pages",
+            service_id=SERVICE_ONE_ID,
+            template_id=sample_uuid(),
+            _data={"file": file},
+            _expected_status=400,
+        )
+    assert normalize_spaces(page.select_one(".govuk-error-summary__body").text) == "The file must be smaller than 2MB"
+    assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
+
+
+def test_post_choose_upload_letter_attachment_when_file_is_malformed(
+    client_request,
+    service_one,
+    mock_get_service_letter_template,
+    mocker,
+):
+    mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
+
+    with open("tests/test_pdf_files/no_eof_marker.pdf", "rb") as file:
+        page = client_request.post(
+            "main.letter_template_attach_pages",
+            service_id=SERVICE_ONE_ID,
+            template_id=sample_uuid(),
+            _data={"file": file},
+            _expected_status=400,
+        )
     assert page.select_one("div.banner-dangerous").find("h1").text == "There’s a problem with your file"
     assert (
         page.select_one("div.banner-dangerous").find("p").text
-        == "Notify cannot read this PDF.Save a new copy of your file and try again."
+        == "Notify cannot read this PDF - save a new copy and try again"
     )
     assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
 
 
-def test_post_upload_letter_with_invalid_file(mocker, client_request, fake_uuid):
+def test_post_upload_letter_with_invalid_file(
+    client_request,
+    fake_uuid,
+    mocker,
+):
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mock_s3_upload = mocker.patch("app.main.views.uploads.upload_letter_to_s3")
@@ -362,7 +462,7 @@ def test_post_upload_letter_with_invalid_file(mocker, client_request, fake_uuid)
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "content-outside-printable-area", "invalid_pages": [1]}
-    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_preview_client.sanitise_letter", return_value=mock_sanitise_response)
     mocker.patch("app.models.service.service_api_client.get_precompiled_template")
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
@@ -396,12 +496,15 @@ def test_post_upload_letter_with_invalid_file(mocker, client_request, fake_uuid)
         )
 
     mock_s3_backup.assert_not_called()
-    assert page.select_one("div.banner-dangerous h1")["data-error-type"] == "content-outside-printable-area"
     assert page.select_one("form").attrs["action"] == url_for("main.upload_letter", service_id=SERVICE_ONE_ID)
     assert normalize_spaces(page.select_one("input[type=file]")["data-button-text"]) == "Upload your file again"
 
 
-def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client_request, fake_uuid):
+def test_post_upload_letter_shows_letter_preview_for_invalid_file(
+    client_request,
+    fake_uuid,
+    mocker,
+):
     letter_template = {
         "service": SERVICE_ONE_ID,
         "template_type": "letter",
@@ -418,7 +521,7 @@ def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client
     mock_sanitise_response = Mock()
     mock_sanitise_response.raise_for_status.side_effect = RequestException(response=Mock(status_code=400))
     mock_sanitise_response.json = lambda: {"message": "template preview error", "recipient_address": "The Queen"}
-    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", return_value=mock_sanitise_response)
+    mocker.patch("app.template_preview_client.sanitise_letter", return_value=mock_sanitise_response)
     mocker.patch("app.models.service.service_api_client.get_precompiled_template", return_value=letter_template)
     mocker.patch(
         "app.main.views.uploads.get_letter_metadata",
@@ -455,15 +558,15 @@ def test_post_upload_letter_shows_letter_preview_for_invalid_file(mocker, client
 
 
 def test_post_upload_letter_does_not_upload_to_s3_if_template_preview_raises_unknown_error(
-    mocker,
     client_request,
     fake_uuid,
+    mocker,
 ):
     mocker.patch("uuid.uuid4", return_value=fake_uuid)
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     mock_s3 = mocker.patch("app.main.views.uploads.upload_letter_to_s3")
 
-    mocker.patch("app.template_previews.TemplatePreview.sanitise_letter", side_effect=RequestException())
+    mocker.patch("app.template_preview_client.sanitise_letter", side_effect=RequestException())
 
     with pytest.raises(RequestException):
         with open("tests/test_pdf_files/one_page_pdf.pdf", "rb") as file:
@@ -475,11 +578,11 @@ def test_post_upload_letter_does_not_upload_to_s3_if_template_preview_raises_unk
 
 
 def test_uploaded_letter_preview(
-    mocker,
     active_user_with_permissions,
     service_one,
     client_request,
     fake_uuid,
+    mocker,
 ):
     mocker.patch("app.models.service.service_api_client.get_precompiled_template")
     mocker.patch(
@@ -511,9 +614,9 @@ def test_uploaded_letter_preview(
 
 
 def test_uploaded_letter_preview_does_not_show_send_button_if_service_in_trial_mode(
-    mocker,
     client_request,
     fake_uuid,
+    mocker,
 ):
     mocker.patch("app.models.service.service_api_client.get_precompiled_template")
     mocker.patch(
@@ -542,7 +645,11 @@ def test_uploaded_letter_preview_does_not_show_send_button_if_service_in_trial_m
     assert len(page.select("form button")) == 0
 
 
-def test_uploaded_letter_preview_redirects_if_file_not_in_s3(mocker, client_request, fake_uuid):
+def test_uploaded_letter_preview_redirects_if_file_not_in_s3(
+    client_request,
+    fake_uuid,
+    mocker,
+):
     mocker.patch("app.main.views.uploads.get_letter_metadata", side_effect=LetterNotFoundError)
 
     client_request.get(
@@ -568,13 +675,12 @@ def test_uploaded_letter_preview_redirects_if_file_not_in_s3(mocker, client_requ
     ),
 )
 def test_uploaded_letter_preview_image_shows_overlay_when_content_outside_printable_area_on_a_page(
-    mocker,
     client_request,
-    mock_get_service,
     fake_uuid,
     invalid_pages,
     page_requested,
     overlay_expected,
+    mocker,
 ):
     mocker.patch(
         "app.main.views.uploads.get_letter_pdf_and_metadata",
@@ -587,11 +693,11 @@ def test_uploaded_letter_preview_image_shows_overlay_when_content_outside_printa
         ),
     )
     template_preview_mock_valid = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.get_png_for_valid_pdf_page",
+        "app.template_preview_client.get_png_for_valid_pdf_page",
         return_value=make_response("page.html", 200),
     )
     template_preview_mock_invalid = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.get_png_for_invalid_pdf_page",
+        "app.template_preview_client.get_png_for_invalid_pdf_page",
         return_value=make_response("page.html", 200),
     )
 
@@ -619,15 +725,14 @@ def test_uploaded_letter_preview_image_shows_overlay_when_content_outside_printa
     ],
 )
 def test_uploaded_letter_preview_image_does_not_show_overlay_if_no_content_outside_printable_area(
-    mocker,
     client_request,
-    mock_get_service,
     metadata,
     fake_uuid,
+    mocker,
 ):
     mocker.patch("app.main.views.uploads.get_letter_pdf_and_metadata", return_value=("pdf_file", metadata))
     template_preview_mock = mocker.patch(
-        "app.main.views.uploads.TemplatePreview.get_png_for_valid_pdf_page",
+        "app.template_preview_client.get_png_for_valid_pdf_page",
         return_value=make_response("page.html", 200),
     )
 
@@ -686,13 +791,13 @@ def test_uploaded_letter_preview_image_400s_for_bad_page_type(
     ),
 )
 def test_send_uploaded_letter_sends_letter_and_redirects_to_notification_page(
-    mocker,
     service_one,
     client_request,
     fake_uuid,
     address,
     post_data,
     expected_postage,
+    mocker,
 ):
     metadata = LetterMetadata(
         {
@@ -730,10 +835,10 @@ def test_send_uploaded_letter_sends_letter_and_redirects_to_notification_page(
 
 
 def test_send_uploaded_letter_redirects_if_file_not_in_s3(
-    mocker,
     client_request,
     fake_uuid,
     service_one,
+    mocker,
 ):
     mocker.patch("app.main.views.uploads.get_letter_metadata", side_effect=LetterNotFoundError)
 
@@ -760,11 +865,11 @@ def test_send_uploaded_letter_redirects_if_file_not_in_s3(
     ],
 )
 def test_send_uploaded_letter_when_service_does_not_have_correct_permissions(
-    mocker,
     service_one,
     client_request,
     permissions,
     fake_uuid,
+    mocker,
 ):
     mocker.patch("app.main.views.uploads.get_letter_pdf_and_metadata", return_value=("file", {"status": "valid"}))
     mock_send = mocker.patch("app.main.views.uploads.notification_api_client.send_precompiled_letter")
@@ -782,10 +887,10 @@ def test_send_uploaded_letter_when_service_does_not_have_correct_permissions(
 
 
 def test_send_uploaded_letter_when_metadata_states_pdf_is_invalid(
-    mocker,
     service_one,
     client_request,
     fake_uuid,
+    mocker,
 ):
     mock_send = mocker.patch("app.main.views.uploads.notification_api_client.send_precompiled_letter")
     mocker.patch(

@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -19,7 +20,7 @@ INV_PARENT_FOLDER_ID = "7e979e79-d970-43a5-ac69-b625a8d147b0"
 VIS_PARENT_FOLDER_ID = "bbbb222b-2b22-2b22-222b-b222b22b2222"
 
 
-def test_get_user_phone_number_when_only_inbound_exists(mocker):
+def test_get_user_phone_number_when_only_inbound_exists(notify_admin, mocker):
     mock_get_inbound_sms = mocker.patch(
         "app.main.views.conversation.service_api_client.get_inbound_sms_by_id",
         return_value={"user_number": "4407900900123", "notify_number": "07900000002"},
@@ -33,7 +34,7 @@ def test_get_user_phone_number_when_only_inbound_exists(mocker):
     assert mock_get_notification.called is False
 
 
-def test_get_user_phone_number_when_only_outbound_exists(mocker):
+def test_get_user_phone_number_when_only_outbound_exists(notify_admin, mocker):
     mock_get_inbound_sms = mocker.patch(
         "app.main.views.conversation.service_api_client.get_inbound_sms_by_id",
         side_effect=HTTPError(response=Mock(status_code=404)),
@@ -46,7 +47,7 @@ def test_get_user_phone_number_when_only_outbound_exists(mocker):
     mock_get_notification.assert_called_once_with("service", "notification")
 
 
-def test_get_user_phone_number_raises_if_both_api_requests_fail(mocker):
+def test_get_user_phone_number_raises_if_both_api_requests_fail(notify_admin, mocker):
     mock_get_inbound_sms = mocker.patch(
         "app.main.views.conversation.service_api_client.get_inbound_sms_by_id",
         side_effect=HTTPError(response=Mock(status_code=404)),
@@ -84,7 +85,7 @@ def test_view_conversation(
         personalisation={"name": "Jo"},
         redact_personalisation=outbound_redacted,
     )
-    mock = mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mock = mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.conversation",
@@ -171,7 +172,6 @@ def test_view_conversation_updates(
     client_request,
     mocker,
     fake_uuid,
-    mock_get_inbound_sms_by_id_with_no_messages,
     mock_get_notification,
 ):
     mocker.patch(
@@ -197,14 +197,13 @@ def test_view_conversation_updates(
 def test_view_conversation_with_empty_inbound(
     client_request,
     mocker,
-    api_user_active,
     mock_get_inbound_sms_by_id_with_no_messages,
     mock_get_notification,
     mock_get_notifications_with_no_notifications,
     fake_uuid,
 ):
     mock_get_inbound_sms = mocker.patch(
-        "app.main.views.conversation.service_api_client.get_inbound_sms",
+        "app.models.notification.InboundSMSMessages._get_items",
         return_value={
             "has_next": False,
             "data": [
@@ -260,7 +259,6 @@ def test_conversation_reply_shows_link_to_add_templates_if_service_has_no_templa
     fake_uuid,
     mock_get_service_templates_when_no_templates_exist,
     mock_get_template_folders,
-    active_user_with_permissions,
 ):
     page = client_request.get(
         "main.conversation_reply",
@@ -279,10 +277,11 @@ def test_conversation_reply_shows_link_to_add_templates_if_service_has_no_templa
 def test_conversation_reply_shows_templates(
     client_request, fake_uuid, mocker, mock_get_template_folders, active_user_with_permissions, service_one
 ):
+    template_two_id = "5b35cf78-a07e-4618-a7d1-c328e53d63d8"
     all_templates = {
         "data": [
             _template("sms", "sms_template_one", parent=INV_PARENT_FOLDER_ID),
-            _template("sms", "sms_template_two"),
+            _template("sms", "sms_template_two", template_id=template_two_id),
             _template("sms", "sms_template_three", parent=VIS_PARENT_FOLDER_ID),
             _template("letter", "letter_template_one"),
         ]
@@ -304,33 +303,22 @@ def test_conversation_reply_shows_templates(
     )
 
     link = page.select(".template-list-item-without-ancestors")
-    assert normalize_spaces(link[0].text) == "Parent 2 - visible 1 template"
+    assert normalize_spaces(link[0].text) == "Folder Parent 2 - visible 1 template"
     assert normalize_spaces(link[1].text) == "sms_template_two Text message template"
 
-    assert (
-        link[0]
-        .select_one("a")["href"]
-        .startswith(
-            url_for(
-                "main.conversation_reply",
-                service_id=SERVICE_ONE_ID,
-                notification_id=fake_uuid,
-                from_folder=VIS_PARENT_FOLDER_ID,
-            )
-        )
+    assert link[0].select_one("a")["href"] == url_for(
+        "main.conversation_reply",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+        from_folder=VIS_PARENT_FOLDER_ID,
     )
 
-    assert (
-        link[1]
-        .select_one("a")["href"]
-        .startswith(
-            url_for(
-                "main.conversation_reply_with_template",
-                service_id=SERVICE_ONE_ID,
-                notification_id=fake_uuid,
-                template_id="",
-            )
-        )
+    assert link[1].select_one("a")["href"] == url_for(
+        "main.conversation_reply_with_template",
+        service_id=SERVICE_ONE_ID,
+        template_id=template_two_id,
+        notification_id=fake_uuid,
+        from_folder=None,
     )
 
 
@@ -372,7 +360,98 @@ def test_conversation_reply_redirects_with_phone_number_from_notification(
         assert normalize_spaces(page.select_one(element).text) == expected_text
 
 
-def test_get_user_phone_number_when_not_a_standard_phone_number(mocker):
+def test_conversation_reply_with_template_adds_values_to_session(
+    client_request,
+    fake_uuid,
+    mock_get_inbound_sms_by_id_with_no_messages,
+    mock_get_notification,
+    mock_get_service_template,
+):
+    client_request.get(
+        "main.conversation_reply_with_template",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+        template_id=fake_uuid,
+        from_folder="abcd",
+        _follow_redirects=True,
+    )
+
+    with client_request.session_transaction() as session:
+        assert session["recipient"] == "07123 456789"
+        assert session["placeholders"] == {"phone number": "07123 456789"}
+        assert session["from_inbound_sms_details"] == {"from_folder": "abcd", "notification_id": fake_uuid}
+
+
+def test_conversation_reply_back_link_when_viewing_top_level_templates(
+    client_request,
+    fake_uuid,
+    mock_get_template_folders,
+    mock_get_service_templates,
+):
+    page = client_request.get(
+        "main.conversation_reply",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+    )
+
+    assert page.select_one(".govuk-back-link")["href"] == url_for(
+        "main.conversation", service_id=SERVICE_ONE_ID, notification_id=fake_uuid
+    )
+
+
+def test_conversation_reply_back_link_when_viewing_nested_templates(
+    client_request,
+    fake_uuid,
+    active_user_with_permissions,
+    mock_get_template_folders,
+    mock_get_service_templates,
+):
+    sub_folder_id = uuid.uuid4()
+    parent_folder_id = uuid.uuid4()
+    template_folders = [
+        {
+            "id": str(parent_folder_id),
+            "name": "Parent folder",
+            "service_id": SERVICE_ONE_ID,
+            "parent_id": None,
+            "users_with_permission": [active_user_with_permissions["id"]],
+        },
+        {
+            "id": str(sub_folder_id),
+            "name": "Sub-folder",
+            "service_id": SERVICE_ONE_ID,
+            "parent_id": str(parent_folder_id),
+            "users_with_permission": [active_user_with_permissions["id"]],
+        },
+    ]
+    mock_get_template_folders.return_value = template_folders
+
+    # The back link when viewing a sub-folder takes you to the parent folder
+    page = client_request.get(
+        "main.conversation_reply",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+        from_folder=str(sub_folder_id),
+    )
+    assert page.select_one(".govuk-back-link")["href"] == url_for(
+        "main.conversation_reply",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+        from_folder=str(parent_folder_id),
+    )
+    # The back link when viewing a top-level folder takes you to the top-level templates page
+    page = client_request.get(
+        "main.conversation_reply",
+        service_id=SERVICE_ONE_ID,
+        notification_id=fake_uuid,
+        from_folder=str(parent_folder_id),
+    )
+    assert page.select_one(".govuk-back-link")["href"] == url_for(
+        "main.conversation_reply", service_id=SERVICE_ONE_ID, notification_id=fake_uuid
+    )
+
+
+def test_get_user_phone_number_when_not_a_standard_phone_number(notify_admin, mocker):
     mocker.patch(
         "app.main.views.conversation.service_api_client.get_inbound_sms_by_id",
         return_value={"user_number": "ALPHANUM3R1C", "notify_number": "07900000002"},

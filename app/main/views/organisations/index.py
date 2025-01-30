@@ -115,7 +115,7 @@ def add_organisation_from_nhs_local_service(service_id):
         organisation_choices=[
             (organisation.id, organisation.name)
             for organisation in sorted(AllOrganisations())
-            if organisation.organisation_type == Organisation.TYPE_NHS_LOCAL
+            if organisation.organisation_type == Organisation.TYPE_NHS_LOCAL and organisation.active
         ]
     )
 
@@ -191,9 +191,7 @@ def download_organisation_usage_report(org_id):
         {
             "Content-Type": "text/csv; charset=utf-8",
             "Content-Disposition": (
-                "inline;"
-                'filename="{} organisation usage report for year {}'
-                ' - generated on {}.csv"'.format(
+                'inline;filename="{} organisation usage report for year {} - generated on {}.csv"'.format(
                     current_organisation.name, selected_year, datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                 )
             ),
@@ -409,6 +407,7 @@ def edit_organisation_domains(org_id):
                 return render_template(
                     "views/organisations/organisation/settings/edit-domains.html",
                     form=form,
+                    error_summary_enabled=True,
                 )
             else:
                 raise e
@@ -420,6 +419,7 @@ def edit_organisation_domains(org_id):
     return render_template(
         "views/organisations/organisation/settings/edit-domains.html",
         form=form,
+        error_summary_enabled=True,
     )
 
 
@@ -547,7 +547,7 @@ def archive_organisation(org_id):
                 raise e
 
         flash(f"‘{current_organisation.name}’ was deleted", "default_with_tick")
-        return redirect(url_for(".choose_account"))
+        return redirect(url_for(".your_services"))
 
     flash(
         f"Are you sure you want to delete ‘{current_organisation.name}’? There’s no way to undo this.",

@@ -1,8 +1,12 @@
+from contextvars import ContextVar
 from datetime import datetime
-from typing import Optional
 
+from flask import current_app
 from notifications_utils.clients.redis import daily_limit_cache_key
+from notifications_utils.local_vars import LazyLocalGetter
+from werkzeug.local import LocalProxy
 
+from app import memo_resetters
 from app.constants import LetterLanguageOptions
 from app.extensions import redis_client
 from app.notify_client import NotifyAdminAPIClient, _attach_current_user, cache
@@ -15,6 +19,7 @@ ALLOWED_TEMPLATE_ATTRIBUTES = {
     "subject",
     "letter_welsh_subject",
     "letter_welsh_content",
+    "has_unsubscribe_link",
 }
 
 
@@ -149,10 +154,6 @@ class ServiceAPIClient(NotifyAdminAPIClient):
             count_as_live=count_as_live,
         )
 
-    # This method is not cached because it calls through to one which is
-    def update_service_with_properties(self, service_id, properties):
-        return self.update_service(service_id, **properties)
-
     @cache.delete("service-{service_id}")
     @cache.delete_by_pattern("service-{service_id}-template*")
     def archive_service(self, service_id, cached_service_user_ids):
@@ -173,15 +174,17 @@ class ServiceAPIClient(NotifyAdminAPIClient):
     @cache.delete("service-{service_id}-templates")
     def create_service_template(
         self,
+        *,
         name,
         type_,
         content,
         service_id,
         subject=None,
         parent_folder_id=None,
-        letter_languages: Optional[LetterLanguageOptions] = None,
+        letter_languages: LetterLanguageOptions | None = None,
         letter_welsh_subject: str = None,
         letter_welsh_content: str = None,
+        has_unsubscribe_link: bool | None = None,
     ):
         """
         Create a service template.
@@ -191,7 +194,7 @@ class ServiceAPIClient(NotifyAdminAPIClient):
             "template_type": type_,
             "content": content,
             "service": service_id,
-            "process_type": "normal",
+            "has_unsubscribe_link": has_unsubscribe_link,
         }
         if subject:
             data.update({"subject": subject})
@@ -202,6 +205,10 @@ class ServiceAPIClient(NotifyAdminAPIClient):
                 "letter_languages": letter_languages,
                 "letter_welsh_subject": letter_welsh_subject,
                 "letter_welsh_content": letter_welsh_content,
+            }
+        if has_unsubscribe_link is not None:
+            data |= {
+                "has_unsubscribe_link": has_unsubscribe_link,
             }
         data = _attach_current_user(data)
         endpoint = f"/service/{service_id}/template"
@@ -329,6 +336,16 @@ class ServiceAPIClient(NotifyAdminAPIClient):
 
     def get_inbound_sms_summary(self, service_id):
         return self.get(f"/service/{service_id}/inbound-sms/summary")
+
+    @cache.delete("service-{service_id}")
+    @cache.delete_by_pattern("service-{service_id}-template-*")
+    def remove_service_inbound_sms(self, service_id, archive: bool):
+        return self.post(f"/service/{service_id}/inbound-sms/remove", data={"archive": archive})
+
+    def get_most_recent_inbound_number_usage_date(self, service_id):
+        return self.get(
+            f"/service/{service_id}/inbound-sms/most-recent-usage",
+        )
 
     @cache.delete("service-{service_id}")
     def create_service_inbound_api(self, service_id, url, bearer_token, user_id):
@@ -497,6 +514,26 @@ class ServiceAPIClient(NotifyAdminAPIClient):
         count = redis_client.get(daily_limit_cache_key(service_id, notification_type=notification_type)) or 0
         return int(count)
 
+    @cache.set("service-{service_id}-unsubscribe-request-reports-summary")
+    def get_unsubscribe_reports_summary(self, service_id):
+        return self.get(f"service/{service_id}/unsubscribe-request-reports-summary")
+
+    @cache.delete("service-{service_id}-unsubscribe-request-reports-summary")
+    @cache.delete("service-{service_id}-unsubscribe-request-statistics")
+    def process_unsubscribe_request_report(self, service_id, batch_id, data):
+        return self.post(f"service/{service_id}/process-unsubscribe-request-report/{batch_id}", data=data)
+
+    @cache.set("service-{service_id}-unsubscribe-request-statistics")
+    def get_unsubscribe_request_statistics(self, service_id):
+        return self.get(f"service/{service_id}/unsubscribe-request-statistics")
+
+    @cache.delete("service-{service_id}-unsubscribe-request-reports-summary")
+    def create_unsubscribe_request_report(self, service_id, data):
+        return self.post(f"service/{service_id}/create-unsubscribe-request-report", data)
+
+    def get_unsubscribe_request_report(self, service_id, batch_id):
+        return self.get(f"service/{service_id}/unsubscribe-request-report/{batch_id}")
+
     @classmethod
     def parse_edit_service_http_error(cls, http_error):
         """Inspect the HTTPError from a create_service/update_service call and return a human-friendly error message"""
@@ -516,5 +553,22 @@ class ServiceAPIClient(NotifyAdminAPIClient):
 
         return None
 
+    @cache.set("service-join-request-{request_id}")
+    def get_service_join_requests(self, request_id):
+        return self.get(f"/service/service-join-request/{request_id}")
 
-service_api_client = ServiceAPIClient()
+    @cache.delete("service-join-request-{request_id}")
+    @cache.delete("user-{requester_id}")
+    @cache.delete("service-{service_id}-template-folders")
+    def update_service_join_requests(self, request_id, requester_id, service_id, **kwargs):
+        data = dict(**kwargs)
+        return self.post(f"/service/update-service-join-request-status/{request_id}", data)
+
+
+_service_api_client_context_var: ContextVar[ServiceAPIClient] = ContextVar("service_api_client")
+get_service_api_client: LazyLocalGetter[ServiceAPIClient] = LazyLocalGetter(
+    _service_api_client_context_var,
+    lambda: ServiceAPIClient(current_app),
+)
+memo_resetters.append(lambda: get_service_api_client.clear())
+service_api_client = LocalProxy(get_service_api_client)

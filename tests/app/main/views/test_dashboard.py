@@ -141,6 +141,7 @@ def test_get_started(
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
@@ -166,6 +167,7 @@ def test_get_started_is_hidden_once_templates_exist(
     mock_get_service_templates,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
@@ -186,11 +188,11 @@ def test_get_started_is_hidden_once_templates_exist(
 
 def test_inbound_messages_not_visible_to_service_without_permissions(
     client_request,
-    mocker,
     service_one,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -210,12 +212,12 @@ def test_inbound_messages_not_visible_to_service_without_permissions(
 
 def test_inbound_messages_shows_count_of_messages_when_there_are_messages(
     client_request,
-    mocker,
     service_one,
     mock_get_service_templates_when_no_templates_exist,
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -234,12 +236,12 @@ def test_inbound_messages_shows_count_of_messages_when_there_are_messages(
 
 def test_inbound_messages_shows_count_of_messages_when_there_are_no_messages(
     client_request,
-    mocker,
     service_one,
     mock_get_service_templates_when_no_templates_exist,
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -297,6 +299,8 @@ def test_inbox_showing_inbound_messages(
         "main.inbox_download",
         service_id=SERVICE_ONE_ID,
     )
+    assert len(page.select("thead th:first-child.govuk-\\!-width-two-thirds--static")) == 1
+    assert len(page.select("thead th:last-child.govuk-\\!-width-one-third--static")) == 1
 
 
 def test_get_inbound_sms_shows_page_links(
@@ -423,7 +427,7 @@ def test_download_inbox(
         service_id=SERVICE_ONE_ID,
     )
     assert response.headers["Content-Type"] == "text/csv; charset=utf-8"
-    assert response.headers["Content-Disposition"] == ("inline; " 'filename="Received text messages 2016-07-01.csv"')
+    assert response.headers["Content-Disposition"] == ('inline; filename="Received text messages 2016-07-01.csv"')
     assert response.get_data(as_text=True) == (
         "Phone number,Message,Received\r\n"
         "07900 900000,message-1,2016-07-01 13:00\r\n"
@@ -450,14 +454,14 @@ def test_download_inbox(
     ],
 )
 def test_download_inbox_strips_formulae(
-    mocker,
     client_request,
     fake_uuid,
     message_content,
     expected_cell,
+    mocker,
 ):
     mocker.patch(
-        "app.service_api_client.get_inbound_sms",
+        "app.models.notification.InboundSMSMessages._get_items",
         return_value={
             "has_next": False,
             "data": [
@@ -480,11 +484,11 @@ def test_download_inbox_strips_formulae(
 
 def test_returned_letters_not_visible_if_service_has_no_returned_letters(
     client_request,
-    mocker,
     service_one,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -516,6 +520,7 @@ def test_returned_letters_shows_count_of_recently_returned_letters(
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -561,6 +566,7 @@ def test_returned_letters_only_counts_recently_returned_letters(
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -585,12 +591,87 @@ def test_returned_letters_only_counts_recently_returned_letters(
     assert banner["href"] == url_for("main.returned_letter_summary", service_id=SERVICE_ONE_ID)
 
 
+@pytest.mark.parametrize(
+    "last_request_date, count, expected_message",
+    (
+        ("2024-07-16", 1, "1 email unsubscribe request latest report yesterday"),
+        ("2024-07-16", 250, "250 email unsubscribe requests latest report yesterday"),
+        ("2024-07-13", 70, "70 email unsubscribe requests latest report 4 days ago"),
+        ("2024-07-06", 1234, "1,234 email unsubscribe requests latest report 11 days ago"),
+        ("2024-06-09", 133, "133 email unsubscribe requests latest report 1 month ago"),
+        ("2024-04-13", 412, "412 email unsubscribe requests latest report 3 months ago"),
+        ("2023-07-13", 163, "163 email unsubscribe requests latest report 1 year, 5 days ago"),
+    ),
+)
+@freeze_time("2024-07-17")
+def test_dashboard_shows_count_of_unsubscribe_requests(
+    count,
+    expected_message,
+    last_request_date,
+    client_request,
+    service_one,
+    mocker,
+    mock_get_service_templates_when_no_templates_exist,
+    mock_get_jobs,
+    mock_get_scheduled_job_stats,
+    mock_get_service_statistics,
+    mock_get_returned_letter_statistics_with_no_returned_letters,
+    mock_get_template_statistics,
+    mock_get_annual_usage_for_service,
+    mock_get_free_sms_fragment_limit,
+    mock_get_inbound_sms_summary,
+):
+    mocker.patch(
+        "app.service_api_client.get_unsubscribe_request_statistics",
+        return_value={
+            "unsubscribe_requests_count": count,
+            "datetime_of_latest_unsubscribe_request": last_request_date,
+        },
+    )
+
+    page = client_request.get(
+        "main.service_dashboard",
+        service_id=SERVICE_ONE_ID,
+    )
+    banner = page.select_one("#total-unsubscribe-requests")
+    assert normalize_spaces(banner.text) == expected_message
+    assert banner["href"] == url_for("main.unsubscribe_request_reports_summary", service_id=SERVICE_ONE_ID)
+
+
+def test_dashboard_shows_no_unsubscribe_requests_statistics_when_there_are_no_unsubscribe_requests(
+    client_request,
+    service_one,
+    mocker,
+    mock_get_service_templates_when_no_templates_exist,
+    mock_get_jobs,
+    mock_get_scheduled_job_stats,
+    mock_get_service_statistics,
+    mock_get_returned_letter_statistics_with_no_returned_letters,
+    mock_get_template_statistics,
+    mock_get_annual_usage_for_service,
+    mock_get_free_sms_fragment_limit,
+    mock_get_inbound_sms_summary,
+):
+    mocker.patch(
+        "app.service_api_client.get_unsubscribe_request_statistics",
+        return_value={},
+    )
+
+    page = client_request.get(
+        "main.service_dashboard",
+        service_id=SERVICE_ONE_ID,
+    )
+
+    assert not page.select("#total-unsubscribe-requests")
+
+
 def test_should_show_recent_templates_on_dashboard(
     client_request,
     mocker,
     mock_get_service_templates,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
@@ -650,6 +731,7 @@ def test_should_not_show_recent_templates_on_dashboard_if_only_one_template_used
     mock_get_service_templates,
     mock_has_no_jobs,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
@@ -693,6 +775,10 @@ def test_should_show_redirect_from_template_history(
         "main.template_history",
         service_id=SERVICE_ONE_ID,
         _expected_status=301,
+        _expected_redirect=url_for(
+            "main.template_usage",
+            service_id=SERVICE_ONE_ID,
+        ),
         **extra_args,
     )
 
@@ -795,6 +881,7 @@ def test_should_show_upcoming_jobs_on_dashboard(
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_annual_usage_for_service,
@@ -819,16 +906,17 @@ def test_should_show_upcoming_jobs_on_dashboard(
 
 
 def test_should_not_show_upcoming_jobs_on_dashboard_if_count_is_0(
-    mocker,
     client_request,
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     mocker.patch(
         "app.job_api_client.get_scheduled_job_stats",
@@ -847,17 +935,18 @@ def test_should_not_show_upcoming_jobs_on_dashboard_if_count_is_0(
 
 
 def test_should_not_show_upcoming_jobs_on_dashboard_if_service_has_no_jobs(
-    mocker,
     client_request,
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_no_jobs,
     mock_get_scheduled_job_stats,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     page = client_request.get(
         "main.service_dashboard",
@@ -897,6 +986,7 @@ def test_correct_font_size_for_big_numbers(
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
@@ -928,6 +1018,7 @@ def test_should_not_show_jobs_on_dashboard_for_users_with_uploads_page(
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_jobs,
     mock_get_scheduled_job_stats,
     mock_get_annual_usage_for_service,
@@ -994,7 +1085,10 @@ def test_usage_page(
 
 @freeze_time("2012-03-31 12:12:12")
 def test_usage_page_no_sms_spend(
-    mocker, client_request, mock_get_monthly_usage_for_service, mock_get_free_sms_fragment_limit
+    client_request,
+    mock_get_monthly_usage_for_service,
+    mock_get_free_sms_fragment_limit,
+    mocker,
 ):
     mocker.patch(
         "app.billing_api_client.get_annual_usage_for_service",
@@ -1054,13 +1148,13 @@ def test_usage_page_no_sms_spend(
 )
 @freeze_time("2012-03-31 12:12:12")
 def test_usage_page_font_size(
-    mocker,
     client_request,
     mock_get_monthly_usage_for_service,
     mock_get_free_sms_fragment_limit,
     annual_usage,
     expected_css_class,
     expected_item_count,
+    mocker,
 ):
     mocker.patch(
         "app.billing_api_client.get_annual_usage_for_service",
@@ -1143,10 +1237,10 @@ def test_usage_page_letter_breakdown_ordered_by_postage_and_rate(
 
 
 def test_usage_page_with_0_free_allowance(
-    mocker,
     client_request,
     mock_get_annual_usage_for_service,
     mock_get_monthly_usage_for_service,
+    mocker,
 ):
     mocker.patch(
         "app.billing_api_client.get_free_sms_fragment_limit_for_year",
@@ -1218,6 +1312,13 @@ def _test_dashboard_menu(client_request, mocker, usr, service, permissions):
     mocker.patch("app.user_api_client.get_user", return_value=usr)
     mocker.patch("app.user_api_client.get_user_by_email", return_value=usr)
     mocker.patch("app.service_api_client.get_service", return_value={"data": service})
+    mocker.patch(
+        "app.service_api_client.get_unsubscribe_request_statistics",
+        return_value={
+            "unsubscribe_requests_count": 250,
+            "datetime_of_latest_unsubscribe_request": "2024-07-14 09:36:17",
+        },
+    )
     client_request.login(usr)
     return client_request.get("main.service_dashboard", service_id=service["id"])
 
@@ -1232,6 +1333,7 @@ def test_menu_send_messages(
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_inbound_sms_summary,
     mock_get_free_sms_fragment_limit,
@@ -1271,6 +1373,7 @@ def test_menu_send_messages_when_service_does_not_have_upload_letters_permission
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_inbound_sms_summary,
     mock_get_free_sms_fragment_limit,
@@ -1297,6 +1400,7 @@ def test_menu_manage_service(
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
@@ -1332,6 +1436,7 @@ def test_menu_manage_api_keys(
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
@@ -1364,6 +1469,7 @@ def test_menu_all_services_for_platform_admin_user(
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
@@ -1380,7 +1486,6 @@ def test_menu_all_services_for_platform_admin_user(
 
 
 def test_route_for_service_permissions(
-    mocker,
     notify_admin,
     api_user_active,
     service_one,
@@ -1390,10 +1495,12 @@ def test_route_for_service_permissions(
     mock_has_no_jobs,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     with notify_admin.test_request_context():
         validate_route_permission(
@@ -1439,16 +1546,17 @@ def test_aggregate_notifications_stats():
 
 
 def test_service_dashboard_updates_gets_dashboard_totals(
-    mocker,
     client_request,
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     mocker.patch(
         "app.main.views.dashboard.get_dashboard_totals",
@@ -1471,16 +1579,17 @@ def test_service_dashboard_updates_gets_dashboard_totals(
 
 
 def test_service_dashboard_totals_link_to_view_notifications(
-    mocker,
     client_request,
     mock_get_service_templates,
     mock_get_template_statistics,
     mock_get_service_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
     mock_get_inbound_sms_summary,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     mocker.patch(
         "app.main.views.dashboard.get_dashboard_totals",
@@ -1628,6 +1737,7 @@ def test_get_tuples_of_financial_years_defaults_to_2015():
 def test_org_breadcrumbs_do_not_show_if_service_has_no_org(
     client_request,
     mock_get_template_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
@@ -1640,14 +1750,15 @@ def test_org_breadcrumbs_do_not_show_if_service_has_no_org(
 
 
 def test_org_breadcrumbs_do_not_show_if_user_is_not_an_org_member(
-    mocker,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     active_caseworking_user,
     client_request,
     mock_get_template_folders,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     mock_get_api_keys,
+    mocker,
 ):
     # active_caseworking_user is not an org member
 
@@ -1663,15 +1774,16 @@ def test_org_breadcrumbs_do_not_show_if_user_is_not_an_org_member(
 
 
 def test_org_breadcrumbs_show_if_user_is_a_member_of_the_services_org(
-    mocker,
     mock_get_template_statistics,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     active_user_with_permissions,
     client_request,
+    mocker,
 ):
     # active_user_with_permissions (used by the client_request) is an org member
 
@@ -1695,15 +1807,16 @@ def test_org_breadcrumbs_show_if_user_is_a_member_of_the_services_org(
 
 
 def test_org_breadcrumbs_do_not_show_if_user_is_a_member_of_the_services_org_but_service_is_in_trial_mode(
-    mocker,
     mock_get_template_statistics,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_free_sms_fragment_limit,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     active_user_with_permissions,
     client_request,
+    mocker,
 ):
     # active_user_with_permissions (used by the client_request) is an org member
 
@@ -1720,15 +1833,16 @@ def test_org_breadcrumbs_do_not_show_if_user_is_a_member_of_the_services_org_but
 
 
 def test_org_breadcrumbs_show_if_user_is_platform_admin(
-    mocker,
     mock_get_template_statistics,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
     mock_get_free_sms_fragment_limit,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     platform_admin_user,
     client_request,
+    mocker,
 ):
     service_one_json = service_json(SERVICE_ONE_ID, users=[platform_admin_user["id"]], organisation_id=ORGANISATION_ID)
 
@@ -1750,15 +1864,16 @@ def test_org_breadcrumbs_show_if_user_is_platform_admin(
 
 
 def test_breadcrumb_shows_if_service_is_suspended(
-    mocker,
     mock_get_template_statistics,
     mock_get_service_templates_when_no_templates_exist,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_free_sms_fragment_limit,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     platform_admin_user,
     client_request,
+    mocker,
 ):
     service_one_json = service_json(SERVICE_ONE_ID, active=False)
     client_request.login(platform_admin_user, service=service_one_json)
@@ -1779,6 +1894,7 @@ def test_service_dashboard_shows_usage(
     client_request,
     service_one,
     mock_get_service_templates,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_has_no_jobs,
     mock_get_annual_usage_for_service,
@@ -1790,19 +1906,20 @@ def test_service_dashboard_shows_usage(
     page = client_request.get("main.service_dashboard", service_id=SERVICE_ONE_ID)
 
     assert normalize_spaces(page.select_one("[data-key=usage]").text) == (
-        "Unlimited free email allowance " "£29.85 spent on text messages " "£30.00 spent on letters"
+        "Unlimited free email allowance £29.85 spent on text messages £30.00 spent on letters"
     )
 
 
 def test_service_dashboard_shows_free_allowance(
-    mocker,
     client_request,
     service_one,
     mock_get_service_templates,
     mock_get_template_statistics,
+    mock_get_unsubscribe_requests_statistics,
     mock_has_no_jobs,
     mock_get_free_sms_fragment_limit,
     mock_get_returned_letter_statistics_with_no_returned_letters,
+    mocker,
 ):
     mocker.patch(
         "app.billing_api_client.get_annual_usage_for_service",
@@ -1848,16 +1965,17 @@ def test_service_dashboard_shows_free_allowance(
     ),
 )
 def test_service_dashboard_shows_usage_in_correct_font_size(
-    mocker,
     client_request,
     service_one,
     mock_get_service_templates,
+    mock_get_unsubscribe_requests_statistics,
     mock_get_template_statistics,
     mock_has_no_jobs,
     mock_get_free_sms_fragment_limit,
     mock_get_returned_letter_statistics_with_no_returned_letters,
     annual_usage,
     expected_css_class,
+    mocker,
 ):
     mocker.patch(
         "app.billing_api_client.get_annual_usage_for_service",

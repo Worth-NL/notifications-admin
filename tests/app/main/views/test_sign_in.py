@@ -83,9 +83,9 @@ def test_redirect_to_sign_in_if_logged_in_from_other_browser(
         session["current_session_id"] = str(cookie_sess_id)
 
     client_request.get(
-        "main.choose_account",
+        "main.your_services",
         _expected_status=302,
-        _expected_redirect=url_for("main.sign_in", next="/accounts"),
+        _expected_redirect=url_for("main.sign_in", next="/your-services"),
     )
 
 
@@ -133,7 +133,6 @@ def test_process_sms_auth_sign_in_return_2fa_template(
     client_request,
     api_user_active,
     mock_send_verify_code,
-    mock_get_user,
     mock_get_user_by_email,
     mock_verify_password,
     email_address,

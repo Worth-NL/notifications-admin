@@ -1,5 +1,3 @@
-import sys
-
 import pytest
 
 from app.models import JSONModel
@@ -7,7 +5,7 @@ from app.models import JSONModel
 
 def test_looks_up_from_dict():
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = {"foo"}
+        foo: str
         __sort_attribute__ = "foo"
 
     assert Custom({"foo": "bar"}).foo == "bar"
@@ -15,7 +13,7 @@ def test_looks_up_from_dict():
 
 def test_raises_when_overriding_custom_properties():
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = {"foo"}
+        foo: str
         __sort_attribute__ = "foo"
 
         @property
@@ -25,12 +23,9 @@ def test_raises_when_overriding_custom_properties():
     with pytest.raises(AttributeError) as e:
         Custom({"foo": "NOPE"})
 
-    if sys.version_info < (3, 11):
-        assert str(e.value) == "can't set attribute"
-    else:
-        assert str(e.value) == (
-            "property 'foo' of 'test_raises_when_overriding_custom_properties.<locals>.Custom' object has no setter"
-        )
+    assert str(e.value) == (
+        "property 'foo' of 'test_raises_when_overriding_custom_properties.<locals>.Custom' object has no setter"
+    )
 
 
 @pytest.mark.parametrize(
@@ -42,11 +37,9 @@ def test_raises_when_overriding_custom_properties():
 )
 def test_model_raises_for_unknown_attributes(json_response):
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = set()
         __sort_attribute__ = None
 
     model = Custom(json_response)
-    assert model.ALLOWED_PROPERTIES == set()
 
     with pytest.raises(AttributeError) as e:
         model.foo  # noqa: B018
@@ -56,7 +49,7 @@ def test_model_raises_for_unknown_attributes(json_response):
 
 def test_model_raises_keyerror_if_item_missing_from_dict():
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = {"foo"}
+        foo: str
         __sort_attribute__ = "foo"
 
     with pytest.raises(AttributeError) as e:
@@ -74,7 +67,6 @@ def test_model_raises_keyerror_if_item_missing_from_dict():
 )
 def test_model_doesnt_swallow_attribute_errors(json_response):
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = set()
         __sort_attribute__ = None
 
         @property
@@ -89,9 +81,34 @@ def test_model_doesnt_swallow_attribute_errors(json_response):
 
 def test_dynamic_properties_are_introspectable():
     class Custom(JSONModel):
-        ALLOWED_PROPERTIES = {"foo", "bar", "baz"}
+        foo: str
+        bar: str
+        baz: str
         __sort_attribute__ = "foo"
 
     model = Custom({"foo": None, "bar": None, "baz": None})
 
-    assert dir(model)[-3:] == ["bar", "baz", "foo"]
+    for property_name in ["bar", "baz", "foo"]:
+        assert property_name in dir(model)
+
+    assert model.foo is None
+    assert model.bar is None
+    assert model.baz is None
+
+
+def test_attribute_inheritence():
+    class Parent1(JSONModel):
+        foo: str
+
+    class Parent2(JSONModel):
+        bar: str
+
+    class Child(Parent1, Parent2):
+        __sort_attribute__ = "foo"
+        baz: str
+
+    instance = Child({"foo": 1, "bar": 2, "baz": 3})
+
+    assert instance.foo == "1"
+    assert instance.bar == "2"
+    assert instance.baz == "3"

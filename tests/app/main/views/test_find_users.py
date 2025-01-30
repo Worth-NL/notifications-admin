@@ -17,6 +17,7 @@ def test_user_information_page_shows_information_about_user(
     client_request.login(platform_admin_user)
     user_service_one = uuid.uuid4()
     user_service_two = uuid.uuid4()
+    user_organisation = uuid.uuid4()
     mocker.patch(
         "app.user_api_client.get_user",
         return_value=user_json(name="Apple Bloom", services=[user_service_one, user_service_two]),
@@ -25,7 +26,9 @@ def test_user_information_page_shows_information_about_user(
     mocker.patch(
         "app.user_api_client.get_organisations_and_services_for_user",
         return_value={
-            "organisations": [],
+            "organisations": [
+                {"id": user_organisation, "name": "Nature org"},
+            ],
             "services": [
                 {"id": user_service_one, "name": "Fresh Orchard Juice", "restricted": True},
                 {"id": user_service_two, "name": "Nature Therapy", "restricted": False},
@@ -40,20 +43,24 @@ def test_user_information_page_shows_information_about_user(
     assert [normalize_spaces(p.text) for p in page.select("main p")] == [
         "test@gov.uk",
         "+447700900986",
-        "Text message code",
+        "Signs in with a text message code",
         "Last logged in just now",
+        "Does not want to receive new features email",
+        "Does not want to take part in user research",
     ]
 
     assert "0 failed login attempts" not in page.text
 
     assert [normalize_spaces(h2.text) for h2 in page.select("main h2")] == [
+        "Organisations",
         "Live services",
         "Trial mode services",
         "Authentication",
-        "Last login",
+        "Preferences",
     ]
 
     assert [normalize_spaces(a.text) for a in page.select("main li a")] == [
+        "Nature org",
         "Nature Therapy",
         "Fresh Orchard Juice",
     ]
@@ -173,10 +180,10 @@ def test_user_information_page_shows_archive_link_for_active_users(
 
 
 def test_user_information_page_does_not_show_archive_link_for_inactive_users(
-    mocker,
     client_request,
     platform_admin_user,
     mock_get_organisations_and_services_for_user,
+    mocker,
 ):
     inactive_user_id = uuid.uuid4()
     inactive_user = user_json(id_=inactive_user_id, state="inactive")

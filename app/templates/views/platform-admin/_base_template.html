@@ -5,10 +5,12 @@
 {% block main %}
 <div class="govuk-width-container {{ mainClasses }}">
     <div class="navigation-service">
-      <div class="navigation-service-name govuk-!-font-weight-bold">
-        Platform admin
+      <div class="navigation-service__container">
+        <div class="navigation-service-name govuk-!-font-weight-bold">
+          Platform admin
+        </div>
       </div>
-      <a href="{{ url_for('main.choose_account') }}" class="govuk-link govuk-link--no-visited-state govuk-link--no-underline navigation-service-switch">Switch service</a>
+      <a href="{{ url_for('main.your_services') }}" class="govuk-link govuk-link--no-visited-state govuk-link--no-underline navigation-service-switch">Switch service</a>
     </div>
     <div class="govuk-grid-row">
       <div class="govuk-grid-column-one-quarter">
@@ -16,9 +18,7 @@
           <ul class="govuk-list">
           {% for link_text, url in [
             ('Search', url_for('main.platform_admin_search')),
-            ('Summary', url_for('main.platform_admin')),
-            ('Live services', url_for('main.live_services')),
-            ('Trial mode services', url_for('main.trial_services')),
+            <!-- TODO: alphagov-merge - other options removed because of commit https://github.com/alphagov/notifications-admin/commit/2b8366942ac0f6bcc445533cec013fd7bed5648c#diff-a1c8d24b22d4478fe71f75fd43b71b18dd82aae97bc63de84473a6da1902909b -->
             ('Organisations', url_for('main.organisations')),
             ('Providers', url_for('main.view_providers')),
             ('Reports', url_for('main.platform_admin_reports')),

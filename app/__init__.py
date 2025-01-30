@@ -1,5 +1,7 @@
 import os
 import pathlib
+import secrets
+from collections.abc import Callable
 from time import monotonic
 
 import jinja2
@@ -24,25 +26,32 @@ from flask_wtf.csrf import CSRFError
 from gds_metrics import GDSMetrics
 from itsdangerous import BadSignature
 from notifications_python_client.errors import HTTPError
-from notifications_utils import logging, request_helper
+from notifications_utils import request_helper
+from notifications_utils.asset_fingerprinter import asset_fingerprinter
+from notifications_utils.eventlet import EventletTimeout
 from notifications_utils.formatters import (
     formatted_list,
     get_lines_with_normalised_whitespace,
 )
-from notifications_utils.recipients import format_phone_number_human_readable
+from notifications_utils.logging import flask as utils_logging
+from notifications_utils.recipient_validation.phone_number import format_phone_number_human_readable
 from notifications_utils.safe_string import make_string_safe_for_email_local_part, make_string_safe_for_id
 from notifications_utils.sanitise_text import SanitiseASCII
 from werkzeug.exceptions import HTTPException as WerkzeugHTTPException
 from werkzeug.exceptions import abort
 from werkzeug.local import LocalProxy
 
+# must be declared before rest of app is imported to satisfy circular import
+# ruff: noqa: E402
+memo_resetters: list[Callable] = []
+
 from app import proxy_fix, webauthn_server
-from app.asset_fingerprinter import asset_fingerprinter
 from app.commands import setup_commands
-from app.config import configs
-from app.extensions import antivirus_client, redis_client, zendesk_client
+from app.config import Config, configs
+from app.extensions import antivirus_client, redis_client, zendesk_client  # noqa
 from app.formatters import (
     convert_to_boolean,
+    extract_path_from_url,
     format_auth_type,
     format_billions,
     format_date,
@@ -69,8 +78,8 @@ from app.formatters import (
     format_thousands,
     format_time,
     format_yes_no,
+    insert_wbr,
     iteration_count,
-    linkable_name,
     message_count,
     message_count_label,
     message_count_noun,
@@ -78,6 +87,7 @@ from app.formatters import (
     recipient_count,
     recipient_count_label,
     redact_mobile_number,
+    sentence_case,
     valid_phone_number,
 )
 from app.models.organisation import Organisation
@@ -91,37 +101,42 @@ from app.navigation import (
     PlatformAdminNavigation,
 )
 from app.notify_client import InviteTokenError
-from app.notify_client.api_key_api_client import api_key_api_client
-from app.notify_client.billing_api_client import billing_api_client
-from app.notify_client.complaint_api_client import complaint_api_client
-from app.notify_client.contact_list_api_client import contact_list_api_client
-from app.notify_client.email_branding_client import email_branding_client
-from app.notify_client.events_api_client import events_api_client
-from app.notify_client.inbound_number_client import inbound_number_client
-from app.notify_client.invite_api_client import invite_api_client
-from app.notify_client.job_api_client import job_api_client
-from app.notify_client.letter_attachment_client import letter_attachment_client
-from app.notify_client.letter_branding_client import letter_branding_client
-from app.notify_client.letter_jobs_client import letter_jobs_client
-from app.notify_client.letter_rate_api_client import letter_rate_api_client
-from app.notify_client.notification_api_client import notification_api_client
-from app.notify_client.org_invite_api_client import org_invite_api_client
-from app.notify_client.organisations_api_client import organisations_client
+from app.notify_client.api_key_api_client import api_key_api_client  # noqa
+from app.notify_client.billing_api_client import billing_api_client  # noqa
+from app.notify_client.complaint_api_client import complaint_api_client  # noqa
+from app.notify_client.contact_list_api_client import contact_list_api_client  # noqa
+from app.notify_client.email_branding_client import email_branding_client  # noqa
+from app.notify_client.events_api_client import events_api_client  # noqa
+from app.notify_client.inbound_number_client import inbound_number_client  # noqa
+from app.notify_client.invite_api_client import invite_api_client  # noqa
+from app.notify_client.job_api_client import job_api_client  # noqa
+from app.notify_client.letter_attachment_client import letter_attachment_client  # noqa
+from app.notify_client.letter_branding_client import letter_branding_client  # noqa
+from app.notify_client.letter_jobs_client import letter_jobs_client  # noqa
+from app.notify_client.letter_rate_api_client import letter_rate_api_client  # noqa
+from app.notify_client.notification_api_client import notification_api_client  # noqa
+from app.notify_client.org_invite_api_client import org_invite_api_client  # noqa
+from app.notify_client.organisations_api_client import organisations_client  # noqa
 from app.notify_client.performance_dashboard_api_client import (
-    performance_dashboard_api_client,
+    performance_dashboard_api_client,  # noqa
 )
-from app.notify_client.platform_admin_api_client import admin_api_client
-from app.notify_client.platform_stats_api_client import platform_stats_api_client
-from app.notify_client.provider_client import provider_client
-from app.notify_client.service_api_client import service_api_client
-from app.notify_client.status_api_client import status_api_client
-from app.notify_client.template_folder_api_client import template_folder_api_client
-from app.notify_client.template_statistics_api_client import template_statistics_client
-from app.notify_client.upload_api_client import upload_api_client
-from app.notify_client.user_api_client import user_api_client
+from app.notify_client.platform_admin_api_client import admin_api_client  # noqa
+from app.notify_client.protected_sender_id_api_client import protected_sender_id_api_client  # noqa
+from app.notify_client.provider_client import provider_client  # noqa
+from app.notify_client.service_api_client import service_api_client  # noqa
+from app.notify_client.sms_rate_client import sms_rate_api_client  # noqa
+from app.notify_client.status_api_client import status_api_client  # noqa
+from app.notify_client.template_folder_api_client import template_folder_api_client  # noqa
+from app.notify_client.template_statistics_api_client import template_statistics_client  # noqa
+from app.notify_client.unsubscribe_api_client import unsubscribe_api_client  # noqa
+from app.notify_client.upload_api_client import upload_api_client  # noqa
+from app.notify_client.user_api_client import user_api_client  # noqa
 from app.notify_session import NotifyAdminSessionInterface
 from app.s3_client.logo_client import logo_client
+from app.template_previews import template_preview_client  # noqa
 from app.url_converters import (
+    AgreementTypeConverter,
+    BrandingTypeConverter,
     LetterFileExtensionConverter,
     SimpleDateTypeConverter,
     TemplateTypeConverter,
@@ -152,7 +167,11 @@ navigation = {
 def create_app(application):
     notify_environment = os.environ["NOTIFY_ENVIRONMENT"]
 
-    application.config.from_object(configs[notify_environment])
+    if notify_environment in configs:
+        application.config.from_object(configs[notify_environment])
+    else:
+        application.config.from_object(Config)
+
     asset_fingerprinter._asset_root = application.config["ASSET_PATH"]
 
     init_app(application)
@@ -172,42 +191,13 @@ def create_app(application):
         login_manager,
         proxy_fix,
         request_helper,
-        # API clients
-        api_key_api_client,
-        billing_api_client,
-        contact_list_api_client,
-        complaint_api_client,
-        email_branding_client,
-        events_api_client,
-        inbound_number_client,
-        invite_api_client,
-        job_api_client,
-        letter_attachment_client,
-        letter_branding_client,
-        letter_jobs_client,
-        letter_rate_api_client,
-        notification_api_client,
-        org_invite_api_client,
-        organisations_client,
-        performance_dashboard_api_client,
-        platform_stats_api_client,
-        provider_client,
-        service_api_client,
-        status_api_client,
-        template_folder_api_client,
-        template_statistics_client,
-        upload_api_client,
-        user_api_client,
-        admin_api_client,
         # External API clients
-        antivirus_client,
         redis_client,
-        zendesk_client,
         logo_client,
     ):
         client.init_app(application)
 
-    logging.init_app(application)
+    utils_logging.init_app(application)
     webauthn_server.init_app(application)
 
     login_manager.login_view = "main.sign_in"
@@ -235,10 +225,10 @@ def init_app(application):
     application.after_request(useful_headers_after_request)
 
     # Load user first (as we want user_id to be available for all calls to API, which service+organisation might make.
+    application.before_request(make_nonce_before_request)
     application.before_request(load_user_id_before_request)
     application.before_request(load_service_before_request)
     application.before_request(load_organisation_before_request)
-    application.before_request(request_helper.check_proxy_header_before_request)
 
     application.session_interface = NotifyAdminSessionInterface()
 
@@ -278,7 +268,9 @@ def init_app(application):
         }
 
     application.url_map.converters["uuid"].to_python = lambda self, value: value.lower()
+    application.url_map.converters["agreement_type"] = AgreementTypeConverter
     application.url_map.converters["template_type"] = TemplateTypeConverter
+    application.url_map.converters["branding_type"] = BrandingTypeConverter
     application.url_map.converters["ticket_type"] = TicketTypeConverter
     application.url_map.converters["letter_file_extension"] = LetterFileExtensionConverter
     application.url_map.converters["simple_date"] = SimpleDateTypeConverter
@@ -290,6 +282,14 @@ def init_app(application):
     # false flips the behaviour so we still populate the endpoint args with the default values but don't do any
     # automatic redirects. We only make use of this in our old historical_redirects endpoint
     application.url_map.redirect_defaults = False
+
+
+def reset_memos():
+    """
+    Reset all memos registered in memo_resetters
+    """
+    for resetter in memo_resetters:
+        resetter()
 
 
 @login_manager.user_loader
@@ -343,24 +343,32 @@ def load_user_id_before_request():
     g.user_id = get_user_id_from_flask_login_session()
 
 
+def make_nonce_before_request():
+    # `govuk_frontend_jinja/template.html` can be extended and inline `<script>` can be added without CSP complaining
+    if not getattr(request, "csp_nonce", None):
+        request.csp_nonce = secrets.token_urlsafe(16)
+
+
 #  https://www.owasp.org/index.php/List_of_useful_HTTP_headers
 def useful_headers_after_request(response):
-    response.headers.add("X-Frame-Options", "deny")
     response.headers.add("X-Content-Type-Options", "nosniff")
     response.headers.add("X-XSS-Protection", "1; mode=block")
     response.headers.add(
         "Content-Security-Policy",
         (
             "default-src 'self' {asset_domain} 'unsafe-inline';"
-            "script-src 'self' {asset_domain} *.google-analytics.com 'unsafe-inline' 'unsafe-eval' data:;"
-            "connect-src 'self' *.google-analytics.com;"
+            "script-src 'self' {asset_domain} 'nonce-{csp_nonce}';"
+            "connect-src 'self';"
             "object-src 'self';"
             "font-src 'self' {asset_domain} data:;"
-            "img-src 'self' {asset_domain} *.tile.openstreetmap.org *.google-analytics.com"
+            "img-src 'self' {asset_domain}"
             " *.notifynl.nl {logo_domain} data:;"
+            "style-src 'self' {asset_domain} 'unsafe-inline';"
+            "frame-ancestors 'self';"
             "frame-src 'self';".format(
                 asset_domain=current_app.config["ASSET_DOMAIN"],
                 logo_domain=current_app.config["LOGO_CDN_DOMAIN"],
+                csp_nonce=getattr(request, "csp_nonce", ""),
             )
         ),
     )
@@ -368,7 +376,7 @@ def useful_headers_after_request(response):
         "Link",
         (
             "<{asset_url}>; rel=dns-prefetch, <{asset_url}>; rel=preconnect".format(
-                asset_url=f'https://{current_app.config["ASSET_DOMAIN"]}'
+                asset_url=f"https://{current_app.config['ASSET_DOMAIN']}"
             )
         ),
     )
@@ -377,6 +385,25 @@ def useful_headers_after_request(response):
     response.headers.add("Cache-Control", "no-store, no-cache, private, must-revalidate")
     for key, value in response.headers:
         response.headers[key] = SanitiseASCII.encode(value)
+    response.headers.add("Strict-Transport-Security", "max-age=31536000; preload")
+    response.headers.add("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.add(
+        "Cross-Origin-Embedder-Policy",
+        "require-corp {asset_domain};".format(asset_domain=current_app.config["ASSET_DOMAIN"]),
+    )
+    response.headers.add(
+        "Cross-Origin-Opener-Policy",
+        "same-origin {asset_domain};".format(asset_domain=current_app.config["ASSET_DOMAIN"]),
+    )
+    response.headers.add(
+        "Cross-Origin-Resource-Policy",
+        "same-origin {asset_domain};".format(asset_domain=current_app.config["ASSET_DOMAIN"]),
+    )
+    response.headers.add(
+        "Permissions-Policy",
+        "geolocation=(), microphone=(), camera=(), autoplay=(), payment=(), sync-xhr=()",
+    )
+    response.headers.add("Server", "Cloudfront")
     return response
 
 
@@ -391,11 +418,11 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
     def render_http_error(error):
         application.logger.warning(
             "API %(api)s failed with status=%(status)s, message='%(message)s'",
-            dict(
-                api=error.response.url if isinstance(error.response, requests.Response) else "unknown",
-                status=error.status_code,
-                message=error.message,
-            ),
+            {
+                "api": error.response.url if isinstance(error.response, requests.Response) else "unknown",
+                "status": error.status_code,
+                "message": error.message,
+            },
         )
         error_code = error.status_code
         if error_code not in [401, 404, 403, 410]:
@@ -404,11 +431,11 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
             # legitimately return a 400, we should handle that within the view or the client that calls it.
             application.logger.exception(
                 "API %(api)s failed with status=%(status)s message='%(message)s'",
-                dict(
-                    api=error.response.url if isinstance(error.response, requests.Response) else "unknown",
-                    status=error.status_code,
-                    message=error.message,
-                ),
+                {
+                    "api": error.response.url if isinstance(error.response, requests.Response) else "unknown",
+                    "status": error.status_code,
+                    "message": error.message,
+                },
             )
             error_code = 500
         return _error_response(error_code)
@@ -455,7 +482,7 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
 
         application.logger.warning(
             "csrf.invalid_token: Aborting request, user_id: %(user_id)s",
-            dict(user_id=session["user_id"]),
+            {"user_id": session["user_id"]},
             extra={"user_id": session["user_id"]},  # include as a distinct field in the log output
         )
 
@@ -490,6 +517,11 @@ def register_errorhandlers(application):  # noqa (C901 too complex)
         if current_app.config.get("DEBUG", None):
             raise error
         return _error_response(500)
+
+    @application.errorhandler(EventletTimeout)
+    def eventlet_timeout(error):
+        application.logger.exception(error)
+        return _error_response(504, error_page_template=500)
 
 
 def setup_blueprints(application):
@@ -538,7 +570,6 @@ def add_template_filters(application):
         format_datetime_short,
         format_time,
         valid_phone_number,
-        linkable_name,
         format_pennies_as_currency,
         format_date,
         format_date_human,
@@ -561,6 +592,7 @@ def add_template_filters(application):
         nl2br,
         format_phone_number_human_readable,
         format_thousands,
+        insert_wbr,
         make_string_safe_for_id,
         convert_to_boolean,
         format_list_items,
@@ -573,6 +605,8 @@ def add_template_filters(application):
         message_count_noun,
         format_yes_no,
         make_string_safe_for_email_local_part,
+        extract_path_from_url,
+        sentence_case,
     ]:
         application.add_template_filter(fn)
 

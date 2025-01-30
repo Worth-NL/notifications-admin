@@ -148,6 +148,11 @@
     max-width: 580px;
   }
 
+  &-hint--flow-text {
+    white-space: wrap;
+    overflow-wrap: break-word;
+  }
+
   &-status {
     text-align: right;
   }
@@ -170,17 +175,6 @@
 
   & + .file-list-hint,
   & + .file-list-hint-large {
-    color: $govuk-focus-text-colour;
-  }
-
-}
-
-// Note: this selector should use the :has() pseudo-class in the future when it is supported
-//       which will remove the need for JS
-.file-list .js-child-has-focus {
-
-  & + .file-list-hint-large,
-  & ~ .file-list-status {
     color: $govuk-focus-text-colour;
   }
 

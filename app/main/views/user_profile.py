@@ -1,5 +1,3 @@
-import json
-
 from flask import (
     abort,
     current_app,
@@ -27,6 +25,7 @@ from app.main.forms import (
     TwoFactorForm,
     YesNoSettingForm,
 )
+from app.models.token import Token
 from app.models.user import User
 from app.utils.user import user_is_gov_user, user_is_logged_in
 
@@ -107,7 +106,7 @@ def user_profile_email_authenticate():
     )
 
 
-@main.route("/user-profile/email/confirm/<token>", methods=["GET"])
+@main.route("/user-profile/email/confirm/<string:token>", methods=["GET"])
 @user_is_logged_in
 @RateLimit.USER_LIMIT
 def user_profile_email_confirm(token):
@@ -117,9 +116,9 @@ def user_profile_email_confirm(token):
         current_app.config["DANGEROUS_SALT"],
         current_app.config["EMAIL_EXPIRY_SECONDS"],
     )
-    token_data = json.loads(token_data)
-    user = User.from_id(token_data["user_id"])
-    user.update(email_address=token_data["email"])
+    token = Token(token_data)
+    user = User.from_id(token.user_id)
+    user.update(email_address=token.email)
     session.pop(NEW_EMAIL, None)
 
     return redirect(url_for(".user_profile"))
@@ -247,6 +246,25 @@ def user_profile_take_part_in_user_research():
         return redirect(url_for(".user_profile"))
 
     return render_template("views/user-profile/take-part-in-user-research.html", form=form, error_summary_enabled=True)
+
+
+@main.route("/user-profile/get-emails-about-new-features", methods=["GET", "POST"])
+@user_is_logged_in
+def user_profile_get_emails_about_new_features():
+    form = YesNoSettingForm(
+        name="Get emails about new features",
+        enabled=current_user.receives_new_features_email,
+    )
+
+    if form.validate_on_submit():
+        current_user.update(receives_new_features_email=form.enabled.data)
+        return redirect(url_for(".user_profile"))
+
+    return render_template(
+        "views/user-profile/get-emails-about-new-features.html",
+        form=form,
+        error_summary_enabled=True,
+    )
 
 
 @main.route("/user-profile/disable-platform-admin-view", methods=["GET", "POST"])

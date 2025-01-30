@@ -1,5 +1,5 @@
-import datetime
-from typing import Optional
+from datetime import date, datetime
+from typing import Any
 
 from flask import abort
 from werkzeug.utils import cached_property
@@ -35,38 +35,36 @@ class Organisation(JSONModel):
         TYPE_CENTRAL: "Central government",
         TYPE_LOCAL: "Local government",
         # TYPE_NHS_CENTRAL: "NHS – central government agency or public body",
-        # TYPE_NHS_LOCAL: "NHS Trust or Clinical Commissioning Group",
+        # TYPE_NHS_LOCAL: "NHS Trust or Integrated Care Board",
         # TYPE_NHS_GP: "GP practice",
         # TYPE_EMERGENCY_SERVICE: "Emergency service",
         # TYPE_SCHOOL_OR_COLLEGE: "School or college",
         TYPE_OTHER: "Other",
     }
 
-    ALLOWED_PROPERTIES = {
-        "id",
-        "name",
-        "active",
-        "crown",
-        "organisation_type",
-        "letter_branding_id",
-        "email_branding_id",
-        "agreement_signed",
-        "agreement_signed_at",
-        "agreement_signed_by_id",
-        "agreement_signed_version",
-        "agreement_signed_on_behalf_of_name",
-        "agreement_signed_on_behalf_of_email_address",
-        "domains",
-        "request_to_go_live_notes",
-        "count_of_live_services",
-        "billing_contact_email_addresses",
-        "billing_contact_names",
-        "billing_reference",
-        "purchase_order_number",
-        "notes",
-        "can_approve_own_go_live_requests",
-        "permissions",
-    }
+    id: Any
+    name: str
+    active: bool
+    crown: bool
+    organisation_type: Any
+    letter_branding_id: Any
+    email_branding_id: Any
+    agreement_signed: bool
+    agreement_signed_at: datetime
+    agreement_signed_by_id: Any
+    agreement_signed_version: str
+    agreement_signed_on_behalf_of_name: str
+    agreement_signed_on_behalf_of_email_address: str
+    domains: list
+    request_to_go_live_notes: str
+    count_of_live_services: int
+    billing_contact_email_addresses: str
+    billing_contact_names: str
+    billing_reference: str
+    purchase_order_number: str
+    notes: str
+    can_approve_own_go_live_requests: bool
+    permissions: list
 
     __sort_attribute__ = "name"
 
@@ -231,11 +229,11 @@ class Organisation(JSONModel):
     def associate_service(self, service_id):
         organisations_client.update_service_organisation(service_id, self.id)
 
-    def services_and_usage(self, financial_year) -> tuple[dict, Optional[datetime.date]]:
+    def services_and_usage(self, financial_year) -> tuple[dict, date | None]:
         response = organisations_client.get_services_and_usage(self.id, financial_year)
         updated_at = response.get("updated_at")
         if updated_at:
-            updated_at = datetime.datetime.fromisoformat(updated_at)
+            updated_at = datetime.fromisoformat(updated_at)
         return response["services"], updated_at
 
     def can_use_org_user_permission(self, permission: str):
@@ -255,4 +253,6 @@ class Organisations(SerialisedModelCollection):
 
 
 class AllOrganisations(ModelList, Organisations):
-    client_method = organisations_client.get_organisations
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return organisations_client.get_organisations(*args, **kwargs)

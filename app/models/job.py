@@ -1,5 +1,6 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytz
 from notifications_utils.letter_timings import (
@@ -7,11 +8,11 @@ from notifications_utils.letter_timings import (
     get_letter_timings,
     letter_can_be_cancelled,
 )
-from notifications_utils.timezones import utc_string_to_aware_gmt_datetime
 from werkzeug.utils import cached_property
 
 from app.models import JSONModel, ModelList, PaginatedModelList
-from app.notify_client.job_api_client import job_api_client
+from app.models.notification import Notifications
+from app.notify_client.job_api_client import JobApiClient, job_api_client
 from app.notify_client.notification_api_client import notification_api_client
 from app.notify_client.service_api_client import service_api_client
 from app.utils import set_status_filters
@@ -20,18 +21,18 @@ from app.utils.time import is_less_than_days_ago
 
 
 class Job(JSONModel):
-    ALLOWED_PROPERTIES = {
-        "id",
-        "service",
-        "template_name",
-        "template_version",
-        "original_file_name",
-        "created_at",
-        "notification_count",
-        "created_by",
-        "template_type",
-        "recipient",
-    }
+    id: Any
+    service: Any
+    template_name: str
+    template_version: int
+    original_file_name: str
+    created_at: datetime
+    notification_count: int
+    created_by: Any
+    template_type: Any
+    recipient: Any
+    processing_started: datetime
+    scheduled_for: datetime
 
     __sort_attribute__ = "original_file_name"
 
@@ -52,22 +53,12 @@ class Job(JSONModel):
         return self.status == "scheduled"
 
     @property
-    def scheduled_for(self):
-        return self._dict.get("scheduled_for")
-
-    @property
     def upload_type(self):
         return self._dict.get("upload_type")
 
     @property
     def pdf_letter(self):
         return self.upload_type == "letter"
-
-    @property
-    def processing_started(self):
-        if not self._dict.get("processing_started"):
-            return None
-        return self._dict["processing_started"]
 
     def _aggregate_statistics(self, *statuses):
         return sum(
@@ -108,10 +99,12 @@ class Job(JSONModel):
 
     @property
     def still_processing(self):
-        return self.status != "finished" or self.percentage_complete < 100
+        # reduce to status != FINISHED_ALL_NOTIFICATIONS_CREATED_JOB_STATUS once api support rolled out
+        return self.status not in JobApiClient.FINISHED_JOB_STATUSES or self.percentage_complete < 100
 
     @cached_property
     def finished_processing(self):
+        # change to status == FINISHED_ALL_NOTIFICATIONS_CREATED_JOB_STATUS once api support rolled out
         return self.notification_count == self.notifications_sent
 
     @property
@@ -147,9 +140,7 @@ class Job(JSONModel):
         if any(self.uncancellable_notifications):
             return False
 
-        if not letter_can_be_cancelled(
-            "created", utc_string_to_aware_gmt_datetime(self.created_at).replace(tzinfo=None)
-        ):
+        if not letter_can_be_cancelled("created", self.created_at.replace(tzinfo=None)):
             return False
 
         return True
@@ -157,29 +148,29 @@ class Job(JSONModel):
     @property
     def letter_printing_statement(self):
         if self.upload_type != "letter_day":
-            raise TypeError()
+            raise TypeError
         return get_letter_printing_statement(
             "created",
             # We have to make the time just before 5:30pm because a
             # letter uploaded at 5:30pm will be printed the next day
-            (utc_string_to_aware_gmt_datetime(self.created_at) - timedelta(minutes=1)).astimezone(pytz.utc).isoformat(),
+            (self.created_at - timedelta(minutes=1)).astimezone(pytz.utc).isoformat(),
             long_form=False,
         )
 
     @cached_property
     def all_notifications(self):
-        return self.get_notifications(set_status_filters({}))["notifications"]
+        return self.get_notifications(set_status_filters({}))
 
     @property
     def uncancellable_notifications(self):
-        return (n for n in self.all_notifications if n["status"] not in CANCELLABLE_JOB_LETTER_STATUSES)
+        return (n for n in self.all_notifications if n.status not in CANCELLABLE_JOB_LETTER_STATUSES)
 
     @cached_property
     def postage(self):
         # There might be no notifications if the job has only just been
         # created and the tasks haven't run yet
         try:
-            return self.all_notifications[0]["postage"]
+            return self.all_notifications[0].postage
         except IndexError:
             return self.template["postage"]
 
@@ -198,7 +189,7 @@ class Job(JSONModel):
         return self.failure_rate > 30
 
     def get_notifications(self, status):
-        return notification_api_client.get_notifications_for_service(
+        return Notifications(
             self.service,
             self.id,
             status=status,
@@ -216,17 +207,25 @@ class Job(JSONModel):
 
 
 class ImmediateJobs(ModelList):
-    client_method = job_api_client.get_immediate_jobs
     model = Job
+
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return job_api_client.get_immediate_jobs(*args, **kwargs)
 
 
 class ScheduledJobs(ImmediateJobs):
-    client_method = job_api_client.get_scheduled_jobs
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return job_api_client.get_scheduled_jobs(*args, **kwargs)
 
 
 class PaginatedJobs(PaginatedModelList, ImmediateJobs):
-    client_method = job_api_client.get_page_of_jobs
     statuses = None
+
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return job_api_client.get_page_of_jobs(*args, **kwargs)
 
     def __init__(self, service_id, *, contact_list_id=None, page=None, limit_days=None):
         super().__init__(
@@ -239,8 +238,10 @@ class PaginatedJobs(PaginatedModelList, ImmediateJobs):
 
 
 class PaginatedJobsAndScheduledJobs(PaginatedJobs):
-    statuses = job_api_client.NON_CANCELLED_JOB_STATUSES
+    statuses = JobApiClient.NON_CANCELLED_JOB_STATUSES
 
 
 class PaginatedUploads(PaginatedModelList, ImmediateJobs):
-    client_method = job_api_client.get_uploads
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return job_api_client.get_uploads(*args, **kwargs)

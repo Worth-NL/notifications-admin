@@ -6,7 +6,6 @@ from tests.conftest import SERVICE_ONE_ID
 
 def test_should_render_email_verification_resend_show_email_address_and_resend_verify_email(
     client_request,
-    mocker,
     api_user_active,
     mock_get_user_by_email,
     mock_send_verify_email,
@@ -39,7 +38,7 @@ def test_should_render_correct_resend_template_for_active_user(
         session["user_details"] = {"id": api_user_active["id"], "email": api_user_active["email_address"]}
     page = client_request.get("main.check_and_resend_text_code", next=redirect_url)
 
-    assert page.select_one("h1").string == "Resend security code"
+    assert page.select_one("h1").string == "If you do not receive a security code"
     # there shouldn't be a form for updating mobile number
     assert page.select_one("form") is None
     assert page.select_one("a.govuk-button")["href"] == url_for(
@@ -51,7 +50,6 @@ def test_should_render_correct_resend_template_for_pending_user(
     client_request,
     mocker,
     api_user_pending,
-    mock_send_verify_code,
 ):
     client_request.logout()
     mocker.patch("app.user_api_client.get_user_by_email", return_value=api_user_pending)
@@ -60,10 +58,10 @@ def test_should_render_correct_resend_template_for_pending_user(
         session["user_details"] = {"id": api_user_pending["id"], "email": api_user_pending["email_address"]}
     page = client_request.get("main.check_and_resend_text_code")
 
-    assert page.select_one("h1").string == "Check your mobile number"
+    assert page.select_one("h1").string == "If you do not receive a security code"
 
-    expected = "Check your mobile phone number is correct and then resend the security code."
-    message = page.select("main p")[0].text
+    expected = "Check that you can receive text messages from other numbers."
+    message = page.select("main li")[0].text
     assert message == expected
     assert page.select_one("form").input["value"] == api_user_pending["mobile_number"]
 
@@ -186,14 +184,53 @@ def test_redirect_to_sign_in_if_not_logged_in(
     ],
 )
 def test_should_render_correct_email_not_received_template_for_active_user(
-    client_request, api_user_active, mock_get_user_by_email, mock_send_verify_code, redirect_url
+    client_request,
+    api_user_active,
+    mock_get_user_by_email,
+    redirect_url,
 ):
     client_request.logout()
     with client_request.session_transaction() as session:
         session["user_details"] = {"id": api_user_active["id"], "email": api_user_active["email_address"]}
+
     page = client_request.get("main.email_not_received", next=redirect_url)
 
-    assert page.select_one("h1").string == "Resend email link"
+    assert page.select_one("h1").string == "If you do not receive an email link"
     # there shouldn't be a form for updating mobile number
     assert page.select_one("form") is None
     assert page.select_one("a.govuk-button")["href"] == url_for("main.resend_email_link", next=redirect_url)
+
+    assert (
+        "Ask a member of your team with the ‘Manage settings, team and usage’ permission to change your sign-in method"
+    ) not in page.text
+
+
+@pytest.mark.parametrize(
+    "redirect_url",
+    [
+        None,
+        f"/services/{SERVICE_ONE_ID}/templates",
+    ],
+)
+def test_should_render_correct_email_not_received_template_for_email_auth(
+    client_request,
+    api_user_active,
+    mock_get_user_by_email,
+    redirect_url,
+):
+    client_request.logout()
+    with client_request.session_transaction() as session:
+        session["user_details"] = {"id": api_user_active["id"], "email": api_user_active["email_address"]}
+
+    api_user_active["auth_type"] = "email_auth"
+
+    page = client_request.get("main.email_not_received", next=redirect_url)
+
+    assert page.select_one("h1").string == "If you do not receive an email link"
+    # there shouldn't be a form for updating mobile number
+    assert page.select_one("form") is None
+    assert page.select_one("a.govuk-button")["href"] == url_for("main.resend_email_link", next=redirect_url)
+
+    assert (
+        "Ask a member of your team with the ‘Manage settings, team and usage’ permission to change your sign-in method"
+    ) in page.text

@@ -10,7 +10,7 @@ Create an account
 
 <div class="govuk-grid-row">
   <div class="govuk-grid-column-two-thirds">
-    <h1 class="heading-large">Create an account</h1>
+    <h1 class="govuk-heading-l">Create an account</h1>
     {% call form_wrapper(autocomplete=True) %}
       {{ form.name(param_extensions={"classes": "govuk-!-width-three-quarters"}) }}
       {{ form.email_address(
@@ -31,6 +31,7 @@ Create an account
       {{form.auth_type}}
       {{ page_footer("Continue") }}
     {% endcall %}
+  <p class="bottom-gutter">When you create an account you accept our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.terms_of_use') }}">terms of use</a>.</p>
   </div>
 </div>
 

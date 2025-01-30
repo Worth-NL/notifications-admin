@@ -175,7 +175,7 @@ def test_upload_csv_file_shows_error_banner(
     page = client_request.post(
         "main.upload_contact_list",
         service_id=SERVICE_ONE_ID,
-        _data={"file": (BytesIO("".encode("utf-8")), "invalid.csv")},
+        _data={"file": (BytesIO(b""), "invalid.csv")},
         _follow_redirects=True,
     )
     mock_upload.assert_called_once_with(
@@ -215,7 +215,6 @@ def test_upload_csv_file_shows_error_banner_for_too_many_rows(
     client_request,
     mocker,
     mock_s3_upload,
-    mock_get_job_doesnt_exist,
     mock_get_users_by_service,
     fake_uuid,
 ):
@@ -229,14 +228,12 @@ def test_upload_csv_file_shows_error_banner_for_too_many_rows(
     page = client_request.post(
         "main.upload_contact_list",
         service_id=SERVICE_ONE_ID,
-        _data={"file": (BytesIO("".encode("utf-8")), "invalid.csv")},
+        _data={"file": (BytesIO(b""), "invalid.csv")},
         _follow_redirects=True,
     )
 
     assert normalize_spaces(page.select_one(".banner-dangerous").text) == (
-        "Your file has too many rows "
-        "Notify can store files up to 100,000 rows in size. "
-        "Your file has 100,001 rows."
+        "Your file has too many rows Notify can store files up to 100,000 rows in size. Your file has 100,001 rows."
     )
     assert len(page.select("tbody tr")) == 50
     assert normalize_spaces(page.select_one(".table-show-more-link").text) == "Only showing the first 50 rows"
@@ -248,12 +245,12 @@ def test_upload_csv_shows_error_with_invalid_extension(
     page = client_request.post(
         "main.upload_contact_list",
         service_id=SERVICE_ONE_ID,
-        _data={"file": (BytesIO("".encode("utf-8")), "invalid.txt")},
+        _data={"file": (BytesIO(b""), "invalid.txt")},
         _follow_redirects=True,
     )
 
-    assert normalize_spaces(page.select_one(".banner-dangerous").text) == (
-        "invalid.txt is not a spreadsheet that Notify can read"
+    assert normalize_spaces(page.select_one(".govuk-error-summary__body").text) == (
+        "The file must be a spreadsheet that Notify can read"
     )
 
 
@@ -261,8 +258,6 @@ def test_upload_csv_file_sanitises_and_truncates_file_name_in_metadata(
     client_request,
     mocker,
     mock_s3_upload,
-    mock_get_job_doesnt_exist,
-    mock_get_users_by_service,
     fake_uuid,
 ):
     mocker.patch("app.models.contact_list.s3upload", return_value=fake_uuid)
@@ -276,7 +271,7 @@ def test_upload_csv_file_sanitises_and_truncates_file_name_in_metadata(
     client_request.post(
         "main.upload_contact_list",
         service_id=SERVICE_ONE_ID,
-        _data={"file": (BytesIO("".encode("utf-8")), filename)},
+        _data={"file": (BytesIO(b""), filename)},
         _follow_redirects=False,
     )
 
@@ -285,9 +280,7 @@ def test_upload_csv_file_sanitises_and_truncates_file_name_in_metadata(
     assert mock_set_metadata.call_args_list[0][1]["original_file_name"].startswith("?")
 
 
-def test_upload_csv_shows_trial_mode_error(
-    client_request, mock_get_users_by_service, mock_get_job_doesnt_exist, fake_uuid, mocker
-):
+def test_upload_csv_shows_trial_mode_error(client_request, mock_get_users_by_service, fake_uuid, mocker):
     mocker.patch("app.models.contact_list.s3upload", return_value=fake_uuid)
     mocker.patch("app.models.contact_list.s3download", return_value=("phone number\n07900900321"))  # Not in team
     mocker.patch("app.models.contact_list.get_csv_metadata", return_value={"original_file_name": "invalid.csv"})
@@ -305,9 +298,7 @@ def test_upload_csv_shows_trial_mode_error(
     assert page.select_one(".banner-dangerous a")["href"] == url_for("main.guidance_trial_mode")
 
 
-def test_upload_csv_shows_ok_page(
-    client_request, mock_get_live_service, mock_get_users_by_service, mock_get_job_doesnt_exist, fake_uuid, mocker
-):
+def test_upload_csv_shows_ok_page(client_request, mock_get_live_service, fake_uuid, mocker):
     mocker.patch(
         "app.models.contact_list.s3download", return_value="\n".join(["email address"] + ["test@example.com"] * 51)
     )
@@ -347,10 +338,10 @@ def test_upload_csv_shows_ok_page(
 
 
 def test_save_contact_list(
-    mocker,
     client_request,
     fake_uuid,
     mock_create_contact_list,
+    mocker,
 ):
     mock_get_metadata = mocker.patch(
         "app.models.contact_list.get_csv_metadata",
@@ -381,10 +372,10 @@ def test_save_contact_list(
 
 
 def test_cant_save_bad_contact_list(
-    mocker,
     client_request,
     fake_uuid,
     mock_create_contact_list,
+    mocker,
 ):
     mocker.patch(
         "app.models.contact_list.get_csv_metadata",
@@ -408,7 +399,6 @@ def test_cant_save_bad_contact_list(
 )
 @freeze_time("2020-06-13 16:51:56")
 def test_view_contact_list(
-    mocker,
     client_request,
     mock_get_contact_list,
     mock_get_no_jobs,
@@ -416,6 +406,7 @@ def test_view_contact_list(
     fake_uuid,
     has_jobs,
     expected_empty_message,
+    mocker,
 ):
     mocker.patch(
         "app.models.contact_list.contact_list_api_client.get_contact_list",
@@ -438,6 +429,7 @@ def test_view_contact_list(
         limit_days=7,
         statuses={
             "finished",
+            "finished all notifications created",
             "in progress",
             "pending",
             "ready to send",
@@ -474,16 +466,16 @@ def test_view_contact_list(
 
 @freeze_time("2015-12-31 16:51:56")
 def test_view_jobs_for_contact_list(
-    mocker,
     client_request,
     mock_get_jobs,
     mock_get_service_data_retention,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
         "app.models.contact_list.contact_list_api_client.get_contact_list",
         return_value={
-            "created_at": "2015-12-31 12:12:12",
+            "created_at": "2015-12-31T12:12:12+00:00",
             "created_by": "Test User",
             "id": fake_uuid,
             "original_file_name": "EmergencyContactList.xls",
@@ -524,7 +516,6 @@ def test_view_jobs_for_contact_list(
 def test_view_contact_list_404s_for_non_existing_list(
     client_request,
     mock_get_no_contact_list,
-    fake_uuid,
 ):
     client_request.get(
         "main.contact_list",
@@ -535,10 +526,10 @@ def test_view_contact_list_404s_for_non_existing_list(
 
 
 def test_download_contact_list(
-    mocker,
     client_request,
     fake_uuid,
     mock_get_contact_list,
+    mocker,
 ):
     mocker.patch("app.models.contact_list.s3download", return_value="phone number\n07900900321")
     response = client_request.get_response(
@@ -552,12 +543,12 @@ def test_download_contact_list(
 
 
 def test_confirm_delete_contact_list(
-    mocker,
     client_request,
     fake_uuid,
     mock_get_jobs,
     mock_get_service_data_retention,
     mock_get_contact_list,
+    mocker,
 ):
     mocker.patch("app.models.contact_list.s3download", return_value="phone number\n07900900321")
     page = client_request.get(
@@ -573,10 +564,10 @@ def test_confirm_delete_contact_list(
 
 
 def test_delete_contact_list(
-    mocker,
     client_request,
     fake_uuid,
     mock_get_contact_list,
+    mocker,
 ):
     mock_delete = mocker.patch("app.models.contact_list.contact_list_api_client.delete_contact_list")
     client_request.post(

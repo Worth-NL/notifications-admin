@@ -1,5 +1,6 @@
 import json
 import uuid
+from collections import namedtuple
 from functools import partial
 from urllib.parse import parse_qs, urlparse
 
@@ -7,8 +8,10 @@ import pytest
 from flask import url_for
 from freezegun import freeze_time
 
-from app.main.views.jobs import get_status_filters, get_time_left
+from app.main.views.dashboard import cache_search_query, get_status_filters, make_cache_key
+from app.main.views.jobs import get_time_left
 from app.models.service import Service
+from app.utils import SEVEN_DAYS_TTL, get_sha512_hashed
 from tests.conftest import (
     SERVICE_ONE_ID,
     create_active_caseworking_user,
@@ -99,6 +102,7 @@ def test_can_show_notifications(
     mock_get_service_data_retention,
     mock_has_no_jobs,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     user,
     extra_args,
     expected_update_endpoint,
@@ -110,18 +114,20 @@ def test_can_show_notifications(
     expected_page_argument,
     to_argument,
     expected_to_argument,
-    mocker,
+    mock_cache_search_query,
 ):
     client_request.login(user)
+    hash_search_query = get_sha512_hashed(to_argument) if to_argument else ""
     if expected_to_argument:
         page = client_request.post(
             "main.view_notifications",
             service_id=SERVICE_ONE_ID,
             status=status_argument,
+            search_query=hash_search_query,
             page=page_argument,
             _data={"to": to_argument},
             _expected_status=200,
-            **extra_args
+            **extra_args,
         )
     else:
         page = client_request.get(
@@ -129,8 +135,9 @@ def test_can_show_notifications(
             service_id=SERVICE_ONE_ID,
             status=status_argument,
             page=page_argument,
-            **extra_args
+            **extra_args,
         )
+
     first_row = page.select_one("tbody tr")
     assert normalize_spaces(first_row.select_one("a.file-list-filename.govuk-link").text) == (
         # Comes from
@@ -160,10 +167,7 @@ def test_can_show_notifications(
     path_to_json = page.select_one("div[data-key=notifications]")["data-resource"]
 
     url = urlparse(path_to_json)
-    assert url.path == "/services/{}/notifications{}".format(
-        SERVICE_ONE_ID,
-        expected_update_endpoint,
-    )
+    assert url.path == f"/services/{SERVICE_ONE_ID}/notifications{expected_update_endpoint}"
     query_dict = parse_qs(url.query)
     if status_argument:
         assert query_dict["status"] == [status_argument]
@@ -184,7 +188,7 @@ def test_can_show_notifications(
         "json_updates.get_notifications_page_partials_as_json",
         service_id=service_one["id"],
         status=status_argument,
-        **extra_args
+        **extra_args,
     )
     json_content = json.loads(json_response.get_data(as_text=True))
     assert json_content.keys() == {"counts", "notifications", "service_data_retention_days"}
@@ -198,6 +202,13 @@ def test_can_show_notifications(
         for view_notification_link in view_notification_links
     )
 
+    if hash_search_query:
+        assert all(
+            parse_qs(urlparse(view_notification_link["href"]).query, keep_blank_values=True)["from_search_query"]
+            == [hash_search_query]
+            for view_notification_link in view_notification_links
+        )
+
 
 def test_can_show_notifications_if_data_retention_not_available(
     client_request,
@@ -205,6 +216,7 @@ def test_can_show_notifications_if_data_retention_not_available(
     mock_get_service_statistics,
     mock_has_no_jobs,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
 ):
     page = client_request.get(
         "main.view_notifications",
@@ -215,11 +227,12 @@ def test_can_show_notifications_if_data_retention_not_available(
 
 
 @pytest.mark.parametrize(
-    "user, query_parameters, expected_download_link",
+    "user, query_parameters, notifications_count,expected_download_link",
     [
         (
             create_active_user_with_permissions(),
             {},
+            100,
             partial(
                 url_for,
                 ".download_notifications_csv",
@@ -229,11 +242,13 @@ def test_can_show_notifications_if_data_retention_not_available(
         (
             create_active_user_with_permissions(),
             {"status": "failed"},
+            100,
             partial(url_for, ".download_notifications_csv", status="failed"),
         ),
         (
             create_active_user_with_permissions(),
             {"message_type": "sms"},
+            100,
             partial(
                 url_for,
                 ".download_notifications_csv",
@@ -243,6 +258,7 @@ def test_can_show_notifications_if_data_retention_not_available(
         (
             create_active_user_view_permissions(),
             {},
+            100,
             partial(
                 url_for,
                 ".download_notifications_csv",
@@ -251,8 +267,23 @@ def test_can_show_notifications_if_data_retention_not_available(
         (
             create_active_caseworking_user(),
             {},
+            100,
             lambda service_id: None,
         ),
+        (
+            create_active_user_with_permissions(),
+            {},
+            300000,  # Above the threshold, should return None
+            lambda service_id: None,
+        ),
+    ],
+    ids=[
+        "Active user - no filters",
+        "Active user - failed status",
+        "Active user - SMS message type",
+        "View permissions user - no filters",
+        "Caseworking user - no download link",
+        "Active user - notifications count above threshold, no download link",
     ],
 )
 def test_link_to_download_notifications(
@@ -262,13 +293,17 @@ def test_link_to_download_notifications(
     mock_get_service_data_retention,
     mock_has_no_jobs,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     user,
     query_parameters,
+    notifications_count,
     expected_download_link,
 ):
+    mock_get_notifications_count_for_service.return_value = notifications_count
+
     client_request.login(user)
     page = client_request.get("main.view_notifications", service_id=SERVICE_ONE_ID, **query_parameters)
-    download_link = page.select_one("a[download=download]")
+    download_link = page.select_one("a[href*='download-notifications.csv']")
     assert (download_link["href"] if download_link else None) == expected_download_link(service_id=SERVICE_ONE_ID)
 
 
@@ -307,12 +342,13 @@ def test_download_not_available_to_users_if_invalid_message_type(
 
 
 def test_letters_with_status_virus_scan_failed_shows_a_failure_description(
-    mocker,
     client_request,
     service_one,
     mock_get_service_statistics,
     mock_get_service_data_retention,
+    mock_get_notifications_count_for_service,
     mock_get_api_keys,
+    mocker,
 ):
     notifications = create_notifications(
         template_type="letter",
@@ -320,7 +356,7 @@ def test_letters_with_status_virus_scan_failed_shows_a_failure_description(
         is_precompiled_letter=True,
         client_reference="client reference",
     )
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.view_notifications",
@@ -335,18 +371,19 @@ def test_letters_with_status_virus_scan_failed_shows_a_failure_description(
 
 @pytest.mark.parametrize("letter_status", ["pending-virus-check", "virus-scan-failed"])
 def test_should_not_show_preview_link_for_precompiled_letters_in_virus_states(
-    mocker,
     client_request,
     service_one,
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     letter_status,
+    mocker,
 ):
     notifications = create_notifications(
         template_type="letter", status=letter_status, is_precompiled_letter=True, client_reference="ref"
     )
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.view_notifications",
@@ -363,6 +400,7 @@ def test_shows_message_when_no_notifications(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_notifications_with_no_notifications,
+    mock_get_notifications_count_for_service,
     mock_get_no_api_keys,
 ):
     page = client_request.get(
@@ -431,35 +469,63 @@ def test_search_recipient_form(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     initial_query_arguments,
     form_post_data,
     expected_search_box_label,
     expected_search_box_contents,
+    mocker,
 ):
-    page = client_request.post(
-        "main.view_notifications",
-        service_id=SERVICE_ONE_ID,
-        _data=form_post_data,
-        _expected_status=200,
-        **initial_query_arguments
-    )
+    search_term = form_post_data.get("to", "")
+    message_type = initial_query_arguments.get("message_type", None)
+    hash_search_query = get_sha512_hashed(search_term) if bool(search_term) else None
 
-    assert page.select_one("form")["method"] == "post"
-    action_url = page.select_one("form")["action"]
-    url = urlparse(action_url)
-    assert url.path == "/services/{}/notifications/{}".format(
-        SERVICE_ONE_ID, initial_query_arguments.get("message_type", "")
-    ).rstrip("/")
-    query_dict = parse_qs(url.query)
-    assert query_dict == {}
+    mocker.patch("app.main.views.dashboard.cache_search_query", return_value=(hash_search_query, search_term))
 
-    assert page.select_one("label[for=to]").text.strip() == expected_search_box_label
+    if search_term:
+        page = client_request.post(
+            "main.view_notifications",
+            service_id=SERVICE_ONE_ID,
+            _data=form_post_data,
+            search_query=hash_search_query,
+            _expected_status=200,
+            **initial_query_arguments,
+        )
 
-    recipient_inputs = page.select("input[name=to]")
-    assert len(recipient_inputs) == 2
+        assert page.select_one("form")["method"] == "post"
+        action_url = page.select_one("form")["action"]
+        url = urlparse(action_url)
+        assert url.path == "/services/{}/notifications/{}".format(
+            SERVICE_ONE_ID, initial_query_arguments.get("message_type", "")
+        ).rstrip("/")
+        query_dict = parse_qs(url.query)
 
-    for field in recipient_inputs:
-        assert field.get("value") == expected_search_box_contents
+        if hash_search_query:
+            assert query_dict["search_query"] == [hash_search_query]
+        else:
+            assert query_dict == {}
+
+        assert page.select_one("label[for=to]").text.strip() == expected_search_box_label
+
+        recipient_inputs = page.select("input[name=to]")
+        assert len(recipient_inputs) == 2
+
+        for field in recipient_inputs:
+            assert field.get("value") == expected_search_box_contents
+    else:
+        client_request.post(
+            "main.view_notifications",
+            service_id=SERVICE_ONE_ID,
+            search_query=hash_search_query,
+            _data=form_post_data,
+            _expected_status=302,
+            _expected_redirect=url_for(
+                "main.view_notifications",
+                service_id=SERVICE_ONE_ID,
+                message_type=message_type,
+            ),
+            **initial_query_arguments,
+        )
 
 
 @pytest.mark.parametrize(
@@ -473,11 +539,10 @@ def test_search_recipient_form(
 )
 def test_api_users_are_told_they_can_search_by_reference_when_service_has_api_keys(
     client_request,
-    mocker,
-    fake_uuid,
     mock_get_notifications,
     mock_get_service_statistics,
     mock_get_service_data_retention,
+    mock_get_notifications_count_for_service,
     message_type,
     expected_search_box_label,
     mock_get_api_keys,
@@ -501,11 +566,10 @@ def test_api_users_are_told_they_can_search_by_reference_when_service_has_api_ke
 )
 def test_api_users_are_not_told_they_can_search_by_reference_when_service_has_no_api_keys(
     client_request,
-    mocker,
-    fake_uuid,
     mock_get_notifications,
     mock_get_service_statistics,
     mock_get_service_data_retention,
+    mock_get_notifications_count_for_service,
     message_type,
     expected_search_box_label,
     mock_get_no_api_keys,
@@ -521,12 +585,11 @@ def test_api_users_are_not_told_they_can_search_by_reference_when_service_has_no
 def test_should_show_notifications_for_a_service_with_next_previous(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_notifications_with_previous_next,
     mock_get_service_statistics,
     mock_get_service_data_retention,
+    mock_get_notifications_count_for_service,
     mock_get_no_api_keys,
-    mocker,
 ):
     page = client_request.get("main.view_notifications", service_id=service_one["id"], message_type="sms", page=2)
 
@@ -549,19 +612,21 @@ def test_should_show_notifications_for_a_service_with_next_previous(
 def test_doesnt_show_pagination_with_search_term(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_notifications_with_previous_next,
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
-    mocker,
+    mock_get_notifications_count_for_service,
 ):
+    to_argument = "test@example.com"
+    hash_search_query = get_sha512_hashed(to_argument)
     page = client_request.post(
         "main.view_notifications",
         service_id=service_one["id"],
         message_type="sms",
+        search_query=hash_search_query,
         _data={
-            "to": "test@example.com",
+            "to": to_argument,
         },
         _expected_status=200,
     )
@@ -589,7 +654,7 @@ STATISTICS = {"sms": {"requested": 6, "failed": 2, "delivered": 1}}
 
 
 def test_get_status_filters_calculates_stats(client_request):
-    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS)
+    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS, None)
 
     assert {label: count for label, _option, _link, count in ret} == {
         "total": 6,
@@ -600,27 +665,33 @@ def test_get_status_filters_calculates_stats(client_request):
 
 
 def test_get_status_filters_in_right_order(client_request):
-    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS)
+    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS, None)
 
     assert [label for label, _option, _link, _count in ret] == ["total", "sending", "delivered", "failed"]
 
 
 def test_get_status_filters_constructs_links(client_request):
-    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS)
+    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS, None)
 
     link = ret[0][2]
     assert link == "/services/foo/notifications/sms?status=sending,delivered,failed"
 
 
+def test_get_status_filters_constructs_search_query(client_request):
+    ret = get_status_filters(Service({"id": "foo"}), "sms", STATISTICS, "test_hash")
+
+    link = ret[0][2]
+    assert link == "/services/foo/notifications/sms?status=sending,delivered,failed&search_query=test_hash"
+
+
 def test_html_contains_notification_id(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_notifications,
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
-    mocker,
+    mock_get_notifications_count_for_service,
 ):
     page = client_request.get(
         "main.view_notifications",
@@ -639,10 +710,11 @@ def test_html_contains_links_for_failed_notifications(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     mocker,
 ):
     notifications = create_notifications(status="technical-failure")
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     response = client_request.get(
         "main.view_notifications", service_id=SERVICE_ONE_ID, message_type="sms", status="sending%2Cdelivered%2Cfailed"
@@ -675,6 +747,7 @@ def test_redacts_templates_that_should_be_redacted(
     mock_get_service_data_retention,
     mock_get_no_api_keys,
     notification_type,
+    mock_get_notifications_count_for_service,
     expected_row_contents,
 ):
     notifications = create_notifications(
@@ -685,7 +758,7 @@ def test_redacts_templates_that_should_be_redacted(
         redact_personalisation=True,
         template_type=notification_type,
     )
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.view_notifications",
@@ -705,6 +778,7 @@ def test_big_numbers_dont_show_for_letters(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     message_type,
     nav_visible,
 ):
@@ -754,6 +828,7 @@ def test_sending_status_hint_displays_correctly_on_notifications_page(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     message_type,
     status,
     expected_hint_status,
@@ -761,7 +836,7 @@ def test_sending_status_hint_displays_correctly_on_notifications_page(
     mocker,
 ):
     notifications = create_notifications(template_type=message_type, status=status)
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get("main.view_notifications", service_id=service_one["id"], message_type=message_type)
 
@@ -782,6 +857,7 @@ def test_should_show_address_and_hint_for_letters(
     mock_get_service_statistics,
     mock_get_service_data_retention,
     mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
     mocker,
     is_precompiled_letter,
     expected_address,
@@ -794,7 +870,7 @@ def test_should_show_address_and_hint_for_letters(
         client_reference=expected_hint,
         to=expected_address,
     )
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.view_notifications",
@@ -804,3 +880,287 @@ def test_should_show_address_and_hint_for_letters(
 
     assert page.select_one("a.file-list-filename").text == "Full Name, First address line, postcode"
     assert page.select_one("p.file-list-hint").text.strip() == expected_hint
+
+
+CanDownloadLinkTestCase = namedtuple(
+    "SupportLinkTestCase",
+    ["notifications_count", "can_download", "expected_download_link_present", "expected_support_link_present"],
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CanDownloadLinkTestCase(
+            notifications_count=100,
+            can_download=True,
+            expected_download_link_present=True,
+            expected_support_link_present=False,
+        ),
+        CanDownloadLinkTestCase(
+            notifications_count=250001,
+            can_download=False,
+            expected_download_link_present=False,
+            expected_support_link_present=True,
+        ),
+    ],
+    ids=[
+        "Below threshold - Download link present, support link not present",
+        "Above threshold - Download link not present, support link present",
+    ],
+)
+def test_view_notifications_can_download(
+    client_request,
+    mock_get_notifications,
+    mock_get_service_statistics,
+    mock_get_service_data_retention,
+    mock_has_no_jobs,
+    mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
+    test_case: CanDownloadLinkTestCase,
+):
+    mock_get_notifications_count_for_service.return_value = test_case.notifications_count
+
+    page = client_request.get("main.view_notifications", service_id=SERVICE_ONE_ID)
+
+    # check download link
+    download_link = page.select_one("a[href*='download-notifications.csv']")
+    if test_case.expected_download_link_present:
+        assert download_link is not None
+    else:
+        assert download_link is None
+
+    # check support link
+    support_link = page.select_one("a[href*='/support/ask-question-give-feedback']")
+    if test_case.expected_support_link_present:
+        assert support_link is not None
+    else:
+        assert support_link is None
+
+
+def test_make_cache_key():
+    key = make_cache_key("test1hash123456", "service-test-id-1234")
+    assert key == "service-service-test-id-1234-notification-search-query-hash-test1hash123456"
+
+
+def test_create_cache_when_search_query_does_not_exist(mocker):
+    search_term = "test@example.com"
+    search_query_hash = ""
+    expected_hash = get_sha512_hashed(search_term)
+
+    mock_redis_set = mocker.patch(
+        "app.extensions.RedisClient.set",
+    )
+    mock_redis_get = mocker.patch(
+        "app.extensions.RedisClient.get",
+        return_value=None,
+    )
+
+    cached_search_query_hash, cached_search_term = cache_search_query(search_term, SERVICE_ONE_ID, search_query_hash)
+
+    assert not mock_redis_get.called
+    mock_redis_set.assert_called_once_with(
+        make_cache_key(expected_hash, SERVICE_ONE_ID),
+        search_term,
+        ex=SEVEN_DAYS_TTL,
+    )
+    assert cached_search_query_hash == expected_hash
+    assert cached_search_term == search_term
+
+
+def test_return_when_search_query_exists(mocker):
+    search_term = ""
+    search_query_hash = get_sha512_hashed("1234567")
+    excepted_search_term = "1234567"
+
+    mock_redis_set = mocker.patch(
+        "app.extensions.RedisClient.set",
+    )
+    mock_redis_get = mocker.patch(
+        "app.extensions.RedisClient.get",
+        return_value=b"1234567",
+    )
+
+    cached_search_query_hash, cached_search_term = cache_search_query(search_term, SERVICE_ONE_ID, search_query_hash)
+
+    mock_redis_get.assert_called_once_with(make_cache_key(search_query_hash, SERVICE_ONE_ID))
+    assert not mock_redis_set.called
+    assert cached_search_query_hash == search_query_hash
+    assert cached_search_term == excepted_search_term
+
+
+def test_return_when_different_search_term_and_search_query(mocker):
+    search_term = "test@example.com"
+    search_query_hash = get_sha512_hashed("1234567")
+    expected_hash = get_sha512_hashed(search_term)
+
+    mock_redis_set = mocker.patch(
+        "app.extensions.RedisClient.set",
+    )
+    mock_redis_get = mocker.patch(
+        "app.extensions.RedisClient.get",
+        return_value=b"1234567",
+    )
+
+    cached_search_query_hash, cached_search_term = cache_search_query(search_term, SERVICE_ONE_ID, search_query_hash)
+
+    mock_redis_get.assert_called_once_with(make_cache_key(search_query_hash, SERVICE_ONE_ID))
+    mock_redis_set.assert_called_once_with(
+        make_cache_key(expected_hash, SERVICE_ONE_ID),
+        search_term,
+        ex=SEVEN_DAYS_TTL,
+    )
+    assert cached_search_query_hash == expected_hash
+    assert cached_search_term == search_term
+
+
+def test_return_when_same_search_term_and_search_query(mocker):
+    search_term = "1234567"
+    search_query_hash = get_sha512_hashed("1234567")
+    expected_hash = get_sha512_hashed(search_term)
+
+    mock_redis_set = mocker.patch(
+        "app.extensions.RedisClient.set",
+    )
+    mock_redis_get = mocker.patch(
+        "app.extensions.RedisClient.get",
+        return_value=b"1234567",
+    )
+
+    cached_search_query_hash, cached_search_term = cache_search_query(search_term, SERVICE_ONE_ID, search_query_hash)
+
+    mock_redis_get.assert_called_once_with(make_cache_key(search_query_hash, SERVICE_ONE_ID))
+    assert not mock_redis_set.called
+    assert cached_search_query_hash == expected_hash
+    assert cached_search_term == search_term
+
+
+@pytest.fixture(scope="function")
+def mock_cache_search_query(mocker, to_argument):
+    def _get_cache(search_term, service_id, search_query_hash):
+        if search_query_hash:
+            return search_query_hash, to_argument
+        elif search_term:
+            hash_search_query = get_sha512_hashed(search_term) if bool(search_term) else None
+            return hash_search_query, search_term
+        return "", ""
+
+    return mocker.patch("app.main.views.dashboard.cache_search_query", side_effect=_get_cache)
+
+
+@pytest.mark.parametrize(
+    "status_argument, page_argument, to_argument, expected_to_argument",
+    [
+        ("sending", 1, "", ""),
+        ("pending", 3, "+447900900123", "+447900900123"),
+        ("delivered", 4, "test@example.com", "test@example.com"),
+    ],
+)
+def test_with_existing_search_query(
+    client_request,
+    service_one,
+    mock_get_notifications,
+    mock_get_service_statistics,
+    mock_get_service_data_retention,
+    mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
+    status_argument,
+    page_argument,
+    to_argument,
+    expected_to_argument,
+    mocker,
+    mock_cache_search_query,
+):
+    client_request.login(create_active_user_view_permissions())
+    hash_search_query = get_sha512_hashed(to_argument) if to_argument else None
+
+    mocker.patch("app.main.views.dashboard.cache_search_query", return_value=(hash_search_query, to_argument))
+
+    page = client_request.get(
+        "main.view_notifications",
+        service_id=SERVICE_ONE_ID,
+        status=status_argument,
+        search_query=hash_search_query,
+        page=page_argument,
+    )
+    if expected_to_argument:
+        assert page.select_one("input[id=to]")["value"] == expected_to_argument
+    else:
+        assert "value" not in page.select_one("input[id=to]")
+
+
+@pytest.mark.parametrize(
+    "status_argument, page_argument, to_argument, expected_to_argument",
+    [
+        ("sending", 1, "", ""),
+        ("pending", 3, "+447900900123", "+447900900123"),
+        ("delivered", 4, "test@example.com", "test@example.com"),
+    ],
+)
+def test_search_should_generate_search_query(
+    client_request,
+    service_one,
+    mock_get_notifications,
+    mock_get_service_statistics,
+    mock_get_service_data_retention,
+    mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
+    status_argument,
+    page_argument,
+    to_argument,
+    expected_to_argument,
+    mocker,
+    mock_cache_search_query,
+):
+    client_request.login(create_active_user_view_permissions())
+    hash_search_query = get_sha512_hashed(expected_to_argument) if expected_to_argument else ""
+
+    client_request.post(
+        "main.view_notifications",
+        service_id=SERVICE_ONE_ID,
+        status=status_argument,
+        _data={"to": to_argument},
+        page=page_argument,
+        _expected_status=302,
+        _expected_redirect=url_for(
+            "main.view_notifications",
+            service_id=SERVICE_ONE_ID,
+            search_query=hash_search_query,
+        ),
+    )
+
+    mock_cache_search_query.assert_called_with(to_argument, SERVICE_ONE_ID, "")
+
+
+def test_ajax_blocks_have_same_resource(
+    client_request,
+    service_one,
+    mock_get_notifications,
+    mock_get_service_statistics,
+    mock_get_service_data_retention,
+    mock_get_no_api_keys,
+    mock_get_notifications_count_for_service,
+):
+    page = client_request.get(
+        "main.view_notifications",
+        service_id=service_one["id"],
+        message_type="sms",
+        status="",
+    )
+
+    ajax_blocks = page.select("[data-notify-module=update-content]")
+
+    assert len(ajax_blocks) == 2
+    for block in ajax_blocks:
+        assert block["data-resource"] == url_for(
+            "json_updates.get_notifications_page_partials_as_json",
+            service_id=service_one["id"],
+            message_type="sms",
+            # we manually define the statuses even though they're implicit in the initial html GET
+            status="sending,delivered,failed",
+            page=1,
+            search_query=None,
+        )
+        # ensure both ajax blocks have a data-form, so that they both issue the same POST request to the json endpoint
+        assert block["data-form"] == "search-form"
+    assert {block["data-key"] for block in ajax_blocks} == {"counts", "notifications"}

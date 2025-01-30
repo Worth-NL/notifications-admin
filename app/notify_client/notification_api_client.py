@@ -1,3 +1,10 @@
+from contextvars import ContextVar
+
+from flask import current_app
+from notifications_utils.local_vars import LazyLocalGetter
+from werkzeug.local import LocalProxy
+
+from app import memo_resetters
 from app.notify_client import NotifyAdminAPIClient, _attach_current_user
 
 
@@ -14,7 +21,6 @@ class NotificationApiClient(NotifyAdminAPIClient):
         limit_days=None,
         include_jobs=None,
         include_from_test_key=None,
-        format_for_csv=None,
         to=None,
         include_one_off=None,
     ):
@@ -25,7 +31,6 @@ class NotificationApiClient(NotifyAdminAPIClient):
             "status": status,
             "include_jobs": include_jobs,
             "include_from_test_key": include_from_test_key,
-            "format_for_csv": format_for_csv,
             "to": to,
             "include_one_off": include_one_off,
             "count_pages": count_pages,
@@ -44,6 +49,36 @@ class NotificationApiClient(NotifyAdminAPIClient):
             if limit_days is not None:
                 params["limit_days"] = limit_days
             return method(url=f"/service/{service_id}/notifications", **kwargs)
+
+    def get_notifications_for_service_for_csv(
+        self,
+        service_id,
+        job_id=None,
+        template_type=None,
+        status=None,
+        older_than=None,
+        page=None,
+        page_size=None,
+        limit_days=None,
+    ):
+        params = {
+            "older_than": older_than,
+            "page": page,
+            "page_size": page_size,
+            "template_type": template_type,
+            "status": status,
+        }
+
+        params = {k: v for k, v in params.items() if v is not None}
+        kwargs = {"params": params}
+
+        if job_id:
+            params["format_for_csv"] = True
+            return self.get(url=f"/service/{service_id}/job/{job_id}/notifications", **kwargs)
+        else:
+            if limit_days is not None:
+                params["limit_days"] = limit_days
+            return self.get(url=f"/service/{service_id}/notifications/csv", **kwargs)
 
     def send_notification(self, service_id, *, template_id, recipient, personalisation, sender_id):
         data = {
@@ -64,26 +99,9 @@ class NotificationApiClient(NotifyAdminAPIClient):
     def get_notification(self, service_id, notification_id):
         return self.get(url=f"/service/{service_id}/notifications/{notification_id}")
 
-    def get_api_notifications_for_service(self, service_id):
-        ret = self.get_notifications_for_service(
-            service_id, include_jobs=False, include_from_test_key=True, include_one_off=False, count_pages=False
-        )
-        return self.map_letters_to_accepted(ret)
-
-    @staticmethod
-    def map_letters_to_accepted(notifications):
-        for notification in notifications["notifications"]:
-            if notification["notification_type"] == "letter":
-                if notification["status"] in ("created", "sending"):
-                    notification["status"] = "accepted"
-
-                if notification["status"] in ("delivered", "returned-letter"):
-                    notification["status"] = "received"
-        return notifications
-
     def get_notification_letter_preview(self, service_id, notification_id, file_type, page=None):
         get_url = "/service/{}/template/preview/{}/{}{}".format(
-            service_id, notification_id, file_type, "?page={}".format(page) if page else ""
+            service_id, notification_id, file_type, f"?page={page}" if page else ""
         )
 
         return self.get(url=get_url)
@@ -103,5 +121,21 @@ class NotificationApiClient(NotifyAdminAPIClient):
     def get_notification_count_for_job_id(self, *, service_id, job_id):
         return self.get(url=f"/service/{service_id}/job/{job_id}/notification_count")["count"]
 
+    def get_notifications_count_for_service(self, service_id, template_type, limit_days):
+        params = {
+            "template_type": template_type,
+            "limit_days": limit_days,
+        }
 
-notification_api_client = NotificationApiClient()
+        response = self.get(url=f"/service/{service_id}/notifications/count", params=params)
+
+        return response.get("notifications_sent_count")
+
+
+_notification_api_client_context_var: ContextVar[NotificationApiClient] = ContextVar("notification_api_client")
+get_notification_api_client: LazyLocalGetter[NotificationApiClient] = LazyLocalGetter(
+    _notification_api_client_context_var,
+    lambda: NotificationApiClient(current_app),
+)
+memo_resetters.append(lambda: get_notification_api_client.clear())
+notification_api_client = LocalProxy(get_notification_api_client)

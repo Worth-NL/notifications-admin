@@ -14,6 +14,7 @@ from tests.conftest import (
     create_platform_admin_user,
     normalize_spaces,
 )
+from tests.utils import RedisClientMock
 
 
 def test_organisation_page_shows_all_organisations(client_request, platform_admin_user, mocker):
@@ -23,7 +24,7 @@ def test_organisation_page_shows_all_organisations(client_request, platform_admi
         {"id": "C2", "name": "Test 2", "active": False, "count_of_live_services": 2},
     ]
 
-    get_organisations = mocker.patch("app.models.organisation.AllOrganisations.client_method", return_value=orgs)
+    get_organisations = mocker.patch("app.models.organisation.AllOrganisations._get_items", return_value=orgs)
     client_request.login(platform_admin_user)
     page = client_request.get(".organisations")
 
@@ -135,12 +136,10 @@ def test_create_new_organisation_validates(
         ".add_organisation",
         _expected_status=200,
     )
-    assert [
-        (error["data-error-label"], normalize_spaces(error.text)) for error in page.select(".govuk-error-message")
-    ] == [
-        ("name", "Error: Enter an organisation name"),
-        ("organisation_type", "Error: Select a type of organisation"),
-        ("crown_status", "Error: Select yes if the organisation is a Crown body"),
+    assert [(normalize_spaces(error.text)) for error in page.select(".govuk-error-message")] == [
+        ("Error: Enter an organisation name"),
+        ("Error: Select a type of organisation"),
+        ("Error: Select yes if the organisation is a Crown body"),
     ]
     assert mock_create_organisation.called is False
 
@@ -257,8 +256,9 @@ def test_nhs_local_can_create_own_organisations(
 ):
     mocker.patch("app.organisations_client.get_organisation", return_value=organisation)
     mocker.patch(
-        "app.models.organisation.AllOrganisations.client_method",
+        "app.models.organisation.AllOrganisations._get_items",
         return_value=[
+            organisation_json("t3", "Trust 3", active=False, organisation_type="nhs_local"),
             organisation_json("t2", "Trust 2", organisation_type="nhs_local"),
             organisation_json("t1", "Trust 1", organisation_type="nhs_local"),
             organisation_json("gp1", "GP 1", organisation_type="nhs_gp"),
@@ -277,7 +277,7 @@ def test_nhs_local_can_create_own_organisations(
         return
 
     assert normalize_spaces(page.select_one("main p").text) == (
-        "Which NHS Trust or Clinical Commissioning Group do you work for?"
+        "Which NHS Trust or Integrated Care Board do you work for?"
     )
     assert page.select_one("[data-notify-module=live-search]")["data-targets"] == ".govuk-radios__item"
     assert [
@@ -347,7 +347,6 @@ def test_add_organisation_from_gp_service_when_that_org_name_already_exists(
     client_request,
     mocker,
     service_one,
-    mock_update_service_organisation,
 ):
     service_one["organisation_type"] = "nhs_gp"
     mocker.patch(
@@ -394,13 +393,12 @@ def test_add_organisation_from_gp_service_when_that_org_name_already_exists(
 )
 def test_validation_of_gps_creating_organisations(
     client_request,
-    mocker,
     service_one,
     data,
     expected_error,
 ):
     service_one["organisation_type"] = "nhs_gp"
-    expected_page_header = "Accept our data sharing and financial agreement"
+    expected_page_header = "Accept our data processing and financial agreement"
     page = client_request.post(
         ".add_organisation_from_gp_service",
         service_id=SERVICE_ONE_ID,
@@ -421,7 +419,7 @@ def test_nhs_local_assigns_to_selected_organisation(
     mock_update_service_organisation,
 ):
     mocker.patch(
-        "app.models.organisation.AllOrganisations.client_method",
+        "app.models.organisation.AllOrganisations._get_items",
         return_value=[
             organisation_json(ORGANISATION_ID, "Trust 1", organisation_type="nhs_local"),
         ],
@@ -449,7 +447,6 @@ def test_organisation_services_shows_live_services_and_usage(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mock = mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -519,7 +516,6 @@ def test_organisation_services_shows_live_services_and_usage_with_count_of_1(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -591,7 +587,6 @@ def test_organisation_services_shows_usage_in_correct_font_size(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
     service_usage,
     expected_css_class,
 ):
@@ -634,8 +629,6 @@ def test_organisation_services_filters_by_financial_year(
     client_request,
     mock_get_organisation,
     mocker,
-    active_user_with_permissions,
-    fake_uuid,
     financial_year,
     expected_selected,
 ):
@@ -660,7 +653,6 @@ def test_organisation_services_shows_search_bar(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -708,7 +700,6 @@ def test_organisation_services_hides_search_bar_for_7_or_fewer_services(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -745,7 +736,6 @@ def test_organisation_services_links_to_downloadable_report(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -783,7 +773,6 @@ def test_download_organisation_usage_report(
     mock_get_organisation,
     mocker,
     active_user_with_permissions,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_services_and_usage",
@@ -833,7 +822,6 @@ def test_organisation_trial_mode_services_shows_all_non_live_services(
     platform_admin_user,
     mock_get_organisation,
     mocker,
-    fake_uuid,
 ):
     mocker.patch(
         "app.organisations_client.get_organisation_services",
@@ -936,7 +924,7 @@ def test_manage_org_users_shows_no_link_for_cancelled_users(
     mocker,
 ):
     sample_org_invite["status"] = "cancelled"
-    mocker.patch("app.models.user.OrganisationInvitedUsers.client_method", return_value=[sample_org_invite])
+    mocker.patch("app.models.user.OrganisationInvitedUsers._get_items", return_value=[sample_org_invite])
 
     page = client_request.get(
         ".manage_org_users",
@@ -963,11 +951,11 @@ def test_manage_org_users_should_show_live_search_if_more_than_7_users(
     number_of_users,
 ):
     mocker.patch(
-        "app.models.user.OrganisationInvitedUsers.client_method",
+        "app.models.user.OrganisationInvitedUsers._get_items",
         return_value=[],
     )
     mocker.patch(
-        "app.models.user.OrganisationUsers.client_method",
+        "app.models.user.OrganisationUsers._get_items",
         return_value=[active_user_with_permissions] * number_of_users,
     )
 
@@ -1030,13 +1018,12 @@ def test_organisation_settings_for_platform_admin(
     organisation_one,
 ):
     expected_rows = [
-        "Label Value Action",
         "Name Test organisation Change organisation name",
         "Sector Central government Change sector for the organisation",
         "Crown organisation Yes Change organisation crown status",
         (
-            "Data sharing and financial agreement "
-            "Not signed Change data sharing and financial agreement for the organisation"
+            "Data processing and financial agreement "
+            "Not signed Change data processing and financial agreement for the organisation"
         ),
         "Request to go live notes None Change go live notes for the organisation",
         "Can approve own go-live requests No Change whether this organisation can approve its own go-live requests",
@@ -1052,7 +1039,7 @@ def test_organisation_settings_for_platform_admin(
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
     assert page.select_one("h1").text == "Settings"
-    rows = page.select("tr")
+    rows = page.select(".govuk-summary-list__row")
     assert len(rows) == len(expected_rows)
     for index, row in enumerate(expected_rows):
         assert row == " ".join(rows[index].text.split())
@@ -1070,7 +1057,7 @@ def test_organisation_settings_table_shows_email_branding_pool(
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    email_branding_options_row = page.select("tr")[10]
+    email_branding_options_row = page.select(".govuk-summary-list__row")[9]
 
     assert normalize_spaces(email_branding_options_row.text) == (
         "Email branding options "
@@ -1092,7 +1079,9 @@ def test_organisation_settings_table_shows_letter_branding_pool(
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    letter_branding_options_row = find_element_by_tag_and_partial_text(page, "tr", "Letter branding options")
+    letter_branding_options_row = find_element_by_tag_and_partial_text(
+        page, ".govuk-summary-list__row", "Letter branding options"
+    )
 
     assert normalize_spaces(letter_branding_options_row.text) == (
         "Letter branding options "
@@ -1128,7 +1117,9 @@ def test_organisation_settings_table_shows_letter_branding_pool_with_brand_as_de
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    letter_branding_options_row = find_element_by_tag_and_partial_text(page, "tr", "Letter branding options")
+    letter_branding_options_row = find_element_by_tag_and_partial_text(
+        page, ".govuk-summary-list__row", "Letter branding options"
+    )
 
     assert normalize_spaces(letter_branding_options_row.text) == (
         "Letter branding options "
@@ -1169,7 +1160,7 @@ def test_organisation_settings_table_shows_email_branding_pool_non_govuk_default
         client_request.login(platform_admin_user)
         page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    email_branding_options_row = page.select("tr")[10]
+    email_branding_options_row = page.select(".govuk-summary-list__row")[9]
 
     assert normalize_spaces(email_branding_options_row.text) == (
         "Email branding options "
@@ -1190,7 +1181,7 @@ def test_organisation_settings_table_shows_email_branding_pool_govuk_default(
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    email_branding_options_row = page.select("tr")[10]
+    email_branding_options_row = page.select(".govuk-summary-list__row")[9]
 
     assert normalize_spaces(email_branding_options_row.text) == (
         "Email branding options GOV.UK Default Manage email branding options for the organisation"
@@ -1290,24 +1281,25 @@ def test_archive_organisation_after_confirmation(
     mock_get_organisation_by_domain,
 ):
     mock_api = mocker.patch("app.organisations_client.post")
-    redis_delete_mock = mocker.patch("app.notify_client.organisations_api_client.redis_client.delete")
+    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete", new_callable=RedisClientMock)
 
     client_request.login(platform_admin_user)
     page = client_request.post("main.archive_organisation", org_id=organisation_one["id"], _follow_redirects=True)
+
     mock_api.assert_called_once_with(url=f"/organisations/{organisation_one['id']}/archive", data=None)
-    assert normalize_spaces(page.select_one("h1").text) == "Choose service"
+    assert normalize_spaces(page.select_one("h1").text) == "Your services"
     assert normalize_spaces(page.select_one(".banner-default-with-tick").text) == "‘Test organisation’ was deleted"
-    assert redis_delete_mock.call_args_list == [
-        mocker.call(f'organisation-{organisation_one["id"]}-name'),
-        mocker.call("domains"),
-        mocker.call("organisations"),
-    ]
+    mock_redis_delete.assert_called_with_args(
+        f"organisation-{organisation_one['id']}-name",
+        "domains",
+        "organisations",
+    )
 
 
 @pytest.mark.parametrize(
     "error_message",
     [
-        "Cannot archive an organisation with services",
+        "Cannot archive an organisation with active services",
         "Cannot archive an organisation with team members or invited team members",
     ],
 )
@@ -1349,7 +1341,7 @@ def test_archive_organisation_does_not_allow_orgs_with_team_members_or_services_
                 {"value": "central", "label": "Central government"},
                 {"value": "local", "label": "Local government"},
                 {"value": "nhs_central", "label": "NHS – central government agency or public body"},
-                {"value": "nhs_local", "label": "NHS Trust or Clinical Commissioning Group"},
+                {"value": "nhs_local", "label": "NHS Trust or Integrated Care Board"},
                 {"value": "nhs_gp", "label": "GP surgery"},
                 {"value": "emergency_service", "label": "Emergency service"},
                 {"value": "school_or_college", "label": "School or college"},
@@ -1400,7 +1392,6 @@ def test_archive_organisation_does_not_allow_orgs_with_team_members_or_services_
 )
 def test_view_organisation_settings(
     client_request,
-    fake_uuid,
     organisation_one,
     mock_get_organisation,
     endpoint,
@@ -1491,9 +1482,7 @@ def test_view_organisation_settings(
     ),
 )
 def test_update_organisation_settings(
-    mocker,
     client_request,
-    fake_uuid,
     organisation_one,
     mock_get_organisation,
     mock_update_organisation,
@@ -1501,6 +1490,7 @@ def test_update_organisation_settings(
     post_data,
     expected_persisted,
     user,
+    mocker,
 ):
     mocker.patch("app.organisations_client.get_organisation_services", return_value=[])
     client_request.login(user)
@@ -1558,10 +1548,9 @@ def test_update_organisation_sector_sends_service_id_data_to_api_client(
     ),
 )
 def test_view_organisation_domains(
-    mocker,
     client_request,
-    fake_uuid,
     user,
+    mocker,
 ):
     client_request.login(user)
 
@@ -1582,6 +1571,16 @@ def test_view_organisation_domains(
     assert [textbox.get("value") for textbox in page.select("input[type=text]")] == [
         "example.gov.uk",
         "test.example.gov.uk",
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -1641,7 +1640,6 @@ def test_view_organisation_domains(
 )
 def test_update_organisation_domains(
     client_request,
-    fake_uuid,
     organisation_one,
     mock_get_organisation,
     mock_update_organisation,
@@ -1669,11 +1667,10 @@ def test_update_organisation_domains(
 
 
 def test_update_organisation_domains_when_domain_already_exists(
-    mocker,
     client_request,
-    fake_uuid,
     organisation_one,
     mock_get_organisation,
+    mocker,
 ):
     user = create_platform_admin_user()
     client_request.login(user)
@@ -1701,9 +1698,8 @@ def test_update_organisation_domains_when_domain_already_exists(
 
 
 def test_update_organisation_domains_with_more_than_just_domain(
-    mocker,
     client_request,
-    fake_uuid,
+    mocker,
 ):
     user = create_platform_admin_user()
     client_request.login(user)
@@ -1728,9 +1724,20 @@ def test_update_organisation_domains_with_more_than_just_domain(
         _expected_status=200,
     )
 
-    assert normalize_spaces(page.select_one(".banner-dangerous").text) == (
-        "There is a problem Item 1: Cannot contain @ Item 3: Cannot contain @"
-    )
+    assert normalize_spaces(page.select_one(".govuk-error-summary__title").text) == ("There is a problem")
+
+    error_summary_links = page.select(".govuk-error-summary__list a")
+
+    assert normalize_spaces(error_summary_links[0].text) == "Domain name 1 cannot contain @"
+    assert normalize_spaces(error_summary_links[0]["href"]) == "#domains-1"
+
+    assert normalize_spaces(error_summary_links[1].text) == "Domain name 3 cannot contain @"
+    assert normalize_spaces(error_summary_links[1]["href"]) == "#domains-3"
+
+    assert [normalize_spaces(error_link.text) for error_link in page.select(".govuk-error-summary__list a")] == [
+        "Domain name 1 cannot contain @",
+        "Domain name 3 cannot contain @",
+    ]
 
     assert [field["value"] for field in page.select("input[type=text][value]")] == [
         "test@example.gov.uk",
@@ -1766,8 +1773,21 @@ def test_update_organisation_domains_nhs_domains(
         _expected_status=200,
     )
 
-    assert normalize_spaces(page.select_one(".banner-dangerous").text) == (
-        f"There is a problem Item 1: Cannot be ‘{domain.lower()}’"
+    assert normalize_spaces(page.select_one(".govuk-error-summary__title").text) == ("There is a problem")
+
+    if domain == "NHS.NET":  # NHS.NET fails by being nhs.net (lowercased) so is announced as such
+        failed_domain = domain.lower()
+    else:
+        failed_domain = domain
+
+    assert (
+        normalize_spaces(page.select_one(".govuk-error-summary__list li:first-of-type a").text)
+        == f"Domain name 1 cannot be ‘{failed_domain}’"
+    )
+
+    assert (
+        normalize_spaces(page.select_one(".list-entry:first-of-type .govuk-error-message").text)
+        == f"Error: Cannot be ‘{failed_domain}’"
     )
 
     assert [field["value"] for field in page.select("input[type=text][value]")] == [
@@ -1885,18 +1905,18 @@ def test_post_edit_organisation_go_live_notes_updates_go_live_notes(
 
 
 def test_organisation_settings_links_to_edit_organisation_notes_page(
-    mocker,
     mock_get_organisation,
     mock_get_email_branding_pool,
     mock_get_letter_branding_pool,
     organisation_one,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    assert page.select(".table-field-right-aligned a")[4]["href"] == url_for(
+    assert page.select(".govuk-summary-list__actions a")[4]["href"] == url_for(
         ".edit_organisation_go_live_notes",
         org_id=organisation_one["id"],
     )
@@ -1914,7 +1934,7 @@ def test_view_edit_organisation_notes(
         org_id=organisation_one["id"],
     )
     assert page.select_one("h1").text == "Edit organisation notes"
-    assert page.select_one("label.form-label").text.strip() == "Notes"
+    assert page.select_one(".govuk-label").text.strip() == "Notes"
     assert page.select_one("textarea").attrs["name"] == "notes"
 
 
@@ -1953,36 +1973,36 @@ def test_update_organisation_notes_errors_when_user_not_platform_admin(
 
 
 def test_organisation_settings_links_to_edit_can_approve_own_go_live_request(
-    mocker,
     mock_get_organisation,
     mock_get_email_branding_pool,
     mock_get_letter_branding_pool,
     organisation_one,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    assert page.select(".table-field-right-aligned a")[5]["href"] == url_for(
+    assert page.select(".govuk-summary-list__actions a")[5]["href"] == url_for(
         ".edit_organisation_can_approve_own_go_live_requests",
         org_id=organisation_one["id"],
     )
 
 
 def test_organisation_settings_links_to_edit_can_ask_to_join_a_service(
-    mocker,
     mock_get_organisation,
     mock_get_email_branding_pool,
     mock_get_letter_branding_pool,
     organisation_one,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
 
-    assert page.select(".table-field-right-aligned a")[6]["href"] == url_for(
+    assert page.select(".govuk-summary-list__actions a")[6]["href"] == url_for(
         ".edit_organisation_can_ask_to_join_a_service",
         org_id=organisation_one["id"],
     )
@@ -1996,7 +2016,6 @@ def test_organisation_settings_links_to_edit_can_ask_to_join_a_service(
     ),
 )
 def test_get_can_ask_to_join_a_service(
-    mocker,
     client_request,
     fake_uuid,
     platform_admin_user,
@@ -2004,6 +2023,7 @@ def test_get_can_ask_to_join_a_service(
     expected_checked_value,
     expected_label,
     permission_list,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
@@ -2074,13 +2094,13 @@ def test_add_delete_can_ask_to_join_a_service(
     ),
 )
 def test_get_can_approve_own_go_live_requests(
-    mocker,
     client_request,
     fake_uuid,
     platform_admin_user,
     value_from_api,
     expected_checked_value,
     expected_label,
+    mocker,
 ):
     client_request.login(platform_admin_user)
 
@@ -2175,17 +2195,17 @@ def test_update_organisation_notes_doesnt_call_api_when_notes_dont_change(
 
 
 def test_organisation_settings_links_to_edit_organisation_billing_details_page(
-    mocker,
     mock_get_organisation,
     mock_get_email_branding_pool,
     mock_get_letter_branding_pool,
     organisation_one,
     client_request,
     platform_admin_user,
+    mocker,
 ):
     client_request.login(platform_admin_user)
     page = client_request.get(".organisation_settings", org_id=organisation_one["id"])
-    assert len(page.select(f"""a[href="/organisations/{organisation_one['id']}/settings/edit-billing-details"]""")) == 1
+    assert len(page.select(f"""a[href="/organisations/{organisation_one["id"]}/settings/edit-billing-details"]""")) == 1
 
 
 def test_view_edit_organisation_billing_details(
@@ -2312,7 +2332,7 @@ def test_organisation_billing_page_when_the_agreement_is_signed_by_a_known_perso
     )
 
     assert page.select_one("h1").string == "Billing"
-    assert "2.5 of the GOV.UK Notify data sharing and financial agreement on 20 February 2020" in normalize_spaces(
+    assert "2.5 of the GOV.UK Notify data processing and financial agreement on 20 February 2020" in normalize_spaces(
         page.text
     )
     assert f"{expected_signatory} signed" in page.text
@@ -2336,7 +2356,7 @@ def test_organisation_billing_page_when_the_agreement_is_signed_by_an_unknown_pe
 
     assert page.select_one("h1").string == "Billing"
     assert (
-        f'{organisation_one["name"]} has accepted the GOV.UK Notify data ' "sharing and financial agreement."
+        f"{organisation_one['name']} has accepted the GOV.UK Notify data processing and financial agreement."
     ) in page.text
     assert page.select_one("main a")["href"] == url_for(".organisation_download_agreement", org_id=ORGANISATION_ID)
 
@@ -2366,7 +2386,7 @@ def test_organisation_billing_page_when_the_agreement_is_not_signed(
     )
 
     assert page.select_one("h1").string == "Billing"
-    assert f'{organisation_one["name"]} {expected_content}' in page.text
+    assert f"{organisation_one['name']} {expected_content}" in page.text
 
 
 @pytest.mark.parametrize(
@@ -2376,13 +2396,13 @@ def test_organisation_billing_page_when_the_agreement_is_not_signed(
             True,
             200,
             "crown.pdf",
-            "GOV.UK Notify data sharing and financial agreement.pdf",
+            "GOV.UK Notify data processing and financial agreement.pdf",
         ),
         (
             False,
             200,
             "non-crown.pdf",
-            "GOV.UK Notify data sharing and financial agreement (non-crown).pdf",
+            "GOV.UK Notify data processing and financial agreement (non-crown).pdf",
         ),
         (
             None,

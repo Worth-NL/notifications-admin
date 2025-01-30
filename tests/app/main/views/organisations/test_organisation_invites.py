@@ -154,7 +154,12 @@ def test_accepted_invite_when_other_user_already_logged_in(client_request, mock_
 
 
 def test_cancelled_invite_opened_by_user(
-    mocker, client_request, api_user_active, mock_check_org_cancelled_invite_token, mock_get_organisation, fake_uuid
+    client_request,
+    api_user_active,
+    mock_check_org_cancelled_invite_token,
+    mock_get_organisation,
+    fake_uuid,
+    mocker,
 ):
     client_request.logout()
     mock_get_user = mocker.patch("app.user_api_client.get_user", return_value=api_user_active)
@@ -353,7 +358,6 @@ def test_org_user_registers_with_email_already_in_use(
     sample_org_invite,
     mock_get_user_by_email,
     mock_accept_org_invite,
-    mock_add_user_to_organisation,
     mock_send_already_registered_email,
     mock_register_user,
     mock_get_invited_org_user_by_id,
@@ -386,7 +390,6 @@ def test_org_user_registration(
     mock_register_user,
     mock_send_verify_code,
     mock_get_user_by_email,
-    mock_send_verify_email,
     mock_accept_org_invite,
     mock_add_user_to_organisation,
     mock_get_invited_org_user_by_id,
@@ -422,10 +425,6 @@ def test_org_user_registration(
 def test_verified_org_user_redirects_to_dashboard(
     client_request,
     sample_org_invite,
-    mock_check_verify_code,
-    mock_get_user,
-    mock_activate_user,
-    mock_login,
 ):
     client_request.logout()
     invited_org_user = InvitedOrgUser(sample_org_invite)
@@ -479,13 +478,12 @@ class TestEditOrganisationUser:
         self,
         client_request,
         mock_get_organisation,
-        mock_get_invites_for_organisation,
         platform_admin_user,
         _other_user,
         _get_user_fn,
         mocker,
     ):
-        mocker.patch("app.models.user.OrganisationUsers.client_method", return_value=[_other_user])
+        mocker.patch("app.models.user.OrganisationUsers._get_items", return_value=[_other_user])
         client_request.login(platform_admin_user)
 
         # Override the `get_user` mock from `login` because we need to be able to get multiple users
@@ -506,14 +504,13 @@ class TestEditOrganisationUser:
     def test_set_permissions(
         self,
         client_request,
-        mock_get_invites_for_organisation,
         platform_admin_user,
         _other_user,
         _get_user_fn,
         mocker,
     ):
         self._mock_get_organistion_can_approve_go_live(mocker)
-        mocker.patch("app.models.user.OrganisationUsers.client_method", return_value=[_other_user])
+        mocker.patch("app.models.user.OrganisationUsers._get_items", return_value=[_other_user])
         mock_set_org_permissions = mocker.patch(
             "app.notify_client.user_api_client.UserApiClient.set_organisation_permissions"
         )
@@ -556,13 +553,12 @@ class TestEditOrganisationUser:
         self,
         client_request,
         mock_get_organisation,
-        mock_get_invites_for_organisation,
         platform_admin_user,
         _other_user,
         _get_user_fn,
         mocker,
     ):
-        mocker.patch("app.models.user.OrganisationUsers.client_method", return_value=[_other_user])
+        mocker.patch("app.models.user.OrganisationUsers._get_items", return_value=[_other_user])
         mocker.patch("app.notify_client.user_api_client.UserApiClient.set_organisation_permissions")
         mocker.patch("app.models.user.create_set_organisation_user_permissions_event")
         client_request.login(platform_admin_user)

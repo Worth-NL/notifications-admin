@@ -47,7 +47,13 @@ def test_email_branding_page_shows_full_branding_list(client_request, platform_a
     "user_fixture, expected_response_status", (("api_user_active_email_auth", 403), ("platform_admin_user", 200))
 )
 def test_view_email_branding_requires_platform_admin(
-    mocker, client_request, mock_get_email_branding, user_fixture, expected_response_status, request, fake_uuid
+    client_request,
+    mock_get_email_branding,
+    user_fixture,
+    expected_response_status,
+    request,
+    fake_uuid,
+    mocker,
 ):
     mocker.patch(
         "app.email_branding_client.get_orgs_and_services_associated_with_branding",
@@ -134,7 +140,7 @@ def test_view_email_branding_shows_created_by_and_helpful_dates_if_available(
 
     page = client_request.get(".platform_admin_view_email_branding", branding_id=fake_uuid)
 
-    created_by_link = page.select("p > a")[1]
+    created_by_link = page.select("main .govuk-body > a")[0]
     assert created_by_link.text.strip() == user["name"]
     assert created_by_link["href"] == url_for(".user_information", user_id=user["id"])
 
@@ -174,7 +180,6 @@ def test_edit_email_branding_shows_the_correct_branding_info(
     page = client_request.get(
         ".platform_admin_update_email_branding",
         branding_id=fake_uuid,
-        _test_page_title=False,  # TODO: Fix page titles
     )
 
     assert page.select_one("#logo-img > img")["src"].endswith("/example.png")
@@ -188,7 +193,6 @@ def test_create_email_branding_does_not_show_any_branding_info(client_request, p
     client_request.login(platform_admin_user)
     page = client_request.get(
         "main.platform_admin_create_email_branding",
-        _test_page_title=False,  # TODO: Fix page titles
     )
 
     assert page.select_one("#logo-img > img") is None
@@ -232,7 +236,7 @@ def test_create_email_branding_backlinks(client_request, platform_admin_user, ex
         text="Example text",
         colour="Example colour",
         brand_type="both",
-        **extra_kwargs
+        **extra_kwargs,
     )
 
     assert page.select_one("a.govuk-back-link")["href"] == expected_backlink
@@ -332,7 +336,7 @@ def test_create_email_branding_does_not_require_a_name_when_uploading_a_file(
     mocker.patch("app.main.views.email_branding.logo_client.save_temporary_logo", return_value="temp_filename")
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
     data = {
-        "file": (BytesIO("".encode("utf-8")), "test.png"),
+        "file": (BytesIO(b""), "test.png"),
         "colour": "",
         "text": "",
         "name": "",
@@ -346,7 +350,7 @@ def test_create_email_branding_does_not_require_a_name_when_uploading_a_file(
         _follow_redirects=True,
     )
 
-    assert not page.select_one(".error-message")
+    assert not page.select_one(".govuk-error-message")
 
 
 @pytest.mark.parametrize(
@@ -366,7 +370,7 @@ def test_create_email_branding_calls_antivirus_scan(
     mocker.patch("app.main.views.email_branding.logo_client.save_temporary_logo", return_value="temp_filename")
     mock_antivirus = mocker.patch("app.extensions.antivirus_client.scan", return_value=scan_result)
     data = {
-        "file": (BytesIO("".encode("utf-8")), "test.png"),
+        "file": (BytesIO(b""), "test.png"),
         "colour": "",
         "text": "",
         "name": "",
@@ -749,7 +753,6 @@ def test_temp_logo_is_shown_after_uploading_logo(
     client_request,
     platform_admin_user,
     mocker,
-    fake_uuid,
 ):
     mocker.patch("app.main.views.email_branding.logo_client.save_temporary_logo", return_value="email/test.png")
     mocker.patch("app.extensions.antivirus_client.scan", return_value=True)
@@ -757,7 +760,7 @@ def test_temp_logo_is_shown_after_uploading_logo(
     client_request.login(platform_admin_user)
     page = client_request.post(
         "main.platform_admin_create_email_branding",
-        _data={"file": (BytesIO("".encode("utf-8")), "test.png")},
+        _data={"file": (BytesIO(b""), "test.png")},
         _content_type="multipart/form-data",
         _follow_redirects=True,
     )
@@ -766,7 +769,7 @@ def test_temp_logo_is_shown_after_uploading_logo(
 
 
 def test_logo_persisted_when_organisation_saved(
-    client_request, platform_admin_user, mock_create_email_branding, mocker, fake_uuid
+    client_request, platform_admin_user, mock_create_email_branding, mocker
 ):
     mock_save_temporary = mocker.patch("app.main.views.email_branding.logo_client.save_temporary_logo")
     mock_save_permanent = mocker.patch("app.main.views.email_branding.logo_client.save_permanent_logo")
@@ -774,7 +777,7 @@ def test_logo_persisted_when_organisation_saved(
     client_request.login(platform_admin_user)
     client_request.post(
         "main.platform_admin_create_email_branding",
-        logo="test.png",
+        logo_key="test.png",
         _content_type="multipart/form-data",
     )
 
@@ -849,8 +852,7 @@ def test_create_email_branding_government_identity_logo_form(client_request, pla
         ),
         (
             "Scotland Office",
-            "https://static.example.com/images/branding/insignia/"
-            "Scotland Office.png?9da8a4c042f1b0f0631bb4ff98330dde",
+            "https://static.example.com/images/branding/insignia/Scotland Office.png?9da8a4c042f1b0f0631bb4ff98330dde",
         ),
         (
             "Wales Office",
@@ -947,7 +949,11 @@ def test_create_email_branding_government_identity_colour_400_if_no_filename_or_
     )
 
 
-def test_post_create_email_branding_government_identity_form_colour(mocker, client_request, platform_admin_user):
+def test_post_create_email_branding_government_identity_form_colour(
+    client_request,
+    platform_admin_user,
+    mocker,
+):
     mock_save_temporary = mocker.patch(
         "app.main.views.email_branding.logo_client.save_temporary_logo",
         return_value="temporary/email/example.png",

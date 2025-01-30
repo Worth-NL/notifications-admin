@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from flask import current_app, render_template
 from flask_login import current_user
 from notifications_utils.international_billing_rates import INTERNATIONAL_BILLING_RATES
@@ -7,8 +9,7 @@ from app.main import main
 from app.main.forms import SearchByNameForm
 from app.main.views.sub_navigation_dictionaries import pricing_nav
 from app.models.letter_rates import LetterRates
-
-CURRENT_SMS_RATE = "1.97"
+from app.models.sms_rate import SMSRate
 
 
 @main.route("/pricing")
@@ -19,19 +20,19 @@ def guidance_pricing():
         navigation_links=pricing_nav(),
     )
 
-
 # @main.route("/pricing/text-messages")
 # def guidance_pricing_text_messages():
 #     return render_template(
 #         "views/guidance/pricing/text-message-pricing.html",
-#         sms_rate=CURRENT_SMS_RATE,
+#         sms_rate=SMSRate(),
 #         international_sms_rates=sorted(
-#             [(cc, country["names"], country["billable_units"]) for cc, country in INTERNATIONAL_BILLING_RATES.items()],
+#             [(cc, country["names"], country["rate_multiplier"]) for cc, country in INTERNATIONAL_BILLING_RATES.items()],
 #             key=lambda x: x[0],
 #         ),
 #         _search_form=SearchByNameForm(),
 #         navigation_links=pricing_nav(),
-#     )
+#         last_updated=datetime(2024, 3, 28).astimezone(UTC),
+#    )
 
 
 # @main.route("/pricing/letters")
@@ -41,21 +42,12 @@ def guidance_pricing():
 #         navigation_links=pricing_nav(),
 #     )
 
-
-# @main.route("/pricing/trial-mode")
-# def guidance_trial_mode():
-#     return render_template(
-#         "views/guidance/pricing/trial-mode.html",
-#         navigation_links=pricing_nav(),
-#         email_and_sms_daily_limit=current_app.config["DEFAULT_SERVICE_LIMIT"],
-#     )
-
-
 # @main.route("/pricing/how-to-pay")
 # def guidance_how_to_pay():
 #     return render_template(
 #         "views/guidance/pricing/how-to-pay.html",
-#         navigation_links=pricing_nav(),
+#         billing_details=current_app.config["NOTIFY_BILLING_DETAILS"],
+#        navigation_links=pricing_nav(),
 #     )
 
 

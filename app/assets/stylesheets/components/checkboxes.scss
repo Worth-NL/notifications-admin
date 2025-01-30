@@ -1,7 +1,7 @@
-// Taken from https://github.com/alphagov/govuk-frontend/blob/v2.13.0/src/components/checkboxes/_checkboxes.scss
-$govuk-touch-target-size: 44px;
+// https://github.com/alphagov/govuk-frontend/blob/v5.4.1/packages/govuk-frontend/src/govuk/components/checkboxes/_index.scss
+$govuk-touch-target-gutter: 4px;
 $govuk-checkboxes-size: 40px;
-
+$govuk-touch-target-size: ($govuk-checkboxes-size + $govuk-touch-target-gutter);
 .selection-summary {
   position: relative;
 
@@ -11,6 +11,11 @@ $govuk-checkboxes-size: 40px;
     left: 0;
     width: 39px;
     height: 30px;
+    display: none;
+
+    .#{$govuk-frontend-supported-css-class} & {
+      display: block;
+    }
   }
 
   .selection-summary__text {
@@ -69,21 +74,20 @@ $govuk-checkboxes-size: 40px;
 .govuk-form-group--nested {
 
   $border-thickness: $govuk-touch-target-size - $govuk-checkboxes-size;
-  $border-indent: $govuk-touch-target-size / 2;
-
   position: relative;
 
   // To equalise the spacing between the line and the top/bottom of
   // the radio
   margin-top: govuk-spacing(1) + ($border-thickness / 2);
   margin-bottom: govuk-spacing(1) * -1;
-  padding-left: govuk-spacing(2) + 2;
+  padding-left: $govuk-checkboxes-size + govuk-spacing(3); //padding of the checkbox label
+  flex-basis: 100%;
 
   &:before {
     content: "";
     position: absolute;
     bottom: 0;
-    left: $border-indent * -1;
+    left: $govuk-checkboxes-size / 2;
     width: $border-thickness;
     height: 100%;
     background: $govuk-border-colour;
@@ -111,6 +115,62 @@ $govuk-checkboxes-size: 40px;
 .selection-wrapper {
   fieldset:focus {
     outline: none;
+  }
+
+}
+
+.govuk-checkboxes__input:disabled+.govuk-checkboxes__label,
+.govuk-checkboxes__input:disabled~.govuk-hint {
+  opacity: 1;
+  color: $govuk-secondary-text-colour;
+}
+
+.govuk-checkboxes__input:disabled+.govuk-checkboxes__label:before {
+  background: govuk-colour("light-grey");
+}
+
+// collapsible checkboxes toggle button
+
+// govuk-button with a chevron icon aligned with text
+.notify-button--with-chevron__chevron {
+  display: inline-block;
+  position: relative;
+  margin-left: govuk-spacing(3);
+
+
+  // inner chevron arrow
+  &::before {
+    transform:translateY(-35%) rotate(45deg) scale(1);
+    border-color: black;
+    border-bottom:2px solid govuk-colour('black');
+    border-right:2px solid govuk-colour('black');
+    content:"";
+    display: inline-block;
+    height: 8px;
+    margin: 0 10px 0 -18px; // negative left margin means the element effectively occupies 0 width
+    vertical-align: middle;
+    width: 8px;
+    // position: static; // override GOV.UK Frontend styling from the Button component
+  }
+}
+
+// Rotate icon to create "Down" version
+.notify-button--with-chevron__chevron--active {
+  &::before {
+    transform:translateY(1px) rotate(225deg) scale(1);
+  }
+}
+
+.govuk-checkboxes__item--single-with-hint {
+
+  margin-top: -1 * govuk-spacing(2);
+
+  .govuk-checkboxes__label::before {
+    top: govuk-spacing(2) + 2px;  // 2px is existing top position
+  }
+
+  .govuk-checkboxes__label::after {
+    top: govuk-spacing(2) + 13px;  // 13px is existing top position
   }
 
 }

@@ -1,20 +1,24 @@
 import re
 from abc import ABC, abstractmethod
 
-from flask import current_app
+from flask import current_app, render_template
+from notifications_utils.clients.zendesk.zendesk_client import NotifySupportTicket, NotifyTicketType
 from notifications_utils.field import Field
 from notifications_utils.formatters import formatted_list
-from notifications_utils.recipients import InvalidEmailError, validate_email_address
+from notifications_utils.recipient_validation.email_address import validate_email_address
+from notifications_utils.recipient_validation.errors import InvalidEmailError, InvalidPhoneError
+from notifications_utils.recipient_validation.phone_number import PhoneNumber, validate_phone_number
 from notifications_utils.sanitise_text import SanitiseSMS
 from ordered_set import OrderedSet
 from wtforms import ValidationError
 from wtforms.validators import URL, DataRequired, InputRequired, StopValidation
 from wtforms.validators import Length as WTFormsLength
 
-from app import antivirus_client
+from app import antivirus_client, current_service, zendesk_client
 from app.formatters import sentence_case
 from app.main._commonly_used_passwords import commonly_used_passwords
 from app.models.spreadsheet import Spreadsheet
+from app.notify_client.protected_sender_id_api_client import protected_sender_id_api_client
 from app.utils.user import is_gov_user
 
 
@@ -35,7 +39,7 @@ class CsvFileValidator:
 
     def __call__(self, form, field):
         if not Spreadsheet.can_handle(field.data.filename):
-            raise ValidationError(f"{field.data.filename} is not a spreadsheet that Notify can read")
+            raise ValidationError("The file must be a spreadsheet that Notify can read")
 
 
 class ValidGovEmail:
@@ -48,19 +52,22 @@ class ValidGovEmail:
         # message = """
         #     Enter a public sector email address or
         #     <a class="govuk-link govuk-link--no-visited-state" href="{}">find out who can use Notify</a>
-        # """.format(
-        #     url_for("main.guidance_who_can_use_notify")
-        # )
-
+        # """.format(url_for("main.guidance_who_can_use_notify"))
+        
         message = "Enter a public sector email address"
-
+        
         if not is_gov_user(field.data.lower()):
             raise ValidationError(message)
 
 
 class ValidEmail:
-    def __init__(self, message="Enter an email address in the correct format, like name@example.gov.uk"):
+    def __init__(
+        self,
+        message="Enter an email address in the correct format, like name@example.gov.uk",
+        error_summary_message="Enter %s in the correct format",
+    ):
         self.message = message
+        self.error_summary_message = error_summary_message
 
     def __call__(self, form, field):
         if not field.data:
@@ -69,7 +76,49 @@ class ValidEmail:
         try:
             validate_email_address(field.data)
         except InvalidEmailError as e:
+            if hasattr(field, "error_summary_messages"):
+                field.error_summary_messages.append(self.error_summary_message)
             raise ValidationError(self.message) from e
+
+
+class ValidPhoneNumber:
+    def __init__(
+        self,
+        allow_international_sms=False,
+        allow_sms_to_uk_landlines=False,
+        message=None,
+    ):
+        self.allow_international_sms = allow_international_sms
+        self.allow_sms_to_uk_landlines = allow_sms_to_uk_landlines
+        self.message = message
+
+    _error_summary_messages_map = {
+        InvalidPhoneError.Codes.TOO_SHORT: "%s is too short",
+        InvalidPhoneError.Codes.TOO_LONG: "%s is too long",
+        InvalidPhoneError.Codes.NOT_A_UK_MOBILE: "%s does not look like a UK mobile number",
+        InvalidPhoneError.Codes.UNSUPPORTED_COUNTRY_CODE: "Country code for %s not found",
+        InvalidPhoneError.Codes.UNKNOWN_CHARACTER: "%s can only include: 0 1 2 3 4 5 6 7 8 9 ( ) + -",
+    }
+
+    def __call__(self, form, field):
+        try:
+            if field.data:
+                if self.allow_sms_to_uk_landlines:
+                    number = PhoneNumber(field.data)
+                    number.validate(
+                        allow_international_number=self.allow_international_sms,
+                        allow_uk_landline=self.allow_sms_to_uk_landlines,
+                    )
+                else:
+                    validate_phone_number(field.data, international=self.allow_international_sms)
+        except InvalidPhoneError as e:
+            error_message = str(e)
+            if hasattr(field, "error_summary_messages"):
+                error_summary_message = self._error_summary_messages_map[e.code]
+
+                field.error_summary_messages.append(error_summary_message)
+
+            raise ValidationError(error_message) from e
 
 
 class NoCommasInPlaceHolders:
@@ -115,7 +164,7 @@ class OnlySMSCharacters:
         super().__init__(*args, **kwargs)
 
     def __call__(self, form, field):
-        non_sms_characters = sorted(list(SanitiseSMS.get_non_compatible_characters(field.data)))
+        non_sms_characters = sorted(SanitiseSMS.get_non_compatible_characters(field.data))
         if non_sms_characters:
             raise ValidationError(
                 "You cannot use {} in text messages. {} will not display properly on some phones.".format(
@@ -139,14 +188,49 @@ class IsNotAGenericSenderID:
 
     def __init__(
         self,
-        message="Text message sender ID cannot be Alert, Info or Verify as those are prohibited due to "
-        "usage by spam",
+        message="Text message sender ID cannot be Alert, Info or Verify as those are prohibited due to usage by spam",
     ):
         self.message = message
 
     def __call__(self, form, field):
         if field.data and field.data.lower() in self.generic_sender_ids:
             raise ValidationError(self.message)
+
+
+class IsNotLikeNHSNoReply:
+    def __call__(self, form, field):
+        lower_cased_data = field.data.lower()
+        if (
+            field.data
+            and ("nhs" in lower_cased_data and "no" in lower_cased_data and "reply" in lower_cased_data)
+            and field.data != "NHSNoReply"
+        ):
+            raise ValidationError("Text message sender ID must match other NHS services - change it to ‘NHSNoReply’")
+
+
+def create_phishing_senderid_zendesk_ticket(senderID=None):
+    ticket_message = render_template(
+        "support-tickets/phishing-senderid.txt",
+        senderID=senderID,
+    )
+    ticket = NotifySupportTicket(
+        subject=f"Possible Phishing sender ID - {current_service.name}",
+        message=ticket_message,
+        ticket_type=NotifySupportTicket.TYPE_TASK,
+        notify_ticket_type=NotifyTicketType.TECHNICAL,
+        notify_task_type="notify_task_blocked_sender",
+    )
+    zendesk_client.send_ticket_to_zendesk(ticket)
+
+
+class IsNotAPotentiallyMaliciousSenderID:
+    def __call__(self, form, field):
+        if protected_sender_id_api_client.get_check_sender_id(sender_id=field.data):
+            create_phishing_senderid_zendesk_ticket(senderID=field.data)
+            current_app.logger.warning("User tried to set sender id to potentially malicious one: %s", field.data)
+            raise ValidationError(
+                f"Text message sender ID cannot be ‘{field.data}’ - this is to protect recipients from phishing scams"
+            )
 
 
 class IsAUKMobileNumberOrShortCode:
@@ -184,35 +268,64 @@ class MustContainAlphanumericCharacters:
 
 
 class CharactersNotAllowed:
-    def __init__(self, characters_not_allowed, *, message=None):
+    def __init__(self, characters_not_allowed, *args, thing="item", message=None, error_summary_message=None):
         self.characters_not_allowed = OrderedSet(characters_not_allowed)
+        self.thing = thing
         self.message = message
+        self.error_summary_message = error_summary_message
 
     def __call__(self, form, field):
         illegal_characters = self.characters_not_allowed.intersection(field.data)
 
         if illegal_characters:
             if self.message:
-                raise ValidationError(self.message)
-            raise ValidationError(
-                f"Cannot contain "
-                f'{formatted_list(illegal_characters, conjunction="or", before_each="", after_each="")}'
-            )
+                error_message = self.message
+            else:
+                error_message = (
+                    f"Cannot contain "
+                    f"{formatted_list(illegal_characters, conjunction='or', before_each='', after_each='')}"
+                )
+
+            if hasattr(field, "error_summary_messages"):
+                if self.error_summary_message:
+                    error_summary_message = self.error_summary_message
+                else:
+                    error_summary_message = (
+                        f"%s cannot contain "
+                        f"{formatted_list(illegal_characters, conjunction='or', before_each='', after_each='')}"
+                    )
+                field.error_summary_messages.append(error_summary_message)
+
+            raise ValidationError(error_message)
 
 
 class StringsNotAllowed:
-    def __init__(self, *args, message=None, match_on_substrings=False):
+    def __init__(self, *args, thing="item", message=None, error_summary_message=None, match_on_substrings=False):
         self.strings_not_allowed = OrderedSet(string.lower() for string in args)
         self.match_on_substrings = match_on_substrings
+        self.thing = thing
         self.message = message
+        self.error_summary_message = error_summary_message
 
     def __call__(self, form, field):
         normalised = field.data.lower()
         for not_allowed in self.strings_not_allowed:
             if normalised == not_allowed or (self.match_on_substrings and not_allowed in normalised):
                 if self.message:
-                    raise ValidationError(self.message)
-                raise ValidationError(f"Cannot {'contain' if self.match_on_substrings else 'be'} ‘{not_allowed}’")
+                    error_message = self.message
+                else:
+                    error_message = f"Cannot {'contain' if self.match_on_substrings else 'be'} ‘{not_allowed}’"
+
+                if hasattr(field, "error_summary_messages"):
+                    if self.error_summary_message:
+                        error_summary_message = self.error_summary_message
+                    else:
+                        error_summary_message = (
+                            f"%s cannot {'contain' if self.match_on_substrings else 'be'} ‘{not_allowed}’"
+                        )
+                    field.error_summary_messages.append(error_summary_message)
+
+                raise ValidationError(error_message)
 
 
 class FileIsVirusFree:
@@ -222,7 +335,7 @@ class FileIsVirusFree:
                 try:
                     virus_free = antivirus_client.scan(field.data)
                     if not virus_free:
-                        raise StopValidation("Your file contains a virus")
+                        raise StopValidation("This file contains a virus")
                 finally:
                     field.data.seek(0)
 

@@ -1,5 +1,3 @@
-import json
-
 from flask import abort, current_app, flash, redirect, render_template, session, url_for
 from itsdangerous import SignatureExpired
 from notifications_utils.url_safe_token import check_token
@@ -9,6 +7,7 @@ from app.constants import PERMISSION_CAN_MAKE_SERVICES_LIVE
 from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import TwoFactorForm
+from app.models.token import Token
 from app.models.user import InvitedOrgUser, InvitedUser, User
 from app.utils.login import redirect_to_sign_in
 
@@ -31,7 +30,7 @@ def verify():
     return render_template("views/two-factor-sms.html", form=form, error_summary_enabled=True)
 
 
-@main.route("/verify-email/<token>")
+@main.route("/verify-email/<string:token>")
 @RateLimit.NO_LIMIT
 def verify_email(token):
     try:
@@ -45,9 +44,8 @@ def verify_email(token):
         flash("The link in the email we sent you has expired. We've sent you a new one.")
         return redirect(url_for("main.resend_email_verification"))
 
-    # token contains json blob of format: {'user_id': '...', 'secret_code': '...'} (secret_code is unused)
-    token_data = json.loads(token_data)
-    user = User.from_id(token_data["user_id"])
+    token = Token(token_data)
+    user = User.from_id(token.user_id)
     if not user:
         abort(404)
 
@@ -87,9 +85,9 @@ def activate_user(user_id):
         return redirect(url_for("main.organisation_dashboard", org_id=organisation_id))
 
     if user.default_organisation.can_ask_to_join_a_service:
-        return redirect(url_for("main.add_or_join_service"))
+        return redirect(url_for("main.your_services"))
 
-    return redirect(url_for("main.add_service", first="first"))
+    return redirect(url_for("main.add_service"))
 
 
 def _add_invited_user_to_service(invitation):

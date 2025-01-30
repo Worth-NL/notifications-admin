@@ -1,14 +1,17 @@
 import json
-from typing import Optional
+from typing import Any
 
-from flask import current_app, render_template
+from flask import current_app, render_template, url_for
 from markupsafe import Markup
 from notifications_utils.countries import Postage
-from notifications_utils.formatters import formatted_list
+from notifications_utils.field import Field
+from notifications_utils.formatters import escape_html, formatted_list, normalise_whitespace
+from notifications_utils.take import Take
 from notifications_utils.template import (
+    BaseEmailTemplate,
     BaseLetterTemplate,
-    EmailPreviewTemplate,
     SMSPreviewTemplate,
+    do_nice_typography,
 )
 
 from app.extensions import redis_client
@@ -143,13 +146,17 @@ class TemplatedLetterImageTemplate(BaseLetterImageTemplate):
 
     @property
     def all_page_counts(self):
-        from app.template_previews import TemplatePreview
+        from app import current_service, template_preview_client
 
         if self._all_page_counts:
             return self._all_page_counts
 
         if self.values:
-            self._all_page_counts = TemplatePreview.get_page_counts_for_letter(self._template, self.values)
+            self._all_page_counts = template_preview_client.get_page_counts_for_letter(
+                self._template,
+                service=current_service,
+                values=self.values,
+            )
             return self._all_page_counts
 
         cache_key = (
@@ -159,7 +166,11 @@ class TemplatedLetterImageTemplate(BaseLetterImageTemplate):
             self._all_page_counts = json.loads(cached_value)
             return self._all_page_counts
 
-        self._all_page_counts = TemplatePreview.get_page_counts_for_letter(self._template, self.values)
+        self._all_page_counts = template_preview_client.get_page_counts_for_letter(
+            self._template,
+            service=current_service,
+            values=self.values,
+        )
         redis_client.set(cache_key, json.dumps(self._all_page_counts), ex=cache.DEFAULT_TTL)
 
         return self._all_page_counts
@@ -185,7 +196,7 @@ class TemplatedLetterImageTemplate(BaseLetterImageTemplate):
         return self.welsh_page_count + 1
 
     @property
-    def first_attachment_page(self) -> Optional[int]:
+    def first_attachment_page(self) -> int | None:
         if not self.attachment:
             return None
 
@@ -214,12 +225,61 @@ class TemplatedLetterImageTemplate(BaseLetterImageTemplate):
         }
 
 
+class EmailPreviewTemplate(BaseEmailTemplate):
+    def __init__(
+        self,
+        template,
+        values=None,
+        from_name=None,
+        reply_to=None,
+        show_recipient=True,
+        redact_missing_personalisation=False,
+        **kwargs,
+    ):
+        super().__init__(template, values, redact_missing_personalisation=redact_missing_personalisation, **kwargs)
+        self.from_name = from_name
+        self.reply_to = reply_to
+        self.show_recipient = show_recipient
+
+    def __str__(self):
+        return Markup(
+            self.jinja_template.render(
+                {
+                    "body": self.html_body,
+                    "subject": self.subject,
+                    "from_name": escape_html(self.from_name),
+                    "reply_to": self.reply_to,
+                    "recipient": Field("((email address))", self.values, with_brackets=False),
+                    "show_recipient": self.show_recipient,
+                }
+            )
+        )
+
+    @property
+    def jinja_template(self):
+        return current_app.jinja_env.get_template("partials/templates/email_preview_template.jinja2")
+
+    @property
+    def subject(self):
+        return (
+            Take(
+                Field(
+                    self._subject,
+                    self.values,
+                    html="escape",
+                    redact_missing_personalisation=self.redact_missing_personalisation,
+                )
+            )
+            .then(do_nice_typography)
+            .then(normalise_whitespace)
+        )
+
+
 class LetterAttachment(JSONModel):
-    ALLOWED_PROPERTIES = {
-        "id",
-        "original_filename",
-        "page_count",
-    }
+    id: Any
+    original_filename: Any
+    page_count: Any
+
     __sort_attribute__ = "original_filename"
 
 
@@ -250,6 +310,7 @@ def get_template(
             show_recipient=show_recipient,
             redact_missing_personalisation=redact_missing_personalisation,
             reply_to=email_reply_to,
+            unsubscribe_link=url_for(".unsubscribe_example") if template.get("has_unsubscribe_link") else None,
         )
     if "sms" == template["template_type"]:
         return SMSPreviewTemplate(

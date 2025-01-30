@@ -14,20 +14,20 @@ def _attach_current_user(data):
 
 
 class NotifyAdminAPIClient(BaseAPIClient):
-    def __init__(self):
-        super().__init__("a" * 73, "b")
-
-    def init_app(self, app):
-        self.base_url = app.config["API_HOST_NAME"]
+    def __init__(self, app):
+        super().__init__(
+            "x" * 100,
+            base_url=app.config["API_HOST_NAME"],
+        )
+        # our credential lengths aren't what BaseAPIClient's __init__ will expect
+        # given it's designed for destructuring end-user api keys
         self.service_id = app.config["ADMIN_CLIENT_USER_NAME"]
         self.api_key = app.config["ADMIN_CLIENT_SECRET"]
-        self.route_secret = app.config["ROUTE_SECRET_KEY_1"]
 
     def generate_headers(self, api_token):
         headers = {
             "Content-type": "application/json",
             "Authorization": f"Bearer {api_token}",
-            "X-Custom-Forwarder": self.route_secret,
             "User-agent": f"NOTIFY-API-PYTHON-CLIENT/{__version__}",
         }
         if has_request_context():

@@ -20,17 +20,14 @@ from app.main.forms import LoginForm
 from app.models.user import InvitedUser, User
 from app.utils import hide_from_search_engines
 from app.utils.constants import JSON_UPDATES_BLUEPRINT_NAME
-from app.utils.login import is_safe_redirect_url
+from app.utils.login import redirect_if_logged_in
 
 
 @main.route("/sign-in", methods=(["GET", "POST"]))
 @hide_from_search_engines
-def sign_in():  # noqa: C901
+@redirect_if_logged_in
+def sign_in():
     redirect_url = request.args.get("next")
-    if current_user and current_user.is_authenticated:
-        if redirect_url and is_safe_redirect_url(redirect_url):
-            return redirect(redirect_url)
-        return redirect(url_for("main.show_accounts_or_dashboard"))
 
     form = LoginForm()
     password_reset_url = url_for(".forgot_password", next=request.args.get("next"))
@@ -67,10 +64,8 @@ def sign_in():  # noqa: C901
         # Vague error message for login in case of user not known, locked, inactive or password not verified
         flash(
             Markup(
-                (
-                    f"The email address or password you entered is incorrect."
-                    f"&ensp;<a href={password_reset_url} class='govuk-link'>Forgotten your password?</a>"
-                )
+                f"The email address or password you entered is incorrect."
+                f"&ensp;<a href={password_reset_url} class='govuk-link'>Forgotten your password?</a>"
             )
         )
 

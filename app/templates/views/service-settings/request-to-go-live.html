@@ -53,7 +53,7 @@
         {% if current_service.able_to_accept_agreement %}
           {{ task_list_item(
             current_service.organisation.agreement_signed,
-            'Accept our data sharing and financial agreement',
+            'Accept our data processing and financial agreement',
             url_for('main.service_agreement', service_id=current_service.id),
           ) }}
         {% endif %}
@@ -66,12 +66,13 @@
         <p class="govuk-body">
           You must complete these steps before you can request to go live.
         </p>
+      {% elif current_service.has_active_go_live_request %}
+        <p class="govuk-body">
+          Your team has already sent a request to go live for this service.
+        </p>
       {% else %}
         <p class="govuk-body">
           When we receive your request we’ll get back to you by the end of the next working day.
-        </p>
-        <p class="bottom-gutter">
-          By requesting to go live you’re agreeing to our <a class="govuk-link govuk-link--no-visited-state" href="{{ url_for('main.terms_of_use') }}">terms of use</a>.
         </p>
         {% call form_wrapper() %}
           {{ page_footer('Request to go live') }}

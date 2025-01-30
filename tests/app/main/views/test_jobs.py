@@ -1,13 +1,13 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from flask import url_for
 from freezegun import freeze_time
 
 from app.main.views.jobs import get_time_left
-from tests import job_json, notification_json, sample_uuid, user_json
+from tests import NotifyBeautifulSoup, job_json, notification_json, user_json
 from tests.conftest import (
     SERVICE_ONE_ID,
     create_active_caseworking_user,
@@ -80,7 +80,6 @@ def test_should_show_page_for_one_job(
     client_request,
     mock_get_service_template,
     mock_get_job,
-    mocker,
     mock_get_notifications,
     mock_get_service_data_retention,
     fake_uuid,
@@ -88,6 +87,7 @@ def test_should_show_page_for_one_job(
     expected_api_call,
     user,
 ):
+    client_request.login(user)
     page = client_request.get("main.view_job", service_id=SERVICE_ONE_ID, job_id=fake_uuid, status=status_argument)
 
     assert page.select_one("h1").text.strip() == "thisisatest.csv"
@@ -104,7 +104,7 @@ def test_should_show_page_for_one_job(
         job_id=fake_uuid,
         status=status_argument,
     )
-    csv_link = page.select_one("a[download]")
+    csv_link = page.select_one("a[id=download-job-report]")
     assert csv_link["href"] == url_for(
         "main.view_job_csv", service_id=SERVICE_ONE_ID, job_id=fake_uuid, status=status_argument
     )
@@ -117,7 +117,7 @@ def test_should_show_page_for_one_job(
     assert page.select_one("tbody tr a")["href"] == url_for(
         "main.view_notification",
         service_id=SERVICE_ONE_ID,
-        notification_id=sample_uuid(),
+        notification_id="00000000-0000-0000-0000-000000000000",
         from_job=fake_uuid,
     )
 
@@ -127,10 +127,8 @@ def test_should_show_page_for_one_job(
 @freeze_time("2016-01-01 11:09:00.061258")
 def test_should_show_page_for_one_job_with_flexible_data_retention(
     client_request,
-    active_user_with_permissions,
     mock_get_service_template,
     mock_get_job,
-    mocker,
     mock_get_notifications,
     mock_get_service_data_retention,
     fake_uuid,
@@ -163,10 +161,8 @@ def test_get_jobs_should_tell_user_if_more_than_one_page(
 def test_should_show_job_in_progress(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_service_template,
     mock_get_job_in_progress,
-    mocker,
     mock_get_notifications,
     mock_get_service_data_retention,
     fake_uuid,
@@ -187,10 +183,8 @@ def test_should_show_job_in_progress(
 def test_should_show_job_without_notifications(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_service_template,
     mock_get_job_in_progress,
-    mocker,
     mock_get_notifications_with_no_notifications,
     mock_get_service_data_retention,
     fake_uuid,
@@ -212,7 +206,6 @@ def test_should_show_job_without_notifications(
 def test_should_show_job_with_sending_limit_exceeded_status(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_service_template,
     mock_get_job_with_sending_limits_exceeded,
     mock_get_notifications_with_no_notifications,
@@ -278,10 +271,8 @@ def test_should_show_old_job(
             "data": job_json(
                 SERVICE_ONE_ID,
                 active_user_with_permissions,
-                created_at=created_at.replace(tzinfo=timezone.utc).isoformat(),
-                processing_started=(
-                    processing_started.replace(tzinfo=timezone.utc).isoformat() if processing_started else None
-                ),
+                created_at=created_at.replace(tzinfo=UTC).isoformat(),
+                processing_started=(processing_started.replace(tzinfo=UTC).isoformat() if processing_started else None),
             ),
         },
     )
@@ -313,7 +304,7 @@ def test_should_show_letter_job(
 ):
     notifications = create_notifications(template_type="letter", subject="template subject")
     get_notifications = mocker.patch(
-        "app.notification_api_client.get_notifications_for_service",
+        "app.models.notification.Notifications._get_items",
         return_value=notifications,
     )
 
@@ -331,7 +322,7 @@ def test_should_show_letter_job(
     )
     assert normalize_spaces(page.select(".keyline-block")[0].text) == "1 Letter"
     assert normalize_spaces(page.select(".keyline-block")[1].text) == "6 January Estimated delivery date"
-    assert page.select_one("a[download]")["href"] == url_for(
+    assert page.select_one("a[id=download-job-report]")["href"] == url_for(
         "main.view_job_csv",
         service_id=SERVICE_ONE_ID,
         job_id=fake_uuid,
@@ -361,15 +352,15 @@ def test_should_show_letter_job(
 
 @freeze_time("2016-01-01 11:09:00")
 def test_should_show_letter_job_with_banner_after_sending_before_1730(
-    mocker,
     client_request,
     mock_get_service_letter_template,
     mock_get_letter_job,
     mock_get_service_data_retention,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
-        "app.notification_api_client.get_notifications_for_service",
+        "app.models.notification.Notifications._get_items",
         return_value=create_notifications(template_type="letter", postage="second"),
     )
 
@@ -389,15 +380,15 @@ def test_should_show_letter_job_with_banner_after_sending_before_1730(
 
 @freeze_time("2016-01-01 11:09:00")
 def test_should_show_letter_job_with_banner_when_there_are_multiple_CSV_rows(
-    mocker,
     client_request,
     mock_get_service_letter_template,
     mock_get_letter_job_in_progress,
     mock_get_service_data_retention,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
-        "app.notification_api_client.get_notifications_for_service",
+        "app.models.notification.Notifications._get_items",
         return_value=create_notifications(template_type="letter", postage="second"),
     )
 
@@ -416,15 +407,15 @@ def test_should_show_letter_job_with_banner_when_there_are_multiple_CSV_rows(
 
 @freeze_time("2016-01-01 18:09:00")
 def test_should_show_letter_job_with_banner_after_sending_after_1730(
-    mocker,
     client_request,
     mock_get_service_letter_template,
     mock_get_letter_job,
     mock_get_service_data_retention,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
-        "app.notification_api_client.get_notifications_for_service",
+        "app.models.notification.Notifications._get_items",
         return_value=create_notifications(template_type="letter", postage="second"),
     )
 
@@ -443,13 +434,13 @@ def test_should_show_letter_job_with_banner_after_sending_after_1730(
 
 @freeze_time("2016-01-01T00:00:00.061258")
 def test_should_show_scheduled_job(
-    mocker,
     client_request,
     mock_get_service_template,
     mock_get_scheduled_job,
     mock_get_service_data_retention,
     mock_get_notifications,
     fake_uuid,
+    mocker,
 ):
     mocker.patch(
         "app.main.views.jobs.s3download",
@@ -503,12 +494,12 @@ def test_should_show_scheduled_job(
 
 
 def test_should_download_scheduled_job(
-    mocker,
     client_request,
     mock_get_scheduled_job,
     fake_uuid,
+    mocker,
 ):
-    original_file_contents = "phone number,name\n" "+447700900986,John\n" "+447700900986,Smith\n"
+    original_file_contents = "phone number,name\n+447700900986,John\n+447700900986,Smith\n"
     mocker.patch(
         "app.main.views.jobs.s3download",
         return_value=original_file_contents,
@@ -523,12 +514,12 @@ def test_should_download_scheduled_job(
 
 
 def test_should_not_download_unscheduled_job(
-    mocker,
     client_request,
     mock_get_job,
     mock_get_service_data_retention,
     mock_get_notifications,
     fake_uuid,
+    mocker,
 ):
     client_request.get(
         "main.view_job_original_file_csv",
@@ -562,7 +553,6 @@ def test_should_cancel_job(
 
 def test_should_not_show_cancelled_job(
     client_request,
-    active_user_with_permissions,
     mock_get_cancelled_job,
     fake_uuid,
 ):
@@ -574,8 +564,9 @@ def test_should_not_show_cancelled_job(
     )
 
 
+@pytest.mark.parametrize("job_status", ["finished", "finished all notifications created"])
 def test_should_cancel_letter_job(
-    client_request, mocker, mock_get_service_letter_template, active_user_with_permissions
+    client_request, job_status, mock_get_service_letter_template, active_user_with_permissions, mocker
 ):
     job_id = str(uuid.uuid4())
     job = job_json(
@@ -583,13 +574,13 @@ def test_should_cancel_letter_job(
         active_user_with_permissions,
         job_id=job_id,
         created_at="2019-06-20T15:30:00.000001+00:00",
-        job_status="finished",
+        job_status=job_status,
         template_type="letter",
     )
     mocker.patch("app.job_api_client.get_job", side_effect=[{"data": job}])
     notifications_json = notification_json(SERVICE_ONE_ID, job=job, status="created", template_type="letter")
     mocker.patch("app.job_api_client.get_job", side_effect=[{"data": job}])
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications_json)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications_json)
     mocker.patch("app.notification_api_client.get_notification_count_for_job_id", return_value=5)
     mock_cancel = mocker.patch("app.job_api_client.cancel_letter_job", return_value=5)
     client_request.post(
@@ -627,7 +618,7 @@ def test_should_not_show_cancel_link_for_letter_job_if_too_late(
     job = job_json(SERVICE_ONE_ID, active_user_with_permissions, job_id=job_id, created_at=job_created_at)
     notifications_json = notification_json(SERVICE_ONE_ID, job=job, status="created", template_type="letter")
     mocker.patch("app.job_api_client.get_job", side_effect=[{"data": job}])
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications_json)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications_json)
 
     page = client_request.get("main.view_job", service_id=SERVICE_ONE_ID, job_id=str(job_id))
 
@@ -636,14 +627,14 @@ def test_should_not_show_cancel_link_for_letter_job_if_too_late(
 
 
 @freeze_time("2019-06-20 15:32:00.000001")
-@pytest.mark.parametrize(" job_status", ["finished", "in progress"])
+@pytest.mark.parametrize("job_status", ["finished", "finished all notifications created", "in progress"])
 def test_should_show_cancel_link_for_letter_job(
     client_request,
-    mocker,
     mock_get_service_letter_template,
     mock_get_service_data_retention,
     active_user_with_permissions,
     job_status,
+    mocker,
 ):
     job_id = uuid.uuid4()
     job = job_json(
@@ -656,7 +647,7 @@ def test_should_show_cancel_link_for_letter_job(
     notifications_json = notification_json(SERVICE_ONE_ID, job=job, status="created", template_type="letter")
     mocker.patch("app.job_api_client.get_job", side_effect=[{"data": job}])
     mocker.patch(
-        "app.notification_api_client.get_notifications_for_service",
+        "app.models.notification.Notifications._get_items",
         return_value=notifications_json,
     )
 
@@ -670,14 +661,14 @@ def test_should_show_cancel_link_for_letter_job(
 
 @freeze_time("2019-06-20 15:31:00.000001")
 @pytest.mark.parametrize("job_status,number_of_processed_notifications", [["in progress", 2], ["finished", 1]])
-def test_dont_cancel_letter_job_when_to_early_to_cancel(
+def test_dont_cancel_letter_job_when_too_early_to_cancel(
     client_request,
-    mocker,
     mock_get_service_letter_template,
     mock_get_service_data_retention,
     active_user_with_permissions,
     job_status,
     number_of_processed_notifications,
+    mocker,
 ):
     job_id = uuid.uuid4()
     job = job_json(
@@ -693,7 +684,7 @@ def test_dont_cancel_letter_job_when_to_early_to_cancel(
     notifications_json = notification_json(
         SERVICE_ONE_ID, job=job, status="created", template_type="letter", rows=number_of_processed_notifications
     )
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications_json)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications_json)
     mocker.patch(
         "app.notification_api_client.get_notification_count_for_job_id", return_value=number_of_processed_notifications
     )
@@ -715,12 +706,10 @@ def test_dont_cancel_letter_job_when_to_early_to_cancel(
 def test_should_show_updates_for_one_job_as_json(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_notifications,
     mock_get_service_template,
     mock_get_job,
     mock_get_service_data_retention,
-    mocker,
     fake_uuid,
 ):
     response = client_request.get_response(
@@ -745,7 +734,6 @@ def test_should_show_updates_for_one_job_as_json(
 def test_should_show_updates_for_scheduled_job_as_json(
     client_request,
     service_one,
-    active_user_with_permissions,
     mock_get_notifications,
     mock_get_service_template,
     mock_get_service_data_retention,
@@ -783,6 +771,47 @@ def test_should_show_updates_for_scheduled_job_as_json(
     assert "Sent by Test User on 1 June at 4:00pm" in content["status"]
 
 
+@freeze_time("2016-01-01 00:00:00")
+def test_should_show_updates_for_upcoming_scheduled_job_as_json(
+    client_request,
+    service_one,
+    mock_get_notifications,
+    mock_get_service_template,
+    mock_get_service_data_retention,
+    mocker,
+    fake_uuid,
+):
+    mocker.patch(
+        "app.job_api_client.get_job",
+        return_value={
+            "data": job_json(
+                SERVICE_ONE_ID,
+                created_by=user_json(),
+                job_id=fake_uuid,
+                scheduled_for="2016-06-01T13:00:00+00:00",
+                job_status="scheduled",
+                processing_started=None,
+            )
+        },
+    )
+
+    response_json = client_request.get_response(
+        "json_updates.view_job_updates",
+        service_id=service_one["id"],
+        job_id=fake_uuid,
+    ).json
+
+    form = NotifyBeautifulSoup(response_json["notifications"], "html.parser").select_one("form")
+
+    assert form["method"] == "post"
+    assert form["action"] == url_for(
+        "main.cancel_job",
+        service_id=SERVICE_ONE_ID,
+        job_id=fake_uuid,
+    )
+    assert form.select_one("button")
+
+
 @pytest.mark.parametrize(
     "job_created_at, expected_message",
     [
@@ -807,7 +836,7 @@ def test_should_show_letter_job_with_first_class_if_notifications_are_first_clas
     mocker,
 ):
     notifications = create_notifications(template_type="letter", postage="first")
-    mocker.patch("app.notification_api_client.get_notifications_for_service", return_value=notifications)
+    mocker.patch("app.models.notification.Notifications._get_items", return_value=notifications)
 
     page = client_request.get(
         "main.view_job",

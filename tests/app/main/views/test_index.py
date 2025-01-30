@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from flask import url_for
 from freezegun import freeze_time
 
-from app.main.forms import FieldWithNoneOption
+from app.main.views.index import REDIRECTS
 from tests.conftest import SERVICE_ONE_ID, normalize_spaces, sample_uuid
 
 
@@ -13,6 +13,7 @@ def test_non_logged_in_user_can_see_homepage(
     client_request,
     mock_get_service_and_organisation_counts,
     mock_get_letter_rates,
+    mock_get_sms_rate,
 ):
     client_request.logout()
     page = client_request.get("main.index", _test_page_title=False)
@@ -35,19 +36,14 @@ def test_non_logged_in_user_can_see_homepage(
     assert page.select_one("#whos-using-notify a")["href"] == url_for("main.performance")
 
 
-def test_logged_in_user_redirects_to_choose_account(
-    client_request,
-    api_user_active,
-    mock_get_user,
-    mock_get_user_by_email,
-    mock_login,
-):
+def test_logged_in_user_redirects_to_your_services(client_request):
     client_request.get(
         "main.index",
-        _expected_status=302,
+        _expected_redirect=url_for("main.your_services"),
     )
     client_request.get(
-        "main.sign_in", _expected_status=302, _expected_redirect=url_for("main.show_accounts_or_dashboard")
+        "main.sign_in",
+        _expected_redirect=url_for("main.show_accounts_or_dashboard"),
     )
 
 
@@ -76,6 +72,7 @@ def test_hiding_pages_from_search_engines(
     client_request,
     mock_get_service_and_organisation_counts,
     mock_get_letter_rates,
+    mock_get_sms_rate,
     endpoint,
     kwargs,
 ):
@@ -91,6 +88,7 @@ def test_hiding_pages_from_search_engines(
 @pytest.mark.parametrize(
     "view",
     [
+        "accessibility_statement",
         "cookies",
         "guidance_api_documentation",
         "guidance_billing_details",
@@ -121,8 +119,8 @@ def test_hiding_pages_from_search_engines(
 )
 def test_static_pages(
     client_request,
-    mock_get_organisation_by_domain,
     mock_get_letter_rates,
+    mock_get_sms_rate,
     view,
 ):
     request = partial(client_request.get, f"main.{view}")
@@ -189,6 +187,7 @@ def test_guidance_pages_link_to_service_pages_when_signed_in(
         ("/using-notify/guidance/message-status", "main.guidance_message_status", {}),
         ("/using-notify/guidance/message-status/sms", "main.guidance_message_status", {"notification_type": "sms"}),
         ("/using-notify/who-its-for", "main.guidance_who_can_use_notify", {}),
+        ("/add-or-join-service", "main.your_services", {}),
     ],
     ids=(lambda arg: arg if isinstance(arg, str) and arg.startswith("/") else ""),
 )
@@ -199,6 +198,12 @@ def test_redirect_blueprint(client_request, old_url, expected_endpoint, expected
         _expected_status=301,
         _expected_redirect=url_for(expected_endpoint, **expected_endpoint_kwargs),
     )
+
+
+def test_redirect_blueprint_contains_valid_urls(_client):
+    endpoints = {rule.endpoint for rule in _client.application.url_map.iter_rules()}
+    invalid_redirects = set(REDIRECTS.values()) - endpoints
+    assert not invalid_redirects, "historical_redirects redirects to invalid endpoint name"
 
 
 def test_message_status_page_redirects_without_notification_type_specified(client_request):
@@ -221,8 +226,14 @@ def test_message_status_page_contains_link_to_support(client_request):
 
 def test_terms_page_has_correct_content(client_request):
     terms_page = client_request.get("main.terms_of_use")
-    assert normalize_spaces(terms_page.select("main p")[0].text) == (
-        "These terms apply to your service’s use of GOV.UK Notify. You must be the service manager to accept them."
+    assert normalize_spaces(terms_page.select("h1")[0].text) == ("Terms of use")
+
+
+def test_new_terms_view_redirects_to_terms_of_use(client_request):
+    client_request.get(
+        "main.new_terms_of_use",
+        _follow_redirects=False,
+        _expected_redirect=url_for("main.terms_of_use"),
     )
 
 
@@ -241,7 +252,7 @@ def test_css_is_served_from_correct_path(client_request):
 def test_resources_that_use_asset_path_variable_have_correct_path(client_request):
     page = client_request.get("main.guidance_api_documentation")  # easy static page
 
-    favicon = page.select_one('link[type="image/x-icon"]')
+    favicon = page.select_one('link[rel="icon"]')
 
     assert favicon.attrs["href"].startswith("https://static.example.com/images/favicon.ico")
 
@@ -280,7 +291,6 @@ def test_email_branding_preview(
 
 def test_email_branding_preview_allows_custom_page_title(
     client_request,
-    mock_get_email_branding,
 ):
     page = client_request.get(
         "main.email_template",
@@ -292,124 +302,12 @@ def test_email_branding_preview_allows_custom_page_title(
     assert page.select_one("title").text == "Preview of new email branding"
 
 
-@pytest.mark.parametrize("filename", [None, FieldWithNoneOption.NONE_OPTION_VALUE])
-@pytest.mark.parametrize("branding_style", [None, FieldWithNoneOption.NONE_OPTION_VALUE])
-def test_letter_template_preview_handles_no_branding_style_or_filename_correctly(
-    client_request,
-    branding_style,
-    filename,
-):
-    page = client_request.get(
-        "main.letter_template",
-        _test_page_title=False,
-        # Letter HTML doesn’t use the Design System, so elements won’t have class attributes
-        _test_for_elements_without_class=False,
-        branding_style=branding_style,
-        filename=filename,
-    )
-
-    image_link = page.select_one("img")["src"]
-
-    assert image_link == url_for("no_cookie.letter_branding_preview_image", filename="no-branding", page=1)
-
-
-@pytest.mark.parametrize("filename", [None, FieldWithNoneOption.NONE_OPTION_VALUE])
-def test_letter_template_preview_links_to_the_correct_image_when_passed_existing_branding(
-    client_request,
-    mock_get_letter_branding_by_id,
-    filename,
-):
-    page = client_request.get(
-        "main.letter_template",
-        _test_page_title=False,
-        # Letter HTML doesn’t use the Design System, so elements won’t have class attributes
-        _test_for_elements_without_class=False,
-        branding_style="12341234-1234-1234-1234-123412341234",
-        filename=filename,
-    )
-
-    mock_get_letter_branding_by_id.assert_called_once_with("12341234-1234-1234-1234-123412341234")
-
-    image_link = page.select_one("img")["src"]
-
-    assert image_link == url_for("no_cookie.letter_branding_preview_image", filename="hm-government", page=1)
-
-
-@pytest.mark.parametrize("branding_style", [None, FieldWithNoneOption.NONE_OPTION_VALUE])
-def test_letter_template_preview_links_to_the_correct_image_when_passed_a_filename(
-    client_request,
-    branding_style,
-):
-    page = client_request.get(
-        "main.letter_template",
-        _test_page_title=False,
-        # Letter HTML doesn’t use the Design System, so elements won’t have class attributes
-        _test_for_elements_without_class=False,
-        branding_style=branding_style,
-        filename="foo.svg",
-    )
-
-    image_link = page.select_one("img")["src"]
-
-    assert image_link == url_for("no_cookie.letter_branding_preview_image", filename="foo.svg", page=1)
-
-
-def test_letter_template_preview_returns_400_if_both_branding_style_and_filename_provided(
-    client_request,
-):
-    client_request.get(
-        "main.letter_template",
-        branding_style="some-branding",
-        filename="some-filename",
-        _test_page_title=False,
-        _expected_status=400,
-    )
-
-
-@pytest.mark.parametrize(
-    "extra_args, expected_page_title",
-    (
-        (
-            {},
-            "Preview of letter branding",
-        ),
-        (
-            {"title": "Preview of new letter branding"},
-            "Preview of new letter branding",
-        ),
-    ),
-)
-def test_letter_template_preview_works_with_and_without_custom_page_title(
-    client_request,
-    extra_args,
-    expected_page_title,
-):
-    page = client_request.get(
-        "main.letter_template",
-        _test_page_title=False,
-        # Letter HTML doesn’t use the Design System, so elements won’t have class attributes
-        _test_for_elements_without_class=False,
-        filename="some-filename",
-        **extra_args,
-    )
-    assert page.select_one("title").text == expected_page_title
-
-
-def test_letter_template_preview_headers(
-    client_request,
-    mock_get_letter_branding_by_id,
-):
-    response = client_request.get_response("main.letter_template")
-
-    assert response.headers.get("X-Frame-Options") == "SAMEORIGIN"
-
-
 def test_letter_spec_redirect(client_request):
     client_request.get(
         "main.letter_spec",
         _expected_status=302,
         _expected_redirect=(
-            "https://docs.notifications.service.gov.uk" "/documentation/images/notify-pdf-letter-spec-v2.4.pdf"
+            "https://docs.notifications.service.gov.uk/documentation/images/notify-pdf-letter-spec-v2.4.pdf"
         ),
     )
 
@@ -420,7 +318,7 @@ def test_letter_spec_redirect_with_non_logged_in_user(client_request):
         "main.letter_spec",
         _expected_status=302,
         _expected_redirect=(
-            "https://docs.notifications.service.gov.uk" "/documentation/images/notify-pdf-letter-spec-v2.4.pdf"
+            "https://docs.notifications.service.gov.uk/documentation/images/notify-pdf-letter-spec-v2.4.pdf"
         ),
     )
 
@@ -429,6 +327,7 @@ def test_font_preload(
     client_request,
     mock_get_service_and_organisation_counts,
     mock_get_letter_rates,
+    mock_get_sms_rate,
 ):
     client_request.logout()
     page = client_request.get("main.index", _test_page_title=False)
@@ -446,6 +345,7 @@ def test_sms_price(
     client_request,
     mock_get_service_and_organisation_counts,
     mock_get_letter_rates,
+    mock_get_sms_rate,
 ):
     client_request.logout()
 
@@ -455,7 +355,7 @@ def test_sms_price(
     expected_rate = "1.97"
     assert (
         normalize_spaces(home_page.select(".product-page-section")[4].select(".govuk-grid-column-one-half")[1].text)
-        == f"Text messages Up to 40,000 free text messages a year, then {expected_rate} pence per message"
+        == f"Text messages Up to 30,000 free text messages a year, then {expected_rate} pence per message"
     )
 
     assert (

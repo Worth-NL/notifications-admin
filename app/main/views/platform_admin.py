@@ -3,7 +3,6 @@ import itertools
 import re
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from notifications_python_client.errors import HTTPError
@@ -15,18 +14,17 @@ from app import (
     letter_jobs_client,
     notification_api_client,
     organisations_client,
-    platform_stats_api_client,
     service_api_client,
     user_api_client,
 )
 from app.extensions import redis_client
+from app.formatters import sentence_case
 from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import (
     AdminClearCacheForm,
     AdminReturnedLettersForm,
     BillingReportDateFilterForm,
-    DateFilterForm,
     PlatformAdminSearchForm,
     RequiredDateFilterForm,
 )
@@ -84,29 +82,29 @@ def platform_admin_search():
         error_summary_enabled=True,
     )
 
+# TODO: alphagov-merge: summary page removed https://github.com/alphagov/notifications-admin/commit/2b8366942ac0f6bcc445533cec013fd7bed5648c
+# @main.route("/platform-admin/summary")
+# @user_is_platform_admin
+# @RateLimit.NO_LIMIT
+# def platform_admin():
+#     form = DateFilterForm(request.args, meta={"csrf": False})
+#     api_args = {}
 
-@main.route("/platform-admin/summary")
-@user_is_platform_admin
-@RateLimit.NO_LIMIT
-def platform_admin():
-    form = DateFilterForm(request.args, meta={"csrf": False})
-    api_args = {}
+#     form.validate()
 
-    form.validate()
+#     if form.start_date.data:
+#         api_args["start_date"] = form.start_date.data
+#         api_args["end_date"] = form.end_date.data or datetime.utcnow().date()
 
-    if form.start_date.data:
-        api_args["start_date"] = form.start_date.data
-        api_args["end_date"] = form.end_date.data or datetime.utcnow().date()
+#     platform_stats = platform_stats_api_client.get_aggregate_platform_stats(api_args)
+#     number_of_complaints = complaint_api_client.get_complaint_count(api_args)
 
-    platform_stats = platform_stats_api_client.get_aggregate_platform_stats(api_args)
-    number_of_complaints = complaint_api_client.get_complaint_count(api_args)
-
-    return render_template(
-        "views/platform-admin/index.html",
-        form=form,
-        global_stats=make_columns(platform_stats, number_of_complaints),
-        error_summary_enabled=True,
-    )
+#     return render_template(
+#         "views/platform-admin/index.html",
+#         form=form,
+#         global_stats=make_columns(platform_stats, number_of_complaints),
+#         error_summary_enabled=True,
+#     )
 
 
 def is_over_threshold(number, total, threshold):
@@ -173,50 +171,50 @@ def make_columns(global_stats, complaints_number):
         },
     ]
 
+# TODO: alphagov-merge: live-services and trial-services pages removed https://github.com/alphagov/notifications-admin/commit/2b8366942ac0f6bcc445533cec013fd7bed5648c
+# @main.route("/platform-admin/live-services", endpoint="live_services")
+# @main.route("/platform-admin/trial-services", endpoint="trial_services")
+# @user_is_platform_admin
+# @RateLimit.NO_LIMIT
+# def platform_admin_services():
+#     form = DateFilterForm(request.args, meta={"csrf": False})
+#     if all(
+#         (
+#             request.args.get("include_from_test_key") is None,
+#             request.args.get("start_date") is None,
+#             request.args.get("end_date") is None,
+#         )
+#     ):
+#         # Default to True if the user hasn’t done any filtering,
+#         # otherwise respect their choice
+#         form.include_from_test_key.data = True
 
-@main.route("/platform-admin/live-services", endpoint="live_services")
-@main.route("/platform-admin/trial-services", endpoint="trial_services")
-@user_is_platform_admin
-@RateLimit.NO_LIMIT
-def platform_admin_services():
-    form = DateFilterForm(request.args, meta={"csrf": False})
-    if all(
-        (
-            request.args.get("include_from_test_key") is None,
-            request.args.get("start_date") is None,
-            request.args.get("end_date") is None,
-        )
-    ):
-        # Default to True if the user hasn’t done any filtering,
-        # otherwise respect their choice
-        form.include_from_test_key.data = True
+#     include_from_test_key = form.include_from_test_key.data
+#     api_args = {
+#         "detailed": True,
+#         "only_active": False,  # specifically DO get inactive services
+#         "include_from_test_key": include_from_test_key,
+#     }
 
-    include_from_test_key = form.include_from_test_key.data
-    api_args = {
-        "detailed": True,
-        "only_active": False,  # specifically DO get inactive services
-        "include_from_test_key": include_from_test_key,
-    }
+#     if form.validate():
+#         if form.start_date.data:
+#             api_args["start_date"] = form.start_date.data
+#             api_args["end_date"] = form.end_date.data or datetime.utcnow().date()
 
-    if form.validate():
-        if form.start_date.data:
-            api_args["start_date"] = form.start_date.data
-            api_args["end_date"] = form.end_date.data or datetime.utcnow().date()
+#     services = filter_and_sort_services(
+#         service_api_client.get_services(api_args)["data"],
+#         trial_mode_services=request.endpoint == "main.trial_services",
+#     )
 
-    services = filter_and_sort_services(
-        service_api_client.get_services(api_args)["data"],
-        trial_mode_services=request.endpoint == "main.trial_services",
-    )
-
-    return render_template(
-        "views/platform-admin/services.html",
-        include_from_test_key=include_from_test_key,
-        form=form,
-        services=list(format_stats_by_service(services)),
-        page_title=f"{'Trial mode' if request.endpoint == 'main.trial_services' else 'Live'} services",
-        global_stats=create_global_stats(services),
-        error_summary_enabled=True,
-    )
+#     return render_template(
+#         "views/platform-admin/services.html",
+#         include_from_test_key=include_from_test_key,
+#         form=form,
+#         services=list(format_stats_by_service(services)),
+#         page_title=f"{'Trial mode' if request.endpoint == 'main.trial_services' else 'Live'} services",
+#         global_stats=create_global_stats(services),
+#         error_summary_enabled=True,
+#     )
 
 
 @main.route("/platform-admin/reports")
@@ -252,7 +250,7 @@ def live_services_csv():
     }
 
     # initialise with header row
-    live_services_data = [[x for x in column_names.values()]]
+    live_services_data = [list(column_names.values())]
 
     for row in results:
         if row["live_date"]:
@@ -265,9 +263,7 @@ def live_services_csv():
         200,
         {
             "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": 'inline; filename="{} live services report.csv"'.format(
-                format_date_numeric(datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-            ),
+            "Content-Disposition": f'inline; filename="{format_date_numeric(datetime.now())} live services report.csv"',
         },
     )
 
@@ -302,9 +298,7 @@ def notifications_sent_by_service():
             {
                 "Content-Type": "text/csv; charset=utf-8",
                 "Content-Disposition": (
-                    'attachment; filename="{} to {} notification status per service report.csv"'.format(
-                        start_date, end_date
-                    )
+                    f'attachment; filename="{start_date} to {end_date} notification status per service report.csv"'
                 ),
             },
         )
@@ -373,9 +367,7 @@ def get_billing_report():
                 200,
                 {
                     "Content-Type": "text/csv; charset=utf-8",
-                    "Content-Disposition": 'attachment; filename="Billing Report from {} to {}.csv"'.format(
-                        start_date, end_date
-                    ),
+                    "Content-Disposition": f'attachment; filename="Billing Report from {start_date} to {end_date}.csv"',
                 },
             )
         else:
@@ -432,8 +424,8 @@ def get_dvla_billing_report():
                 200,
                 {
                     "Content-Type": "text/csv; charset=utf-8",
-                    "Content-Disposition": 'attachment; filename="DVLA Billing Report from {} to {}.csv"'.format(
-                        start_date, end_date
+                    "Content-Disposition": (
+                        f'attachment; filename="DVLA Billing Report from {start_date} to {end_date}.csv"'
                     ),
                 },
             )
@@ -488,8 +480,8 @@ def get_volumes_by_service():
                 200,
                 {
                     "Content-Type": "text/csv; charset=utf-8",
-                    "Content-Disposition": 'attachment; filename="Volumes by service report from {} to {}.csv"'.format(
-                        start_date, end_date
+                    "Content-Disposition": (
+                        f'attachment; filename="Volumes by service report from {start_date} to {end_date}.csv"'
                     ),
                 },
             )
@@ -540,8 +532,8 @@ def get_daily_volumes():
                 200,
                 {
                     "Content-Type": "text/csv; charset=utf-8",
-                    "Content-Disposition": 'attachment; filename="Daily volumes report from {} to {}.csv"'.format(
-                        start_date, end_date
+                    "Content-Disposition": (
+                        f'attachment; filename="Daily volumes report from {start_date} to {end_date}.csv"'
                     ),
                 },
             )
@@ -641,8 +633,6 @@ def platform_admin_returned_letters():
 
         try:
             letter_jobs_client.submit_returned_letters(references)
-            redis_client.delete_by_pattern("service-????????-????-????-????-????????????-returned-letters-statistics")
-            redis_client.delete_by_pattern("service-????????-????-????-????-????????????-returned-letters-summary")
         except HTTPError as error:
             if error.status_code == 400:
                 error_references = [
@@ -702,14 +692,22 @@ def clear_cache():
             "organisation-????????-????-????-????-????????????-email-branding-pool",
             "organisation-????????-????-????-????-????????????-letter-branding-pool",
         ],
-        "letter_rates": [
+        "text_message_and_letter_rates": [
             "letter-rates",
+            "sms-rate",
+        ],
+        "unsubscribe_request_reports": [
+            "service-????????-????-????-????-????????????-unsubscribe-request-reports-summary",
+            "service-????????-????-????-????-????????????-unsubscribe-request-statistics",
+        ],
+        "service_join_request": [
+            "service-join-request-????????-????-????-????-????????????",
         ],
     }
 
     form = AdminClearCacheForm()
 
-    form.model_type.choices = [(key, key.replace("_", " ").title()) for key in CACHE_KEYS]
+    form.model_type.choices = [(key, sentence_case(key.replace("_", " "))) for key in CACHE_KEYS]
 
     if form.validate_on_submit():
         group_keys = form.model_type.data
@@ -717,8 +715,9 @@ def clear_cache():
         patterns = list(itertools.chain(*groups))
 
         num_deleted = sum(redis_client.delete_by_pattern(pattern) for pattern in patterns)
+        keys_deleted = ", ".join(group_keys).replace("_", " ").lower()
 
-        msg = f"Removed {num_deleted} objects across {len(patterns)} key formats " f'for {", ".join(group_keys)}'
+        msg = f"Removed {num_deleted} objects across {len(patterns)} key formats for {keys_deleted}"
 
         flash(msg, category="default")
 
@@ -733,11 +732,11 @@ def get_url_for_notify_record(uuid_):
     @dataclasses.dataclass
     class _EndpointSpec:
         endpoint: str
-        param: Optional[str] = None
+        param: str | None = None
         with_service_id: bool = False
 
         # Extra parameters to pass to `url_for`.
-        extra: dict = dataclasses.field(default_factory=lambda: {})
+        extra: dict = dataclasses.field(default_factory=dict)
 
     try:
         uuid.UUID(uuid_)

@@ -16,9 +16,13 @@
 
     {{ content_metadata(
       data={
-        "Last updated": letter_rates.last_updated
+        "Last updated": letter_rates.last_updated | format_date_normal
       }
     ) }}
+
+  <div class="govuk-inset-text">
+    International letter prices will go up on 6 February 2025. This is because Royal Mail has increased its rates.
+  </div>
 
   <p class="govuk-body">The cost of sending a letter depends on the postage you choose and how many sheets of paper you need.</p>
 

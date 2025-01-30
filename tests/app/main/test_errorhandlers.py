@@ -3,7 +3,7 @@ from io import BytesIO
 
 import pytest
 import requests
-from flask import Response, g, url_for
+from flask import Response, current_app, g, url_for
 from flask_wtf.csrf import CSRFError
 from notifications_python_client.errors import HTTPError
 
@@ -109,7 +109,7 @@ def test_no_session_for_json_endpoint_returns_401(
     client_request,
     service_one,
 ):
-    with set_config_values(notify_admin, dict(WTF_CSRF_ENABLED=True)):
+    with set_config_values(notify_admin, {"WTF_CSRF_ENABLED": True}):
         client_request.logout()
         client_request.post_response(
             "json_updates.get_notifications_page_partials_as_json",
@@ -127,17 +127,17 @@ def test_405_returns_something_went_wrong_page(client_request, mocker):
 
 
 def test_api_error_response_logging(
-    mocker,
-    fake_uuid,
-    requests_mock,
     client_request,
+    requests_mock,
     caplog,
 ):
     response = requests.Response()
     response.status_code = 400
     response.headers["content-type"] = "application/json"
     response.raw = BytesIO(b'{"message": "not found"}')
-    response.url = "http://localhost:6012/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services"
+    response.url = (
+        f"{current_app.config['ADMIN_BASE_URL']}/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services"
+    )
     requests_mock.get(
         "http://you-forgot-to-mock-an-api-call-to/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services",
         exc=requests.HTTPError(response=response),
@@ -145,10 +145,11 @@ def test_api_error_response_logging(
 
     with caplog.at_level(logging.WARNING):
         client_request.get(
-            ".choose_account", _expected_status=500, _test_page_title=False, _test_for_elements_without_class=False
+            ".your_services", _expected_status=500, _test_page_title=False, _test_for_elements_without_class=False
         )
 
     assert (
-        "API http://localhost:6012/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services "
+        f"API {current_app.config['ADMIN_BASE_URL']}"
+        "/user/6ce466d0-fd6a-11e5-82f5-e0accb9d11a6/organisations-and-services "
         "failed with status=400, message='not found'"
     ) in caplog.messages

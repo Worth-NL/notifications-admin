@@ -5,7 +5,6 @@ from zipfile import BadZipFile
 from flask import (
     abort,
     current_app,
-    flash,
     redirect,
     render_template,
     request,
@@ -15,8 +14,8 @@ from flask import (
 from flask_login import current_user
 from notifications_python_client.errors import HTTPError
 from notifications_utils import SMS_CHAR_COUNT_LIMIT
-from notifications_utils.insensitive_dict import InsensitiveDict
-from notifications_utils.postal_address import PostalAddress, address_lines_1_to_7_keys
+from notifications_utils.insensitive_dict import InsensitiveDict, InsensitiveSet
+from notifications_utils.recipient_validation.postal_address import PostalAddress, address_lines_1_to_7_keys
 from notifications_utils.recipients import RecipientCSV, first_column_headings
 from notifications_utils.sanitise_text import SanitiseASCII
 from xlrd.biffh import XLRDError
@@ -28,6 +27,7 @@ from app import (
     nl2br,
     notification_api_client,
     service_api_client,
+    template_preview_client,
 )
 from app.limiters import RateLimit
 from app.main import main, no_cookie
@@ -46,7 +46,6 @@ from app.s3_client.s3_csv_client import (
     s3upload,
     set_metadata_on_csv_upload,
 )
-from app.template_previews import TemplatePreview
 from app.utils import PermanentRedirect, should_skip_template_page, unicode_truncate
 from app.utils.csv import Spreadsheet, get_errors_for_csv
 from app.utils.user import user_has_permissions
@@ -126,12 +125,12 @@ def send_messages(service_id, template_id):
         try:
             current_app.logger.info(
                 "User %(user_id)s uploaded %(filename)s",
-                dict(user_id=current_user.id, filename=form.file.data.filename),
+                {"user_id": current_user.id, "filename": form.file.data.filename},
             )
             upload_id = s3upload(service_id, Spreadsheet.from_file_form(form).as_dict, current_app.config["AWS_REGION"])
             current_app.logger.info(
                 "%(filename)s persisted in S3 as %(upload_id)s",
-                dict(filename=form.file.data.filename, upload_id=upload_id),
+                {"filename": form.file.data.filename, "upload_id": upload_id},
             )
             file_name_metadata = unicode_truncate(SanitiseASCII.encode(form.file.data.filename), 1600)
             set_metadata_on_csv_upload(service_id, upload_id, original_file_name=file_name_metadata)
@@ -145,20 +144,15 @@ def send_messages(service_id, template_id):
             )
         except (UnicodeDecodeError, BadZipFile, XLRDError):
             current_app.logger.warning("Could not read %s", form.file.data.filename, exc_info=True)
-            flash(f"Could not read {form.file.data.filename}. Try using a different file format.")
+            form.file.errors = ["Notify cannot read this file - try using a different file type"]
         except XLDateError:
             current_app.logger.warning("Could not parse numbers/dates in %s", form.file.data.filename, exc_info=True)
-            flash(
-                (
-                    "{} contains numbers or dates that Notify cannot understand. "
-                    "Try formatting all columns as ‘text’ or export your file as CSV."
-                ).format(form.file.data.filename)
-            )
+            form.file.errors = ["Notify cannot read this file - try saving it as a CSV instead"]
     elif form.errors:
         # just show the first error, as we don't expect the form to have more
         # than one, since it only has one field
         first_field_errors = list(form.errors.values())[0]
-        flash(first_field_errors[0])
+        form.file.errors.append(first_field_errors[0])
 
     column_headings = get_spreadsheet_column_headings_from_template(template)
 
@@ -169,6 +163,7 @@ def send_messages(service_id, template_id):
         example=[column_headings, get_example_csv_rows(template)],
         form=form,
         allowed_file_extensions=Spreadsheet.ALLOWED_FILE_EXTENSIONS,
+        error_summary_enabled=True,
     )
 
 
@@ -189,11 +184,26 @@ def get_example_csv(service_id, template_id):
     )
 
 
+def _should_show_set_sender_page(service_id, template) -> bool:
+    if template.template_type == "letter":
+        return False
+
+    sender_details = get_sender_details(service_id, template.template_type)
+
+    if len(sender_details) <= 1:
+        return False
+
+    return True
+
+
 @main.route("/services/<uuid:service_id>/send/<uuid:template_id>/set-sender", methods=["GET", "POST"])
 @user_has_permissions("send_messages", restrict_admin_usage=True)
 @RateLimit.USER_LIMIT
 def set_sender(service_id, template_id):
-    session["sender_id"] = None
+    from_back_link = request.args.get("from_back_link") == "yes"
+    # If we're returning to the page, we want to use the sender_id already in the session instead of resetting it
+    session["sender_id"] = session.get("sender_id") if from_back_link else None
+
     redirect_to_one_off = redirect(url_for(".send_one_off", service_id=service_id, template_id=template_id))
 
     template = current_service.get_template_with_user_permission_or_403(template_id, current_user)
@@ -211,8 +221,10 @@ def set_sender(service_id, template_id):
 
     sender_context = get_sender_context(sender_details, template.template_type)
 
+    selected_sender = session["sender_id"] or sender_context["default_id"]
+
     form = SetSenderForm(
-        sender=sender_context["default_id"],
+        sender=selected_sender,
         sender_choices=sender_context["value_and_label"],
         sender_label=sender_context["description"],
     )
@@ -241,6 +253,7 @@ def set_sender(service_id, template_id):
         template_id=template_id,
         sender_context={"title": sender_context["title"], "description": sender_context["description"]},
         option_hints=option_hints,
+        back_link=_get_set_sender_back_link(service_id, template),
     )
 
 
@@ -407,6 +420,11 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
             )
         )
 
+    # Clear the session variable which indicates we've come from the inbound SMS flow if step_index is 0.
+    # If step_index is 0, the message was not sent from the inbound SMS flow, which starts at step_index 1.
+    if step_index == 0:
+        session.pop("from_inbound_sms_details", None)
+
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
         current_user,
@@ -461,12 +479,12 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
                     step_index=step_index + 1,
                 )
             )
-
     form = get_placeholder_form_instance(
         current_placeholder,
         dict_to_populate_from=get_normalised_placeholders_from_session(),
         template_type=template.template_type,
         allow_international_phone_numbers=current_service.has_permission("international_sms"),
+        allow_sms_to_uk_landline=current_service.has_permission("sms_to_uk_landlines"),
     )
 
     template.values = template_values
@@ -518,13 +536,12 @@ def send_one_off_step(service_id, template_id, step_index):  # noqa: C901
     )
 
 
-@no_cookie.route("/services/<uuid:service_id>/send/<uuid:template_id>/test.<filetype>", methods=["GET"])
+@no_cookie.route(
+    "/services/<uuid:service_id>/send/<uuid:template_id>/test.<letter_file_extension:filetype>", methods=["GET"]
+)
 @user_has_permissions("send_messages")
 @RateLimit.USER_LIMIT
 def send_test_preview(service_id, template_id, filetype):
-    if filetype not in ("pdf", "png"):
-        abort(404)
-
     template = current_service.get_template_with_user_permission_or_403(
         template_id,
         current_user,
@@ -536,15 +553,16 @@ def send_test_preview(service_id, template_id, filetype):
         ),
     )
 
-    return TemplatePreview.get_preview_for_templated_letter(
+    return template_preview_client.get_preview_for_templated_letter(
         db_template=template._template,
         filetype=filetype,
         values=get_normalised_placeholders_from_session(),
         page=request.args.get("page"),
+        service=current_service,
     )
 
 
-@main.route("/services/<uuid:service_id>/send/<uuid:template_id>" "/from-contact-list")
+@main.route("/services/<uuid:service_id>/send/<uuid:template_id>/from-contact-list")
 @user_has_permissions("send_messages")
 @RateLimit.USER_LIMIT
 def choose_from_contact_list(service_id, template_id):
@@ -559,7 +577,7 @@ def choose_from_contact_list(service_id, template_id):
     )
 
 
-@main.route("/services/<uuid:service_id>/send/<uuid:template_id>" "/from-contact-list/<uuid:contact_list_id>")
+@main.route("/services/<uuid:service_id>/send/<uuid:template_id>/from-contact-list/<uuid:contact_list_id>")
 @user_has_permissions("send_messages")
 @RateLimit.USER_LIMIT
 def send_from_contact_list(service_id, template_id, contact_list_id):
@@ -632,6 +650,7 @@ def _check_messages(service_id, template_id, upload_id, preview_row):
         ),
         remaining_messages=remaining_messages,
         allow_international_sms=current_service.has_permission("international_sms"),
+        allow_sms_to_uk_landline=current_service.has_permission("sms_to_uk_landlines"),
         allow_international_letters=current_service.has_permission("international_letters"),
     )
 
@@ -653,33 +672,33 @@ def _check_messages(service_id, template_id, upload_id, preview_row):
 
     original_file_name = get_csv_metadata(service_id, upload_id).get("original_file_name", "")
 
-    return dict(
-        recipients=recipients,
-        template=template,
-        errors=recipients.has_errors,
-        row_errors=get_errors_for_csv(recipients, template.template_type),
-        count_of_recipients=len(recipients),
-        count_of_displayed_recipients=len(list(recipients.displayed_rows)),
-        original_file_name=original_file_name,
-        upload_id=upload_id,
-        form=CsvUploadForm(),
-        remaining_messages=remaining_messages,
-        _choose_time_form=choose_time_form,
-        back_link=back_link,
-        trying_to_send_letters_in_trial_mode=all(
+    return {
+        "recipients": recipients,
+        "template": template,
+        "errors": recipients.has_errors,
+        "row_errors": get_errors_for_csv(recipients, template.template_type),
+        "count_of_recipients": len(recipients),
+        "count_of_displayed_recipients": len(list(recipients.displayed_rows)),
+        "original_file_name": original_file_name,
+        "upload_id": upload_id,
+        "form": CsvUploadForm(),
+        "remaining_messages": remaining_messages,
+        "_choose_time_form": choose_time_form,
+        "back_link": back_link,
+        "trying_to_send_letters_in_trial_mode": all(
             (
                 current_service.trial_mode,
                 template.template_type == "letter",
             )
         ),
-        first_recipient_column=recipients.recipient_column_headers[0],
-        preview_row=preview_row,
-        sent_previously=job_api_client.has_sent_previously(
+        "first_recipient_column": recipients.recipient_column_headers[0],
+        "preview_row": preview_row,
+        "sent_previously": job_api_client.has_sent_previously(
             service_id, template.id, template.get_raw("version"), original_file_name
         ),
-        letter_min_address_lines=PostalAddress.MIN_LINES,
-        letter_max_address_lines=PostalAddress.MAX_LINES,
-    )
+        "letter_min_address_lines": PostalAddress.MIN_LINES,
+        "letter_max_address_lines": PostalAddress.MAX_LINES,
+    }
 
 
 @main.route("/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>", methods=["GET"])
@@ -725,11 +744,11 @@ def check_messages(service_id, template_id, upload_id, row_index=2):
 
 
 @no_cookie.route(
-    "/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>.<filetype>",
+    "/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>.<letter_file_extension:filetype>",
     methods=["GET"],
 )
 @no_cookie.route(
-    "/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>/row-<int:row_index>.<filetype>",
+    "/services/<uuid:service_id>/<uuid:template_id>/check/<uuid:upload_id>/row-<int:row_index>.<letter_file_extension:filetype>",
     methods=["GET"],
 )
 @user_has_permissions("send_messages")
@@ -737,19 +756,21 @@ def check_messages(service_id, template_id, upload_id, row_index=2):
 def check_messages_preview(service_id, template_id, upload_id, filetype, row_index=2):
     if filetype == "pdf":
         page = None
-    elif filetype == "png":
+    if filetype == "png":
         page = request.args.get("page", 1)
-    else:
-        abort(404)
 
     template = _check_messages(service_id, template_id, upload_id, row_index)["template"]
-    return TemplatePreview.get_preview_for_templated_letter(
-        db_template=template._template, filetype=filetype, values=template.values, page=page
+    return template_preview_client.get_preview_for_templated_letter(
+        db_template=template._template,
+        filetype=filetype,
+        values=template.values,
+        page=page,
+        service=current_service,
     )
 
 
 @no_cookie.route(
-    "/services/<uuid:service_id>/<uuid:template_id>/check.<filetype>",
+    "/services/<uuid:service_id>/<uuid:template_id>/check.<letter_file_extension:filetype>",
     methods=["GET"],
 )
 @user_has_permissions("send_messages")
@@ -757,17 +778,19 @@ def check_messages_preview(service_id, template_id, upload_id, filetype, row_ind
 def check_notification_preview(service_id, template_id, filetype):
     if filetype == "pdf":
         page = None
-    elif filetype == "png":
+    if filetype == "png":
         page = request.args.get("page", 1)
-    else:
-        abort(404)
 
     template = _check_notification(
         service_id,
         template_id,
     )["template"]
-    return TemplatePreview.get_preview_for_templated_letter(
-        db_template=template._template, filetype=filetype, values=template.values, page=page
+    return template_preview_client.get_preview_for_templated_letter(
+        db_template=template._template,
+        filetype=filetype,
+        values=template.values,
+        page=page,
+        service=current_service,
     )
 
 
@@ -796,10 +819,10 @@ def start_job(service_id, upload_id):
 
 def fields_to_fill_in(template, prefill_current_user=False):
     if "letter" == template.template_type:
-        return letter_address_columns + list(template.placeholders)
+        return InsensitiveSet(letter_address_columns + list(template.placeholders))
 
     if not prefill_current_user:
-        return first_column_headings[template.template_type] + list(template.placeholders)
+        return InsensitiveSet(first_column_headings[template.template_type] + list(template.placeholders))
 
     if template.template_type == "sms":
         session["recipient"] = current_user.mobile_number
@@ -808,7 +831,7 @@ def fields_to_fill_in(template, prefill_current_user=False):
         session["recipient"] = current_user.email_address
         session["placeholders"]["email address"] = current_user.email_address
 
-    return list(template.placeholders)
+    return InsensitiveSet(template.placeholders)
 
 
 def get_normalised_placeholders_from_session():
@@ -839,19 +862,40 @@ def get_send_test_page_title(template_type, entering_recipient, name=None):
     return "Personalise this message"
 
 
+def _get_set_sender_back_link(service_id, template):
+    if should_skip_template_page(template):
+        return url_for(
+            ".choose_template",
+            service_id=service_id,
+        )
+    else:
+        return url_for(
+            "main.view_template",
+            service_id=service_id,
+            template_id=template.id,
+        )
+
+
 def get_back_link(service_id, template, step_index, placeholders=None):
     if step_index == 0:
-        if should_skip_template_page(template):
+        if _should_show_set_sender_page(service_id, template):
+            return url_for("main.set_sender", service_id=service_id, template_id=template.id, from_back_link="yes")
+        else:
+            return _get_set_sender_back_link(service_id, template)
+
+    if step_index == 1 and template.template_type == "sms" and "from_inbound_sms_details" in session:
+        notification_id = session["from_inbound_sms_details"]["notification_id"]
+        from_folder = session["from_inbound_sms_details"]["from_folder"]
+
+        if from_folder:
             return url_for(
-                ".choose_template",
+                "main.conversation_reply",
                 service_id=service_id,
+                notification_id=notification_id,
+                from_folder=from_folder,
             )
         else:
-            return url_for(
-                "main.view_template",
-                service_id=service_id,
-                template_id=template.id,
-            )
+            return url_for("main.conversation_reply", service_id=service_id, notification_id=notification_id)
 
     if template.template_type == "letter" and placeholders:
         # Make sure we’re not redirecting users to a page which will
@@ -1008,7 +1052,7 @@ def send_notification(service_id, template_id):
     except HTTPError as exception:
         current_app.logger.info(
             'Service %(service_id)s could not send notification: "%(message)s"',
-            dict(service_id=current_service.id, message=exception.message),
+            {"service_id": current_service.id, "message": exception.message},
         )
         return render_template(
             "views/notifications/check.html",
@@ -1018,6 +1062,7 @@ def send_notification(service_id, template_id):
     session.pop("placeholders")
     session.pop("recipient")
     session.pop("sender_id", None)
+    session.pop("from_inbound_sms_details", None)
 
     return redirect(
         url_for(

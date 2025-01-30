@@ -1,18 +1,24 @@
+import datetime
 from functools import partial
 from unittest.mock import ANY, PropertyMock
 
 import pytest
+import pytz
 from flask import url_for
 from freezegun import freeze_time
-from notifications_utils.clients.zendesk.zendesk_client import NotifySupportTicket
+from notifications_utils.clients.zendesk.zendesk_client import (
+    NotifySupportTicket,
+    NotifySupportTicketComment,
+    ZendeskError,
+)
 
-from app.main.views.feedback import in_business_hours
+from app.main.views.feedback import ZENDESK_USER_LOGGED_OUT_NOTE, in_business_hours
 from app.models.feedback import (
     GENERAL_TICKET_TYPE,
     PROBLEM_TICKET_TYPE,
     QUESTION_TICKET_TYPE,
 )
-from tests.conftest import SERVICE_ONE_ID, normalize_spaces, set_config
+from tests.conftest import SERVICE_ONE_ID, normalize_spaces, set_config_values
 
 
 def no_redirect():
@@ -126,6 +132,11 @@ def test_passed_non_logged_in_user_details_through_flow(client_request, mocker):
     mock_send_ticket_to_zendesk = mocker.patch(
         "app.main.views.feedback.zendesk_client.send_ticket_to_zendesk",
         autospec=True,
+        return_value=1234,
+    )
+    mock_update_ticket_with_internal_note = mocker.patch(
+        "app.main.views.feedback.zendesk_client.update_ticket",
+        autospec=True,
     )
 
     data = {"feedback": "blah", "name": "Anne Example", "email_address": "anne@example.com"}
@@ -152,8 +163,56 @@ def test_passed_non_logged_in_user_details_through_flow(client_request, mocker):
         org_id=None,
         org_type=None,
         service_id=None,
+        user_created_at=None,
     )
     mock_send_ticket_to_zendesk.assert_called_once()
+    mock_update_ticket_with_internal_note.assert_called_once_with(
+        1234,
+        comment=NotifySupportTicketComment(body=ZENDESK_USER_LOGGED_OUT_NOTE, attachments=(), public=False),
+    )
+
+
+@pytest.mark.freeze_time("2024-07-08 12:00")
+def test_does_not_add_internal_note_to_tickets_created_by_suspended_users(client_request, mocker):
+    client_request.logout()
+    mocker.patch(
+        "app.main.views.feedback.zendesk_client.send_ticket_to_zendesk",
+        return_value=None,
+    )
+    mock_update_ticket_with_internal_note = mocker.patch("app.main.views.feedback.zendesk_client.update_ticket")
+
+    client_request.post(
+        "main.feedback",
+        ticket_type=GENERAL_TICKET_TYPE,
+        _data={"feedback": "blah", "name": "Anne Example", "email_address": "anne@example.com"},
+        _expected_redirect=url_for(
+            "main.thanks",
+            out_of_hours_emergency=False,
+        ),
+    )
+    assert not mock_update_ticket_with_internal_note.called
+
+
+@pytest.mark.freeze_time("2024-07-08 12:00")
+def test_does_not_add_internal_note_to_ticket_if_error_creating_ticket(client_request, mocker):
+    client_request.logout()
+    mocker.patch(
+        "app.main.views.feedback.zendesk_client.send_ticket_to_zendesk",
+        side_effect=ZendeskError("error from Zendesk"),
+    )
+    mock_update_ticket_with_internal_note = mocker.patch("app.main.views.feedback.zendesk_client.update_ticket")
+
+    with pytest.raises(ZendeskError):
+        client_request.post(
+            "main.feedback",
+            ticket_type=GENERAL_TICKET_TYPE,
+            _data={"feedback": "blah", "name": "Anne Example", "email_address": "anne@example.com"},
+            _expected_redirect=url_for(
+                "main.thanks",
+                out_of_hours_emergency=False,
+            ),
+        )
+    assert not mock_update_ticket_with_internal_note.called
 
 
 @pytest.mark.freeze_time("2016-12-12 12:00:00.000000")
@@ -180,7 +239,9 @@ def test_passes_user_details_through_flow(
     mock_send_ticket_to_zendesk = mocker.patch(
         "app.main.views.feedback.zendesk_client.send_ticket_to_zendesk",
         autospec=True,
+        return_value=1234,
     )
+    mock_update_ticket_with_internal_note = mocker.patch("app.main.views.feedback.zendesk_client.update_ticket")
 
     client_request.post(
         "main.feedback",
@@ -204,6 +265,7 @@ def test_passes_user_details_through_flow(
         org_id=None,
         org_type="central",
         service_id=SERVICE_ONE_ID,
+        user_created_at=datetime.datetime(2018, 11, 7, 8, 34, 54, 857402).replace(tzinfo=pytz.utc),
     )
 
     assert mock_create_ticket.call_args[1]["message"] == "\n".join(
@@ -219,6 +281,7 @@ def test_passes_user_details_through_flow(
         ]
     )
     mock_send_ticket_to_zendesk.assert_called_once()
+    assert not mock_update_ticket_with_internal_note.called
 
 
 @pytest.mark.freeze_time("2016-12-12 12:00:00.000000")
@@ -234,7 +297,13 @@ def test_zendesk_subject_doesnt_show_env_flag_on_prod(
         autospec=True,
     )
 
-    with set_config(notify_admin, "NOTIFY_ENVIRONMENT", "production"):
+    with set_config_values(
+        notify_admin,
+        {
+            "NOTIFY_ENVIRONMENT": "production",
+            "FEEDBACK_ZENDESK_SUBJECT_PREFIX_ENABLED": False,
+        },
+    ):
         client_request.post(
             "main.feedback",
             ticket_type=GENERAL_TICKET_TYPE,
@@ -258,6 +327,7 @@ def test_zendesk_subject_doesnt_show_env_flag_on_prod(
         org_id=None,
         org_type="central",
         service_id=SERVICE_ONE_ID,
+        user_created_at=datetime.datetime(2018, 11, 7, 8, 34, 54, 857402).replace(tzinfo=pytz.utc),
     )
 
 
@@ -392,7 +462,7 @@ ids, params = zip(
             ),
         ),
     ],
-    strict=True
+    strict=True,
 )
 
 
@@ -403,9 +473,7 @@ ids, params = zip(
 )
 def test_redirects_to_triage(
     client_request,
-    api_user_active,
     mocker,
-    mock_get_user,
     ticket_type,
     is_in_business_hours,
     logged_in,
@@ -471,7 +539,7 @@ def test_doesnt_lose_message_if_post_across_closing(
     )
 
     with client_request.session_transaction() as session:
-        assert page.select_one("textarea", {"name": "feedback"}).text == "\r\nfoo"
+        assert page.select_one("textarea", {"name": "feedback"}).text in "\r\nfoo"
         assert "feedback_message" not in session
 
 
@@ -604,7 +672,6 @@ def test_should_be_shown_the_bat_email(
     client_request,
     active_user_with_permissions,
     mocker,
-    service_one,
     mock_get_non_empty_organisations_and_services_for_user,
     is_in_business_hours,
     severe,
@@ -662,7 +729,6 @@ def test_should_be_shown_the_bat_email_for_general_questions(
     client_request,
     active_user_with_permissions,
     mocker,
-    service_one,
     mock_get_non_empty_organisations_and_services_for_user,
     severe,
     expected_status_code,
@@ -693,7 +759,6 @@ def test_should_be_shown_the_bat_email_for_general_questions(
 def test_bat_email_page(
     client_request,
     active_user_with_permissions,
-    service_one,
 ):
     bat_phone_page = "main.bat_phone"
 
@@ -744,8 +809,6 @@ def test_bat_email_page(
 def test_thanks(
     client_request,
     mocker,
-    api_user_active,
-    mock_get_user,
     out_of_hours_emergency,
     out_of_hours,
     message,

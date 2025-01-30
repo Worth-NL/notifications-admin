@@ -19,7 +19,7 @@ from flask import (
 )
 from notifications_utils.insensitive_dict import InsensitiveDict
 from notifications_utils.pdf import pdf_page_count
-from notifications_utils.postal_address import PostalAddress
+from notifications_utils.recipient_validation.postal_address import PostalAddress
 from notifications_utils.recipients import RecipientCSV
 from notifications_utils.sanitise_text import SanitiseASCII
 from pypdf.errors import PdfReadError
@@ -30,6 +30,7 @@ from xlrd.xldate import XLDateError
 from app import (
     current_service,
     notification_api_client,
+    template_preview_client,
     upload_api_client,
 )
 from app.limiters import RateLimit
@@ -44,11 +45,9 @@ from app.s3_client.s3_letter_upload_client import (
     get_transient_letter_file_location,
     upload_letter_to_s3,
 )
-from app.template_previews import TemplatePreview
 from app.utils import unicode_truncate
 from app.utils.csv import Spreadsheet, get_errors_for_csv
 from app.utils.letters import (
-    get_error_from_upload_form,
     get_letter_printing_statement,
     get_letter_validation_error,
 )
@@ -148,89 +147,76 @@ def add_preview_of_content_uploaded_letters(notifications):
 @RateLimit.USER_LIMIT
 def upload_letter(service_id):
     form = PDFUploadForm()
-    error = {}
 
     if form.validate_on_submit():
         pdf_file_bytes = form.file.data.read()
-        original_filename = form.file.data.filename
 
         try:
             # TODO: get page count from the sanitise response once template preview handles malformed files nicely
             page_count = pdf_page_count(BytesIO(pdf_file_bytes))
         except PdfReadError:
             current_app.logger.info("Invalid PDF uploaded for service_id: %s", service_id)
-            return _invalid_upload_error(
-                "There’s a problem with your file",
-                "Notify cannot read this PDF.<br>Save a new copy of your file and try again.",
-            )
+            form.file.errors.append("Notify cannot read this PDF - save a new copy and try again")
 
-        upload_id = uuid.uuid4()
-        file_location = get_transient_letter_file_location(service_id, upload_id)
+        if not form.errors:
+            original_filename = form.file.data.filename
+            upload_id = uuid.uuid4()
+            file_location = get_transient_letter_file_location(service_id, upload_id)
 
-        try:
-            response = TemplatePreview.sanitise_letter(
-                BytesIO(pdf_file_bytes),
-                upload_id=upload_id,
-                allow_international_letters=current_service.has_permission("international_letters"),
-            )
-            response.raise_for_status()
-        except RequestException as ex:
-            if ex.response is not None and ex.response.status_code == 400:
-                validation_failed_message = response.json().get("message")
-                invalid_pages = response.json().get("invalid_pages")
+            try:
+                response = template_preview_client.sanitise_letter(
+                    BytesIO(pdf_file_bytes),
+                    upload_id=upload_id,
+                    allow_international_letters=current_service.has_permission("international_letters"),
+                )
+                response.raise_for_status()
+            except RequestException as ex:
+                if ex.response is not None and ex.response.status_code == 400:
+                    validation_failed_message = response.json().get("message")
+                    invalid_pages = response.json().get("invalid_pages")
 
-                status = "invalid"
+                    status = "invalid"
+                    upload_letter_to_s3(
+                        pdf_file_bytes,
+                        file_location=file_location,
+                        status=status,
+                        page_count=page_count,
+                        filename=original_filename,
+                        message=validation_failed_message,
+                        invalid_pages=invalid_pages,
+                    )
+                else:
+                    raise ex
+            else:
+                response = response.json()
+                recipient = response["recipient_address"]
+                status = "valid"
+                file_contents = base64.b64decode(response["file"].encode())
+
                 upload_letter_to_s3(
-                    pdf_file_bytes,
+                    file_contents,
                     file_location=file_location,
                     status=status,
                     page_count=page_count,
                     filename=original_filename,
-                    message=validation_failed_message,
-                    invalid_pages=invalid_pages,
+                    recipient=recipient,
                 )
-            else:
-                raise ex
-        else:
-            response = response.json()
-            recipient = response["recipient_address"]
-            status = "valid"
-            file_contents = base64.b64decode(response["file"].encode())
 
-            upload_letter_to_s3(
-                file_contents,
-                file_location=file_location,
-                status=status,
-                page_count=page_count,
-                filename=original_filename,
-                recipient=recipient,
+                backup_original_letter_to_s3(
+                    pdf_file_bytes,
+                    upload_id=upload_id,
+                )
+
+            return redirect(
+                url_for(
+                    "main.uploaded_letter_preview",
+                    service_id=current_service.id,
+                    file_id=upload_id,
+                )
             )
 
-            backup_original_letter_to_s3(
-                pdf_file_bytes,
-                upload_id=upload_id,
-            )
-
-        return redirect(
-            url_for(
-                "main.uploaded_letter_preview",
-                service_id=current_service.id,
-                file_id=upload_id,
-            )
-        )
-
-    if form.file.errors:
-        error = get_error_from_upload_form(form.file.errors[0])
-
-    return render_template("views/uploads/choose-file.html", error=error, form=form), 400 if error else 200
-
-
-def _invalid_upload_error(error_title, error_detail=None):
-    return (
-        render_template(
-            "views/uploads/choose-file.html", error={"title": error_title, "detail": error_detail}, form=PDFUploadForm()
-        ),
-        400,
+    return render_template("views/uploads/upload-letter.html", form=form, error_summary_enabled=True), (
+        400 if form.errors else 200
     )
 
 
@@ -304,9 +290,9 @@ def view_letter_upload_as_preview(service_id, file_id):
     invalid_pages = json.loads(metadata.get("invalid_pages", "[]"))
 
     if metadata.get("message") == "content-outside-printable-area" and page in invalid_pages:
-        return TemplatePreview.get_png_for_invalid_pdf_page(pdf_file, page)
+        return template_preview_client.get_png_for_invalid_pdf_page(pdf_file, page)
     else:
-        return TemplatePreview.get_png_for_valid_pdf_page(pdf_file, page)
+        return template_preview_client.get_png_for_valid_pdf_page(pdf_file, page)
 
 
 @main.route("/services/<uuid:service_id>/upload-letter/send/<uuid:file_id>", methods=["POST"])
@@ -382,24 +368,20 @@ def upload_contact_list(service_id):
                 )
             )
         except (UnicodeDecodeError, BadZipFile, XLRDError):
-            flash(f"Could not read {form.file.data.filename}. Try using a different file format.")
+            form.file.errors = ["Notify cannot read this file - try using a different file type"]
         except XLDateError:
-            flash(
-                (
-                    "{} contains numbers or dates that Notify cannot understand. "
-                    "Try formatting all columns as ‘text’ or export your file as CSV."
-                ).format(form.file.data.filename)
-            )
+            form.file.errors = ["Notify cannot read this file - try saving it as a CSV instead"]
     elif form.errors:
         # just show the first error, as we don't expect the form to have more
         # than one, since it only has one field
         first_field_errors = list(form.errors.values())[0]
-        flash(first_field_errors[0])
+        form.file.errors.append(first_field_errors[0])
 
     return render_template(
         "views/uploads/contact-list/upload.html",
         form=form,
         allowed_file_extensions=Spreadsheet.ALLOWED_FILE_EXTENSIONS,
+        error_summary_enabled=True,
     )
 
 

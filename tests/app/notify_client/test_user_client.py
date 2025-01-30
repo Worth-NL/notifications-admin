@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import Mock, call
 
 import pytest
+from flask import current_app
 from notifications_python_client.errors import HTTPError
 
 from app import invite_api_client, service_api_client, user_api_client
@@ -9,11 +10,13 @@ from app.constants import PERMISSION_CAN_MAKE_SERVICES_LIVE
 from app.models.webauthn_credential import WebAuthnCredential
 from tests import sample_uuid
 from tests.conftest import SERVICE_ONE_ID
+from tests.utils import RedisClientMock
 
 user_id = sample_uuid()
 
 
 def test_client_gets_all_users_for_service(
+    notify_admin,
     mocker,
     fake_uuid,
 ):
@@ -34,7 +37,7 @@ def test_client_gets_all_users_for_service(
     assert users[0]["id"] == fake_uuid
 
 
-def test_client_uses_correct_find_by_email(mocker, api_user_active):
+def test_client_uses_correct_find_by_email(notify_admin, mocker, api_user_active):
     expected_url = "/user/email"
     expected_data = {"email": api_user_active["email_address"]}
 
@@ -46,14 +49,14 @@ def test_client_uses_correct_find_by_email(mocker, api_user_active):
     mock_post.assert_called_once_with(expected_url, data=expected_data)
 
 
-def test_client_only_updates_allowed_attributes(mocker):
+def test_client_only_updates_allowed_attributes(notify_admin, mocker):
     mocker.patch("app.notify_client.current_user", id="1")
     with pytest.raises(TypeError) as error:
         user_api_client.update_user_attribute("user_id", id="1")
     assert str(error.value) == "Not allowed to update user attributes: id"
 
 
-def test_client_updates_password_separately(mocker, api_user_active):
+def test_client_updates_password_separately(notify_admin, mocker, api_user_active):
     expected_url = f"/user/{api_user_active['id']}/update-password"
     expected_params = {"_password": "newpassword"}
     user_api_client.max_failed_login_count = 1  # doesn't matter for this test
@@ -63,7 +66,7 @@ def test_client_updates_password_separately(mocker, api_user_active):
     mock_update_password.assert_called_once_with(expected_url, data=expected_params)
 
 
-def test_client_activates_if_pending(mocker, api_user_pending):
+def test_client_activates_if_pending(notify_admin, mocker, api_user_pending):
     mock_post = mocker.patch("app.notify_client.user_api_client.UserApiClient.post")
     user_api_client.max_failed_login_count = 1  # doesn't matter for this test
 
@@ -85,7 +88,7 @@ def test_client_passes_admin_url_when_sending_email_auth(
         f"/user/{fake_uuid}/email-code",
         data={
             "to": "ignored@example.com",
-            "email_auth_link_host": "http://localhost:6012",
+            "email_auth_link_host": current_app.config["ADMIN_BASE_URL"],
         },
     )
 
@@ -125,13 +128,7 @@ def test_client_converts_admin_permissions_to_db_permissions_on_add_to_service(n
 
 
 @pytest.mark.parametrize(
-    (
-        "expected_cache_get_calls,"
-        "cache_value,"
-        "expected_api_calls,"
-        "expected_cache_set_calls,"
-        "expected_return_value,"
-    ),
+    "expected_cache_get_calls,cache_value,expected_api_calls,expected_cache_set_calls,expected_return_value",
     [
         (
             [call(f"user-{user_id}")],
@@ -177,50 +174,59 @@ def test_returns_value_from_cache(
     assert mock_redis_set.call_args_list == expected_cache_set_calls
 
 
+# feeding LocalProxys that need an app context into pytest's parametrization system
+# leads to bad things
+_clients_by_name = {
+    "user": user_api_client,
+    "service": service_api_client,
+    "invite": invite_api_client,
+}
+
+
 @pytest.mark.parametrize(
-    "client, method, extra_args, extra_kwargs",
+    "client_name, method, extra_args, extra_kwargs",
     [
-        (user_api_client, "add_user_to_service", [SERVICE_ONE_ID, sample_uuid(), [], []], {}),
-        (user_api_client, "update_user_attribute", [user_id], {}),
-        (user_api_client, "reset_failed_login_count", [user_id], {}),
-        (user_api_client, "update_user_attribute", [user_id], {}),
-        (user_api_client, "update_password", [user_id, "hunter2"], {}),
-        (user_api_client, "verify_password", [user_id, "hunter2"], {}),
-        (user_api_client, "check_verify_code", [user_id, "", ""], {}),
+        ("user", "add_user_to_service", [SERVICE_ONE_ID, sample_uuid(), [], []], {}),
+        ("user", "update_user_attribute", [user_id], {}),
+        ("user", "reset_failed_login_count", [user_id], {}),
+        ("user", "update_user_attribute", [user_id], {}),
+        ("user", "update_password", [user_id, "hunter2"], {}),
+        ("user", "verify_password", [user_id, "hunter2"], {}),
+        ("user", "check_verify_code", [user_id, "", ""], {}),
         (
-            user_api_client,
+            "user",
             "complete_webauthn_login_attempt",
             [user_id],
             {"is_successful": True, "webauthn_credential_id": "123"},
         ),
-        (user_api_client, "add_user_to_service", [SERVICE_ONE_ID, user_id, [], []], {}),
+        ("user", "add_user_to_service", [SERVICE_ONE_ID, user_id, [], []], {}),
         (
-            user_api_client,
+            "user",
             "add_user_to_organisation",
             [sample_uuid(), user_id, [PERMISSION_CAN_MAKE_SERVICES_LIVE]],
             {},
         ),
-        (user_api_client, "set_user_permissions", [user_id, SERVICE_ONE_ID, []], {}),
-        (user_api_client, "activate_user", [user_id], {}),
-        (user_api_client, "archive_user", [user_id], {}),
-        (service_api_client, "remove_user_from_service", [SERVICE_ONE_ID, user_id], {}),
-        (service_api_client, "create_service", ["", "", 0, 0, 0, False, user_id], {}),
-        (invite_api_client, "accept_invite", [SERVICE_ONE_ID, user_id], {}),
+        ("user", "set_user_permissions", [user_id, SERVICE_ONE_ID, []], {}),
+        ("user", "activate_user", [user_id], {}),
+        ("user", "archive_user", [user_id], {}),
+        ("service", "remove_user_from_service", [SERVICE_ONE_ID, user_id], {}),
+        ("service", "create_service", ["", "", 0, 0, 0, False, user_id], {}),
+        ("invite", "accept_invite", [SERVICE_ONE_ID, user_id], {}),
     ],
 )
-def test_deletes_user_cache(notify_admin, mock_get_user, mocker, client, method, extra_args, extra_kwargs):
+def test_deletes_user_cache(notify_admin, mock_get_user, mocker, client_name, method, extra_args, extra_kwargs):
     mocker.patch("app.notify_client.current_user", id="1")
-    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete")
+    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete", new_callable=RedisClientMock)
     mock_request = mocker.patch("notifications_python_client.base.BaseAPIClient.request")
 
-    getattr(client, method)(*extra_args, **extra_kwargs)
+    getattr(_clients_by_name[client_name], method)(*extra_args, **extra_kwargs)
 
-    assert call(f"user-{user_id}") in mock_redis_delete.call_args_list
     assert len(mock_request.call_args_list) == 1
+    mock_redis_delete.assert_called_with_subset_of_args(f"user-{user_id}")
 
 
-def test_add_user_to_service_calls_correct_endpoint_and_deletes_keys_from_cache(mocker):
-    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete")
+def test_add_user_to_service_calls_correct_endpoint_and_deletes_keys_from_cache(notify_admin, mocker):
+    mock_redis_delete = mocker.patch("app.extensions.RedisClient.delete", new_callable=RedisClientMock)
 
     service_id = uuid.uuid4()
     user_id = uuid.uuid4()
@@ -234,14 +240,14 @@ def test_add_user_to_service_calls_correct_endpoint_and_deletes_keys_from_cache(
     user_api_client.add_user_to_service(service_id, user_id, [], [folder_id])
 
     mock_post.assert_called_once_with(expected_url, data=data)
-    assert mock_redis_delete.call_args_list == [
-        call(f"user-{user_id}"),
-        call(f"service-{service_id}-template-folders"),
-        call(f"service-{service_id}"),
-    ]
+    mock_redis_delete.assert_called_with_args(
+        f"user-{user_id}",
+        f"service-{service_id}-template-folders",
+        f"service-{service_id}",
+    )
 
 
-def test_get_webauthn_credentials_for_user(mocker, webauthn_credential, fake_uuid):
+def test_get_webauthn_credentials_for_user(notify_admin, mocker, webauthn_credential, fake_uuid):
     mock_get = mocker.patch(
         "app.notify_client.user_api_client.UserApiClient.get", return_value={"data": [webauthn_credential]}
     )
@@ -253,7 +259,7 @@ def test_get_webauthn_credentials_for_user(mocker, webauthn_credential, fake_uui
     assert credentials[0]["name"] == "Test credential"
 
 
-def test_create_webauthn_credential_for_user(mocker, webauthn_credential, fake_uuid):
+def test_create_webauthn_credential_for_user(notify_admin, mocker, webauthn_credential, fake_uuid):
     credential = WebAuthnCredential(webauthn_credential)
 
     mock_post = mocker.patch("app.notify_client.user_api_client.UserApiClient.post")
@@ -263,7 +269,7 @@ def test_create_webauthn_credential_for_user(mocker, webauthn_credential, fake_u
     mock_post.assert_called_once_with(expected_url, data=credential.serialize())
 
 
-def test_complete_webauthn_login_attempt_returns_true_and_no_message_normally(fake_uuid, mocker):
+def test_complete_webauthn_login_attempt_returns_true_and_no_message_normally(notify_admin, fake_uuid, mocker):
     mock_post = mocker.patch("app.notify_client.user_api_client.UserApiClient.post")
     webauthn_credential_id = str(uuid.uuid4())
 
@@ -276,7 +282,7 @@ def test_complete_webauthn_login_attempt_returns_true_and_no_message_normally(fa
     assert resp == (True, "")
 
 
-def test_complete_webauthn_login_attempt_returns_false_and_message_on_403(fake_uuid, mocker):
+def test_complete_webauthn_login_attempt_returns_false_and_message_on_403(notify_admin, fake_uuid, mocker):
     mock_post = mocker.patch(
         "app.notify_client.user_api_client.UserApiClient.post",
         side_effect=HTTPError(response=Mock(status_code=403, json=Mock(return_value={"message": "forbidden"}))),
@@ -293,7 +299,7 @@ def test_complete_webauthn_login_attempt_returns_false_and_message_on_403(fake_u
     assert resp == (False, "forbidden")
 
 
-def test_complete_webauthn_login_attempt_raises_on_api_error(fake_uuid, mocker):
+def test_complete_webauthn_login_attempt_raises_on_api_error(notify_admin, fake_uuid, mocker):
     mocker.patch(
         "app.notify_client.user_api_client.UserApiClient.post",
         side_effect=HTTPError(response=Mock(status_code=503, message="error")),
@@ -304,8 +310,8 @@ def test_complete_webauthn_login_attempt_raises_on_api_error(fake_uuid, mocker):
 
 
 def test_reset_password(
+    notify_admin,
     mocker,
-    fake_uuid,
 ):
     mock_post = mocker.patch("app.notify_client.user_api_client.UserApiClient.post")
 
@@ -315,12 +321,13 @@ def test_reset_password(
         "/user/reset-password",
         data={
             "email": "test@example.com",
-            "admin_base_url": "http://localhost:6012",
+            "admin_base_url": current_app.config["ADMIN_BASE_URL"],
         },
     )
 
 
 def test_send_registration_email(
+    notify_admin,
     mocker,
     fake_uuid,
 ):
@@ -332,6 +339,6 @@ def test_send_registration_email(
         f"/user/{fake_uuid}/email-verification",
         data={
             "to": "test@example.com",
-            "admin_base_url": "http://localhost:6012",
+            "admin_base_url": current_app.config["ADMIN_BASE_URL"],
         },
     )

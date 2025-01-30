@@ -1,4 +1,6 @@
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from flask import current_app
 from flask_login import current_user
@@ -13,7 +15,12 @@ from app.notify_client.user_api_client import user_api_client
 
 
 class Branding(JSONModel):
-    ALLOWED_PROPERTIES = {"id", "name"}
+    id: Any
+    name: str
+    created_by: Any
+    created_at: datetime
+    updated_at: datetime
+
     __sort_attribute__ = "name"
 
     def __bool__(self):
@@ -21,7 +28,7 @@ class Branding(JSONModel):
 
     @classmethod
     def with_default_values(cls, **kwargs):
-        return cls({key: None for key in cls.ALLOWED_PROPERTIES} | kwargs)
+        return cls({key: None for key in cls({}).__annotations__} | kwargs)
 
     def name_like(self, name):
         return make_string_safe(name, whitespace="") == make_string_safe(self.name, whitespace="")
@@ -31,16 +38,11 @@ class Branding(JSONModel):
 
 
 class EmailBranding(Branding):
-    ALLOWED_PROPERTIES = Branding.ALLOWED_PROPERTIES | {
-        "colour",
-        "logo",
-        "alt_text",
-        "text",
-        "brand_type",
-        "created_by",
-        "created_at",
-        "updated_at",
-    }
+    colour: str
+    logo: str
+    alt_text: str
+    text: str
+    brand_type: str
 
     NHS_ID = "a7dc4e56-660b-4db7-8cff-12c37b12b5ea"
 
@@ -125,12 +127,8 @@ class EmailBranding(Branding):
 
 
 class LetterBranding(Branding):
-    ALLOWED_PROPERTIES = Branding.ALLOWED_PROPERTIES | {
-        "filename",
-        "created_by",
-        "created_at",
-        "updated_at",
-    }
+    filename: str
+
     NHS_ID = "2cd354bb-6b85-eda3-c0ad-6b613150459f"
 
     @classmethod
@@ -140,7 +138,6 @@ class LetterBranding(Branding):
         name,
         filename,
     ):
-        # TODO: rename temp to non-temp and clean up temp files
         new_letter_branding = letter_branding_client.create_letter_branding(
             name=name,
             filename=filename,
@@ -203,8 +200,11 @@ class AllBranding(ModelList):
 
 
 class AllEmailBranding(AllBranding):
-    client_method = email_branding_client.get_all_email_branding
     model = EmailBranding
+
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return email_branding_client.get_all_email_branding(*args, **kwargs)
 
     @property
     def example_government_identity_branding(self):
@@ -214,26 +214,33 @@ class AllEmailBranding(AllBranding):
 
 
 class EmailBrandingPool(AllEmailBranding):
-    client_method = organisations_client.get_email_branding_pool
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return organisations_client.get_email_branding_pool(*args, **kwargs)
 
     def __init__(self, id):
-        self.items = tuple()
+        self.items = ()
         if id:
-            self.items = self.client_method(id)
+            self.items = self._get_items(id)
 
 
 class AllLetterBranding(AllBranding):
-    client_method = letter_branding_client.get_all_letter_branding
     model = LetterBranding
+
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return letter_branding_client.get_all_letter_branding(*args, **kwargs)
 
 
 class LetterBrandingPool(AllLetterBranding):
-    client_method = organisations_client.get_letter_branding_pool
+    @staticmethod
+    def _get_items(*args, **kwargs):
+        return organisations_client.get_letter_branding_pool(*args, **kwargs)
 
     def __init__(self, id):
-        self.items = tuple()
+        self.items = ()
         if id:
-            self.items = self.client_method(id)
+            self.items = self._get_items(id)
 
 
 GOVERNMENT_IDENTITY_SYSTEM_COLOURS = {

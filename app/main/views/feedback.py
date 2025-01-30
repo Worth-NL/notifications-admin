@@ -4,7 +4,7 @@ import pytz
 from flask import current_app, redirect, render_template, request, session, url_for
 from flask_login import current_user
 from notifications_utils.bank_holidays import BankHolidays
-from notifications_utils.clients.zendesk.zendesk_client import NotifySupportTicket
+from notifications_utils.clients.zendesk.zendesk_client import NotifySupportTicket, NotifySupportTicketComment
 
 from app import convert_to_boolean, current_service
 from app.extensions import zendesk_client
@@ -18,6 +18,13 @@ from app.models.feedback import (
 from app.utils import hide_from_search_engines
 
 bank_holidays = BankHolidays(use_cached_holidays=True)
+
+ZENDESK_USER_LOGGED_OUT_NOTE = (
+    "The requester is not signed in to GOV.UK Notify.\n\n"
+    "To confirm they have access to the email address they entered in the support form:\n\n"
+    "1. Submit a public reply to this ticket.\n"
+    "2. Wait for the requester to reply."
+)
 
 
 @main.route("/support", methods=["GET", "POST"])
@@ -117,9 +124,10 @@ def feedback(ticket_type):
 
         prefix = (
             ""
-            if current_app.config["NOTIFY_ENVIRONMENT"] == "production"
+            if not current_app.config["FEEDBACK_ZENDESK_SUBJECT_PREFIX_ENABLED"]
             else f"[env: {current_app.config['NOTIFY_ENVIRONMENT']}] "
         )
+
         subject = prefix + ticket_type_names[ticket_type]["ticket_subject"]
 
         ticket = NotifySupportTicket(
@@ -133,8 +141,15 @@ def feedback(ticket_type):
             org_id=current_service.organisation_id if current_service else None,
             org_type=current_service.organisation_type if current_service else None,
             service_id=current_service.id if current_service else None,
+            user_created_at=current_user.created_at,
         )
-        zendesk_client.send_ticket_to_zendesk(ticket)
+        zendesk_ticket_id = zendesk_client.send_ticket_to_zendesk(ticket)
+
+        if zendesk_ticket_id and not current_user.is_authenticated:
+            zendesk_client.update_ticket(
+                zendesk_ticket_id,
+                comment=NotifySupportTicketComment(body=ZENDESK_USER_LOGGED_OUT_NOTE, public=False),
+            )
 
         return redirect(
             url_for(

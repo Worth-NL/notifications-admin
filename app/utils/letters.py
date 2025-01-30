@@ -5,7 +5,7 @@ from dateutil import parser
 from flask import url_for
 from notifications_utils.formatters import unescaped_formatted_list
 from notifications_utils.letter_timings import letter_can_be_cancelled
-from notifications_utils.postal_address import PostalAddress
+from notifications_utils.recipient_validation.postal_address import PostalAddress
 from notifications_utils.template import BaseLetterTemplate
 from notifications_utils.timezones import (
     convert_bst_to_utc,
@@ -27,6 +27,8 @@ def printing_today_or_tomorrow(created_at):
 
 
 def get_letter_printing_statement(status, created_at, long_form=True):
+    if isinstance(created_at, datetime):
+        created_at = created_at.astimezone(pytz.utc).isoformat()
     created_at_dt = parser.parse(created_at).replace(tzinfo=None)
     if letter_can_be_cancelled(status, created_at_dt):
         decription = "Printing starts" if long_form else "Printing"
@@ -51,14 +53,14 @@ LETTER_VALIDATION_MESSAGES = {
             "You need to change the size or orientation of {invalid_pages}. <br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--destructive" href="{letter_spec_guidance}" target="_blank">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
         "summary": (
             "Validation failed because {invalid_pages} {invalid_pages_are_or_is} not A4 portrait size.<br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--no-visited-state" href="{letter_spec_guidance}">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
     },
@@ -68,14 +70,14 @@ LETTER_VALIDATION_MESSAGES = {
             "You need to edit {invalid_pages}.<br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--destructive" href="{letter_spec_guidance}">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
         "summary": (
             "Validation failed because content is outside the printable area on {invalid_pages}.<br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--no-visited-state" href="{letter_spec_guidance}" target="_blank">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
     },
@@ -95,7 +97,7 @@ LETTER_VALIDATION_MESSAGES = {
     "no-encoded-string": {"title": "Sanitise failed - No encoded string"},
     "unable-to-read-the-file": {
         "title": "There’s a problem with your file",
-        "detail": ("Notify cannot read this PDF." "<br>Save a new copy of your file and try again."),
+        "detail": ("Notify cannot read this PDF.<br>Save a new copy of your file and try again."),
         "summary": (
             "Validation failed because Notify cannot read this PDF.<br>Save a new copy of your file and try again."
         ),
@@ -106,14 +108,14 @@ LETTER_VALIDATION_MESSAGES = {
             "You need to add a recipient address.<br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--destructive" href="{letter_spec_guidance}" target="_blank">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
         "summary": (
             "Validation failed because the address block is empty.<br>"
             "Files must meet our "
             '<a class="govuk-link govuk-link--no-visited-state" href="{letter_spec_guidance}" target="_blank">'
-            "letter specification"
+            "letter specification (opens in a new tab)"
             "</a>."
         ),
     },
@@ -163,6 +165,11 @@ LETTER_VALIDATION_MESSAGES = {
         "summary": (
             "Validation failed because your file includes a letter you’ve downloaded from Notify on {invalid_pages}."
         ),
+    },
+    "no-fixed-abode-address": {
+        "title": "There is a problem",
+        "detail": "Enter a real address.",
+        "summary": "Validation failed because this is not a real address.",
     },
 }
 

@@ -87,6 +87,7 @@ class HeaderNavigation(Navigation):
             "user_profile_email",
             "user_profile_email_authenticate",
             "user_profile_email_confirm",
+            "user_profile_get_emails_about_new_features",
             "user_profile_mobile_number",
             "user_profile_mobile_number_authenticate",
             "user_profile_mobile_number_confirm",
@@ -103,7 +104,6 @@ class HeaderNavigation(Navigation):
             "edit_sms_provider_ratio",
             "email_branding",
             "letter_branding",
-            "live_services",
             "live_services_csv",
             "notifications_sent_by_service",
             "get_billing_report",
@@ -112,7 +112,6 @@ class HeaderNavigation(Navigation):
             "get_daily_sms_provider_volumes",
             "get_volumes_by_service",
             "organisations",
-            "platform_admin",
             "platform_admin_list_complaints",
             "platform_admin_reports",
             "platform_admin_returned_letters",
@@ -122,7 +121,6 @@ class HeaderNavigation(Navigation):
             "platform_admin_create_email_branding",
             "platform_admin_update_email_branding",
             "platform_admin_view_email_branding",
-            "trial_services",
             "update_letter_branding",
             "user_information",
             "view_provider",
@@ -193,6 +191,10 @@ class MainNavigation(Navigation):
             "returned_letter_summary",
             "returned_letters",
             "service_dashboard",
+            "unsubscribe_request_reports_summary",
+            "unsubscribe_request_report",
+            "download_unsubscribe_request_report",
+            "create_unsubscribe_request_report",
             "template_usage",
             "view_notification",
             "view_notifications",
@@ -304,6 +306,7 @@ class MainNavigation(Navigation):
             "service_receive_text_messages",
             "service_receive_text_messages_start",
             "service_receive_text_messages_stop",
+            "service_receive_text_messages_stop_success",
             "service_set_auth_type",
             "service_set_channel",
             "send_files_by_email_contact_details",
@@ -414,15 +417,6 @@ class PlatformAdminNavigation(Navigation):
     mapping = {
         "search": {
             "platform_admin_search",
-        },
-        "summary": {
-            "platform_admin",
-        },
-        "live-services": {
-            "live_services",
-        },
-        "trial-mode-services": {
-            "trial_services",
         },
         "organisations": {
             "organisations",

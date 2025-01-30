@@ -62,16 +62,10 @@ class GovukFrontendWidgetMixin(ABC):
         Should be a string matching a key in the `govuk_frontend_components` dict - which roughly
         matches up with URLs found in https://design-system.service.gov.uk/components/
         """
-        pass
 
     def get_error_message(self, error_message_format="text"):
         if self.errors:
             return {
-                "attributes": {
-                    "data-notify-module": "track-error",
-                    "data-error-type": self.errors[0],
-                    "data-error-label": self.name,
-                },
                 error_message_format: self.errors[0],
             }
         else:
@@ -137,10 +131,10 @@ def render_govuk_frontend_macro(component, params):
 
     # we need to duplicate all curly braces to escape them from the f string so jinja still sees them
     template_string = f"""
-        {{%- from '{govuk_frontend_components[component]['path']}'
-        import {govuk_frontend_components[component]['macro']} -%}}
+        {{%- from '{govuk_frontend_components[component]["path"]}'
+        import {govuk_frontend_components[component]["macro"]} -%}}
 
-        {{{{ {govuk_frontend_components[component]['macro']}(params) }}}}
+        {{{{ {govuk_frontend_components[component]["macro"]}(params) }}}}
     """
 
     return Markup(render_template_string(template_string, params=params))

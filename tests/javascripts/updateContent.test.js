@@ -57,12 +57,10 @@ beforeAll(() => {
 
   $.ajax.mockImplementation(() => jqueryAJAXReturnObj);
 
-  // RollupJS assigns our bundled module code, including morphdom, to window.GOVUK.
-  // morphdom is assigned to its vendor property so we need to copy that here for the updateContent
+  // We export window.Morphdom from the ESM bundle
+  // so we need to copy that here for the updateContent
   // code to pick it up.
-  window.GOVUK.vendor = {
-    morphdom: require('morphdom')
-  };
+  window.Morphdom = require('morphdom');
   require('../../app/assets/javascripts/updateContent.js');
 
 });
@@ -368,10 +366,13 @@ describe('Update content', () => {
 
     });
 
-    test("If the response contains no changes, the DOM should stay the same", () => {
+    test("If the response contains no changes, the DOM should stay the same and no update event should fire", () => {
 
       // send the done callback a response with updates included
       responseObj[updateKey] = getPartial(partialData);
+
+      const updateEventCallbackSpy = jest.fn();
+      $(document).on('updateContent.onafterupdate', updateEventCallbackSpy);
 
       // start the module
       window.GOVUK.notifyModules.start();
@@ -385,10 +386,13 @@ describe('Update content', () => {
 
       // check a sample DOM node is unchanged
       expect(document.querySelectorAll('.big-number-number')[0].textContent.trim()).toEqual("0");
-
+      expect(updateEventCallbackSpy).not.toHaveBeenCalled()
     });
 
-    test("If the response contains changes, it should update the DOM with them", () => {
+    test("If the response contains changes, it should update the DOM with them and fire an update event", () => {
+
+      const updateEventCallbackSpy = jest.fn();
+      $(document).on('updateContent.onafterupdate', updateEventCallbackSpy);
 
       partialData[0].count = 1;
 
@@ -407,6 +411,9 @@ describe('Update content', () => {
 
       // check the right DOM node is updated
       expect(document.querySelectorAll('.big-number-number')[0].textContent.trim()).toEqual("1");
+      // check the event was triggered with the updated DOM node (the 2nd argument, after the event object)
+      expect(updateEventCallbackSpy).toHaveBeenCalled();
+      expect(updateEventCallbackSpy.mock.calls[0][1]).toEqual(document.querySelector('.ajax-block-container'));
 
     });
 
@@ -575,97 +582,6 @@ describe('Update content', () => {
       // check the node has been removed
       expect(document.querySelectorAll('.file-list').length).toEqual(1);
       expect(document.querySelectorAll('.file-list h2 a')[0].textContent.trim()).toEqual("Gas leak");
-
-    });
-
-    test("If other scripts have added classes to the DOM, they should persist through updates to a single component", () => {
-
-      document.body.innerHTML = getInitialHTMLString(getPartial(partialData));
-
-      // mark classes to persist on the partial
-      document.querySelector('.ajax-block-container').setAttribute('data-classes-to-persist', 'js-child-has-focus');
-
-      // Add class to indicate focus state of link on parent heading
-      document.querySelectorAll('.file-list h2')[0].classList.add('js-child-has-focus');
-
-      // Add an item to trigger an update
-      partialData.push({
-        title: "Reservoir flooding template",
-        hint: "The local reservoir has flooded. All people within 5 miles should move to a safer location.",
-        status: "Waiting for approval",
-        areas: [
-          "Santa Claus Village, Rovaniemi A",
-          "Santa Claus Village, Rovaniemi D"
-        ]
-      });
-
-      // make the response have an extra item
-      responseObj[updateKey] = getPartial(partialData);
-
-      // start the module
-      window.GOVUK.notifyModules.start();
-
-      // move to the time the first request is fired
-      jest.advanceTimersByTime(2000);
-
-      // simulate a 200 response
-      jest.advanceTimersByTime(serverResponse.responseTimeInMilliseconds);
-      serverResponse.complete();
-
-      // check the class is still there
-      expect(document.querySelectorAll('.file-list h2')[0].classList.contains('js-child-has-focus')).toBe(true);
-
-    });
-
-    test("If other scripts have added classes to the DOM, they should persist through updates to multiple components", () => {
-
-      // Create duplicate components in the page
-      document.body.innerHTML = getInitialHTMLString(getPartial(partialData)) + "\n" + getInitialHTMLString(getPartial(partialData));
-
-      var partialsInPage = document.querySelectorAll('.ajax-block-container');
-
-      // Mark classes to persist on the partials (2nd is made up)
-      partialsInPage[0].setAttribute('data-classes-to-persist', 'js-child-has-focus');
-      partialsInPage[1].setAttribute('data-classes-to-persist', 'js-2nd-child-has-focus');
-
-      // Add examples of those classes on each partial (2nd is made up)
-      partialsInPage[0].querySelectorAll('.file-list h2')[0].classList.add('js-child-has-focus');
-      partialsInPage[1].querySelectorAll('.file-list h2')[0].classList.add('js-2nd-child-has-focus');
-
-      // Add an item to trigger an update
-      partialData.push({
-        title: "Reservoir flooding template",
-        hint: "The local reservoir has flooded. All people within 5 miles should move to a safer location.",
-        status: "Waiting for approval",
-        areas: [
-          "Santa Claus Village, Rovaniemi A",
-          "Santa Claus Village, Rovaniemi D"
-        ]
-      });
-
-      // make all responses have an extra item
-      responseObj[updateKey] = getPartial(partialData);
-
-      // start the module
-      window.GOVUK.notifyModules.start();
-
-      // move to the time the first request is fired
-      jest.advanceTimersByTime(2000);
-
-      // simulate a 200 response
-      jest.advanceTimersByTime(serverResponse.responseTimeInMilliseconds);
-      serverResponse.complete();
-
-      // re-select in case nodes in partialsInPage have changed
-      partialsInPage = document.querySelectorAll('.ajax-block-container');
-
-      // check the classes are still there
-      expect(partialsInPage[0].querySelectorAll('.file-list h2')[0].classList.contains('js-child-has-focus')).toBe(true);
-      expect(partialsInPage[1].querySelectorAll('.file-list h2')[0].classList.contains('js-2nd-child-has-focus')).toBe(true);
-
-      // check each heading only has the classes assigned to it before updates occurred
-      expect(partialsInPage[0].querySelectorAll('.file-list h2')[0].classList.contains('js-2nd-child-has-focus')).toBe(false);
-      expect(partialsInPage[1].querySelectorAll('.file-list h2')[0].classList.contains('js-child-has-focus')).toBe(false);
 
     });
 

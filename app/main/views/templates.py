@@ -4,7 +4,7 @@ import math
 import uuid
 from functools import partial
 from io import BytesIO
-from typing import Dict, Literal, Optional
+from typing import Literal
 
 from flask import (
     abort,
@@ -29,9 +29,11 @@ from app import (
     current_service,
     format_delta,
     letter_attachment_client,
+    letter_branding_client,
     nl2br,
     service_api_client,
     template_folder_api_client,
+    template_preview_client,
     template_statistics_client,
 )
 from app.constants import QR_CODE_TOO_LONG, LetterLanguageOptions
@@ -41,6 +43,7 @@ from app.main import main, no_cookie
 from app.main.forms import (
     CopyTemplateForm,
     EmailTemplateForm,
+    FieldWithNoneOption,
     LetterTemplateForm,
     LetterTemplateLanguagesForm,
     LetterTemplatePostageForm,
@@ -63,9 +66,7 @@ from app.s3_client.s3_letter_upload_client import (
     upload_letter_attachment_to_s3,
     upload_letter_to_s3,
 )
-from app.template_previews import TemplatePreview
 from app.utils import (
-    NOTIFICATION_TYPES,
     should_skip_template_page,
 )
 from app.utils.letters import (
@@ -77,7 +78,7 @@ from app.utils.templates import TemplatedLetterImageTemplate, get_template
 from app.utils.user import user_has_permissions
 
 
-def get_template_form(template_type: Literal["email", "sms", "letter"], language: Optional[Literal["welsh"]] = None):
+def get_template_form(template_type: Literal["email", "sms", "letter"], language: Literal["welsh"] | None = None):
     if template_type == "email":
         return EmailTemplateForm
     elif template_type == "sms":
@@ -95,7 +96,7 @@ class LetterAttachmentFormError(Exception):
         self.detail = detail
         self.attachment_page_count = attachment_page_count
 
-    def as_error_dict(self) -> Dict[str, int]:
+    def as_error_dict(self) -> dict[str, int]:
         return {"title": self.title, "detail": self.detail, "attachment_page_count": self.attachment_page_count}
 
 
@@ -114,6 +115,10 @@ def view_template(service_id, template_id):
         show_recipient=True,
         include_letter_edit_ui_overlay=True,
     )
+
+    if template._template["archived"]:
+        template.include_letter_edit_ui_overlay = False
+
     template_folder = current_service.get_template_folder(template.get_raw("folder"))
 
     user_has_template_permission = current_user.has_template_folder_permission(template_folder, service=current_service)
@@ -161,11 +166,6 @@ def choose_template(service_id, template_type="all", template_folder_id=None):
         option_hints=option_hints,
     )
 
-    single_notification_channel = None
-    notification_channels = list(set(current_service.permissions).intersection(NOTIFICATION_TYPES))
-    if len(notification_channels) == 1:
-        single_notification_channel = notification_channels[0]
-
     if request.method == "POST" and templates_and_folders_form.validate_on_submit():
         if not current_user.has_permissions("manage_templates"):
             abort(403)
@@ -203,9 +203,11 @@ def choose_template(service_id, template_type="all", template_folder_id=None):
         form=templates_and_folders_form,
         move_to_children=templates_and_folders_form.move_to.children(),
         user_has_template_folder_permission=user_has_template_folder_permission,
-        single_notification_channel=single_notification_channel,
         option_hints=option_hints,
         error_summary_enabled=True,
+        error_summary_extra_params={
+            "classes": "govuk-!-margin-top-3--mobile-only",
+        },
     )
 
 
@@ -259,22 +261,36 @@ def get_template_nav_items(template_folder_id):
     ]
 
 
-@no_cookie.route("/services/<uuid:service_id>/templates/<uuid:template_id>.<filetype>")
+@no_cookie.route("/services/<uuid:service_id>/templates/<uuid:template_id>.<letter_file_extension:filetype>")
 @user_has_permissions(allow_org_user=True)
 @RateLimit.USER_LIMIT
 def view_letter_template_preview(service_id, template_id, filetype):
-    if filetype not in ("pdf", "png"):
-        abort(404)
-
     template = current_service.get_template(template_id)
 
-    return TemplatePreview.get_preview_for_templated_letter(
-        db_template=template._template, filetype=filetype, values=template.values, page=request.args.get("page")
+    return template_preview_client.get_preview_for_templated_letter(
+        db_template=template._template,
+        filetype=filetype,
+        values=template.values,
+        page=request.args.get("page"),
+        service=current_service,
     )
 
 
-@no_cookie.route("/templates/letter-preview-image/<filename>")
-def letter_branding_preview_image(filename):
+@no_cookie.route("/templates/letter-preview-image")
+@no_cookie.route("/templates/letter-preview-image/<string:filename>")
+def letter_branding_preview_image(filename=None):
+    branding_style = request.args.get("branding_style")
+
+    if branding_style == FieldWithNoneOption.NONE_OPTION_VALUE:
+        branding_style = None
+    if filename == FieldWithNoneOption.NONE_OPTION_VALUE:
+        filename = None
+
+    if branding_style:
+        if filename:
+            abort(400, "Cannot provide both branding_style and filename")
+        filename = letter_branding_client.get_letter_branding(branding_style)["filename"]
+
     template = {
         "subject": "An example letter",
         "content": (
@@ -296,12 +312,12 @@ def letter_branding_preview_image(filename):
         "template_type": "letter",
         "is_precompiled_letter": False,
     }
-    branding_filename = None if filename == "no-branding" else filename
 
-    return TemplatePreview.get_preview_for_templated_letter(
+    return template_preview_client.get_preview_for_templated_letter(
         template,
         filetype="png",
-        branding_filename=branding_filename,
+        branding_filename=filename,
+        service=current_service,
     )
 
 
@@ -329,14 +345,20 @@ def view_template_version(service_id, template_id, version):
     )
 
 
-@no_cookie.route("/services/<uuid:service_id>/templates/<uuid:template_id>/version/<int:version>.<filetype>")
+@no_cookie.route(
+    "/services/<uuid:service_id>/templates/<uuid:template_id>/version/<int:version>.<letter_file_extension:filetype>"
+)
 @user_has_permissions(allow_org_user=True)
 @RateLimit.USER_LIMIT
 def view_letter_template_version_preview(service_id, template_id, version, filetype):
     template = current_service.get_template(template_id, version=version)
 
-    return TemplatePreview.get_preview_for_templated_letter(
-        db_template=template._template, filetype=filetype, values=template.values, page=request.args.get("page")
+    return template_preview_client.get_preview_for_templated_letter(
+        db_template=template._template,
+        filetype=filetype,
+        values=template.values,
+        page=request.args.get("page"),
+        service=current_service,
     )
 
 
@@ -457,6 +479,7 @@ def copy_template(service_id, template_id):
             letter_languages=template.get_raw("letter_languages"),
             letter_welsh_subject=template.get_raw("letter_welsh_subject"),
             letter_welsh_content=template.get_raw("letter_welsh_content"),
+            has_unsubscribe_link=template.get_raw("has_unsubscribe_link"),
         )["data"]
         if template.template_type == "letter" and template.get_raw("letter_attachment"):
             _copy_letter_attachment(from_template=template, to_template=new_template)
@@ -500,12 +523,10 @@ def _get_template_copy_name(template, existing_templates):
     return f"{template['name']} (copy)"
 
 
-@main.route(("/services/<uuid:service_id>/templates/action-blocked/" "<template_type:notification_type>/<return_to>"))
+@main.route("/services/<uuid:service_id>/templates/action-blocked/<template_type:notification_type>/<string:return_to>")
 @main.route(
-    (
-        "/services/<uuid:service_id>/templates/action-blocked/"
-        "<template_type:notification_type>/<return_to>/<uuid:template_id>"
-    )
+    "/services/<uuid:service_id>/templates/action-blocked/"
+    "<template_type:notification_type>/<string:return_to>/<uuid:template_id>"
 )
 @user_has_permissions("manage_templates")
 @RateLimit.USER_LIMIT
@@ -625,18 +646,19 @@ def add_service_template(service_id, template_type, template_folder_id=None):
     if form.validate_on_submit():
         try:
             new_template = service_api_client.create_service_template(
-                form.name.data,
-                template_type,
-                form.template_content.data,
-                service_id,
-                form.subject.data if hasattr(form, "subject") else None,
-                template_folder_id,
+                name=form.name.data,
+                type_=template_type,
+                content=form.template_content.data,
+                service_id=service_id,
+                subject=form.subject.data if hasattr(form, "subject") else None,
+                parent_folder_id=template_folder_id,
+                has_unsubscribe_link=form.has_unsubscribe_link.data if hasattr(form, "has_unsubscribe_link") else None,
             )
         except HTTPError as e:
             if (
                 e.status_code == 400
                 and "content" in e.message
-                and any(["character count greater than" in x for x in e.message["content"]])
+                and any("character count greater than" in x for x in e.message["content"])
             ):
                 form.template_content.errors.extend(e.message["content"])
             else:
@@ -690,7 +712,7 @@ def rename_template(service_id, template_id):
     )
 
 
-def abort_for_unauthorised_bilingual_letters_or_invalid_options(language: Optional[str], template):
+def abort_for_unauthorised_bilingual_letters_or_invalid_options(language: str | None, template):
     if language is None:
         return
 
@@ -705,7 +727,7 @@ def abort_for_unauthorised_bilingual_letters_or_invalid_options(language: Option
 
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit", methods=["GET", "POST"])
-@main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit/<language>", methods=["GET", "POST"])
+@main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/edit/<string:language>", methods=["GET", "POST"])
 @user_has_permissions("manage_templates")
 @RateLimit.USER_LIMIT
 def edit_service_template(service_id, template_id, language=None):
@@ -748,7 +770,7 @@ def edit_service_template(service_id, template_id, language=None):
             )
         except HTTPError as e:
             if e.status_code == 400:
-                if "content" in e.message and any(["character count greater than" in x for x in e.message["content"]]):
+                if "content" in e.message and any("character count greater than" in x for x in e.message["content"]):
                     form.template_content.errors.extend(e.message["content"])
                 elif "content" in e.message and any(x == QR_CODE_TOO_LONG for x in e.message["content"]):
                     form.template_content.errors.append(
@@ -822,9 +844,7 @@ def _get_content_count_error_and_message_for_template(template):
     if template.template_type == "sms":
         if template.is_message_too_long():
             return True, (
-                f"You have "
-                f"{character_count(template.content_count_without_prefix - SMS_CHAR_COUNT_LIMIT)} "
-                f"too many"
+                f"You have {character_count(template.content_count_without_prefix - SMS_CHAR_COUNT_LIMIT)} too many"
             )
         return False, _get_fragment_count_message_for_template(template)
 
@@ -865,7 +885,7 @@ def delete_service_template(service_id, template_id):
     try:
         last_used_notification = template_statistics_client.get_last_used_date_for_template(service_id, template.id)
         message = (
-            "This template has never been used."
+            "This template has not been used within the last year."
             if not last_used_notification
             else f"This template was last used {format_delta(last_used_notification)}."
         )
@@ -949,7 +969,7 @@ def view_template_versions(service_id, template_id):
         service_id=service_id,
         page=page,
         num_pages=num_pages,
-        url_args=dict(template_id=template_id),
+        url_args={"template_id": template_id},
     )
 
     return render_template(
@@ -1063,6 +1083,7 @@ def letter_template_attach_pages(service_id, template_id):
     error = {}
     letter_attachment_image_url = None
     attachment_page_count = 0
+    use_error_summary = False
     if form.validate_on_submit():
         upload_id = uuid.uuid4()
         try:
@@ -1078,6 +1099,7 @@ def letter_template_attach_pages(service_id, template_id):
 
     if form.file.errors:
         error = get_error_from_upload_form(form.file.errors[0])
+        use_error_summary = True
 
     if not template.attachment:
         return (
@@ -1088,6 +1110,8 @@ def letter_template_attach_pages(service_id, template_id):
                 error=error,
                 letter_attachment_image_url=letter_attachment_image_url,
                 page_numbers=_get_page_numbers(attachment_page_count),
+                error_summary_enabled=use_error_summary,
+                use_error_summary=use_error_summary,
             ),
             400 if error else 200,
         )
@@ -1115,7 +1139,11 @@ def letter_template_attach_pages(service_id, template_id):
 @user_has_permissions(allow_org_user=True)
 @RateLimit.USER_LIMIT
 def view_letter_attachment_preview(service_id, attachment_id):
-    return TemplatePreview.get_png_for_letter_attachment_page(attachment_id, page=request.args.get("page"))
+    return template_preview_client.get_png_for_letter_attachment_page(
+        attachment_id,
+        service=current_service,
+        page=request.args.get("page"),
+    )
 
 
 @main.route("/services/<uuid:service_id>/templates/<uuid:template_id>/attach-pages/edit", methods=["GET", "POST"])
@@ -1149,7 +1177,7 @@ def letter_template_edit_pages(template_id, service_id):
         )
 
     flash(
-        f"Are you sure you want to remove the " f"‘{template.attachment.original_filename}’ attachment?",
+        f"Are you sure you want to remove the ‘{template.attachment.original_filename}’ attachment?",
         "remove",
     )
 
@@ -1180,13 +1208,13 @@ def _process_letter_attachment_form(service_id, template, form, upload_id):
         current_app.logger.info("Invalid PDF uploaded for service_id: %s", service_id)
         raise LetterAttachmentFormError(
             title="There’s a problem with your file",
-            detail="Notify cannot read this PDF.<br>Save a new copy of your file and try again.",
+            detail="Notify cannot read this PDF - save a new copy and try again",
         ) from None
 
     file_location = get_transient_letter_file_location(service_id, upload_id)
 
     try:
-        response = TemplatePreview.sanitise_letter(
+        response = template_preview_client.sanitise_letter(
             BytesIO(pdf_file_bytes),
             upload_id=upload_id,
             allow_international_letters=current_service.has_permission("international_letters"),
@@ -1323,9 +1351,9 @@ def view_invalid_letter_attachment_as_preview(service_id, file_id):
     invalid_pages = json.loads(metadata.get("invalid_pages", "[]"))
 
     if metadata.get("message") == "content-outside-printable-area" and page in invalid_pages:
-        return TemplatePreview.get_png_for_invalid_pdf_page(pdf_file, page, is_an_attachment=True)
+        return template_preview_client.get_png_for_invalid_pdf_page(pdf_file, page, is_an_attachment=True)
     else:
-        return TemplatePreview.get_png_for_valid_pdf_page(pdf_file, page)
+        return template_preview_client.get_png_for_valid_pdf_page(pdf_file, page)
 
 
 def _get_page_numbers(page_count):
@@ -1333,7 +1361,7 @@ def _get_page_numbers(page_count):
 
 
 def _change_template_language(service_id, template, language: LetterLanguageOptions):
-    update_kwargs: dict[str, Optional[str]] = {}
+    update_kwargs: dict[str, str | None] = {}
 
     if language == LetterLanguageOptions.english:
         if template.subject == "English heading":
@@ -1363,7 +1391,7 @@ def letter_template_change_language(template_id, service_id):
         abort(404)
 
     current_languages = template.get_raw("letter_languages")
-    form = LetterTemplateLanguagesForm(data=dict(languages=current_languages))
+    form = LetterTemplateLanguagesForm(data={"languages": current_languages})
     if form.validate_on_submit():
         languages = form.languages.data
         if languages != current_languages:

@@ -12,16 +12,15 @@ from flask_login import current_user
 from notifications_utils.recipients import RecipientCSV
 from notifications_utils.template import HTMLEmailTemplate
 
-from app import letter_branding_client, status_api_client
+from app import status_api_client
 from app.formatters import message_count
 from app.limiters import RateLimit
 from app.main import main
 from app.main.forms import FieldWithNoneOption
-from app.main.views.pricing import CURRENT_SMS_RATE
 from app.main.views.sub_navigation_dictionaries import features_nav, using_notify_nav
 from app.models.branding import EmailBranding
 from app.models.letter_rates import LetterRates
-from app.utils.templates import TemplatedLetterImageTemplate
+from app.models.sms_rate import SMSRate
 
 redirects = Blueprint("redirects", __name__)
 main.register_blueprint(redirects)
@@ -31,11 +30,11 @@ main.register_blueprint(redirects)
 @RateLimit.NO_LIMIT
 def index():
     if current_user and current_user.is_authenticated:
-        return redirect(url_for("main.choose_account"))
+        return redirect(url_for("main.your_services"))
 
     return render_template(
         "views/signedout.html",
-        sms_rate=CURRENT_SMS_RATE,
+        sms_rate=SMSRate(),
         counts=status_api_client.get_count_of_live_services_and_organisations(),
         # one_page_second_class_letter_cost=LetterRates().get(
         #     sheet_count=1, post_class="second"),
@@ -115,46 +114,16 @@ def email_template():
     return resp
 
 
-@main.route("/_letter")
-def letter_template():
-    branding_style = request.args.get("branding_style")
-    subject = request.args.get("title", default="Preview of letter branding")
-    filename = request.args.get("filename")
-
-    if branding_style == FieldWithNoneOption.NONE_OPTION_VALUE:
-        branding_style = None
-    if filename == FieldWithNoneOption.NONE_OPTION_VALUE:
-        filename = None
-
-    if branding_style:
-        if filename:
-            abort(400, "Cannot provide both branding_style and filename")
-        filename = letter_branding_client.get_letter_branding(branding_style)["filename"]
-    elif not filename:
-        filename = "no-branding"
-    template = {"subject": subject, "content": "", "template_type": "letter"}
-    image_url = url_for("no_cookie.letter_branding_preview_image", filename=filename)
-
-    template_image = str(
-        TemplatedLetterImageTemplate(
-            template,
-            image_url=image_url,
-            page_counts={"count": 1, "welsh_page_count": 0, "attachment_page_count": 0},
-        )
-    )
-
-    resp = make_response(
-        render_template("views/service-settings/letter-preview.html", template=template_image, subject=subject)
-    )
-
-    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
-    return resp
-
-
-@main.route("/terms-of-use", endpoint="terms_of_use")
+@main.route("/terms-of-use")
 @RateLimit.NO_LIMIT
 def terms_of_use():
     return render_template("views/terms-of-use.html")
+
+
+@main.route("/new-terms-of-use")
+def new_terms_of_use():
+    # this route will be used occasionally - each time we change terms of use, so we keep the redirect here.
+    return redirect(url_for("main.terms_of_use"))
 
 
 # --- Guidance pages --- #
@@ -415,7 +384,7 @@ def guidance_unsubscribe_links():
 @main.route("/docs/notify-pdf-letter-spec-latest.pdf")
 @RateLimit.NO_LIMIT
 def letter_spec():
-    return redirect("https://docs.notifications.service.gov.uk" "/documentation/images/notify-pdf-letter-spec-v2.4.pdf")
+    return redirect("https://docs.notifications.service.gov.uk/documentation/images/notify-pdf-letter-spec-v2.4.pdf")
 
 
 def historical_redirects(new_endpoint, **kwargs):
@@ -423,7 +392,9 @@ def historical_redirects(new_endpoint, **kwargs):
 
 
 REDIRECTS = {
+    "/accounts": "main.your_services",
     "/callbacks": "main.guidance_api_documentation",
+    "/choose-service-to-join": "main.join_service_choose_service",
     "/delivery-and-failure": "main.guidance_message_status",
     "/documentation": "main.guidance_api_documentation",
     # "/features/email": "main.guidance_features",
@@ -442,6 +413,8 @@ REDIRECTS = {
     "/integration-testing": "main.guidance_api_documentation",
     "/performance": "main.performance",
     # "/roadmap": "main.guidance_roadmap",
+    "/services/<uuid:service_to_join_id>/join": "main.join_service_ask",
+    "/services/<uuid:service_to_join_id>/join/requested": "main.join_service_you_have_asked",
     "/terms": "main.terms_of_use",
     "/trial-mode": "main.guidance_trial_mode",
     "/using-notify/delivery-status": "main.guidance_message_status",
@@ -470,6 +443,7 @@ REDIRECTS = {
     "/using-notify/trial-mode": "main.guidance_trial_mode",
     "/using-notify/who-can-use-notify": "main.guidance_who_can_use_notify",
     "/using-notify/who-its-for": "main.guidance_who_can_use_notify",
+    "/add-or-join-service": "main.your_services",
 }
 
 for old_url, new_endpoint in REDIRECTS.items():

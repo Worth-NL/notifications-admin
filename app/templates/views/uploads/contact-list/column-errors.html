@@ -19,18 +19,18 @@
 
       {% if recipients.too_many_rows %}
 
-        <h1 class='banner-title' data-notify-module="track-error" data-error-type="Too many rows" data-error-label="{{ upload_id }}">
+        <h1 class='banner-title'>
           Your file has too many rows
         </h1>
         <p class="govuk-body">
           Notify can store files up to
-          {{ "{:,}".format(recipients.max_rows) }} rows in size. Your
-          file has {{ "{:,}".format(recipients|length) }} rows.
+          {{ recipients.max_rows|format_thousands }} rows in size. Your
+          file has {{ recipients|length|format_thousands }} rows.
         </p>
 
       {% elif not recipients.allowed_to_send_to %}
 
-        <h1 class='banner-title' data-notify-module="track-error" data-error-type="Trial mode: bad recipients" data-error-label="{{ upload_id }}">
+        <h1 class='banner-title'>
           You cannot save
           {{ 'this' if recipients|length == 1 else 'these' }}
           {{ recipients|length|recipient_count_label(recipients.template_type) }}
@@ -54,7 +54,7 @@
         button_text='Upload your file again'
       ) }}
     </div>
-    <a href="#content" class="govuk-link govuk-link--no-visited-state back-to-top-link">Back to top</a>
+    <a href="#main-content" class="govuk-link govuk-link--no-visited-state back-to-top-link">Back to top</a>
   </div>
 
     <h2 class="heading-medium" id="file-preview">{{ original_file_name }}</h2>

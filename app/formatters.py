@@ -1,9 +1,8 @@
 import decimal
 import re
 import urllib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from numbers import Number
-from typing import Union
 
 import ago
 import dateutil
@@ -13,7 +12,7 @@ from markupsafe import Markup
 from notifications_utils.field import Field
 from notifications_utils.formatters import make_quotes_smart
 from notifications_utils.formatters import nl2br as utils_nl2br
-from notifications_utils.recipients import InvalidPhoneError, validate_phone_number
+from notifications_utils.recipient_validation.phone_number import InvalidPhoneError, validate_phone_number
 from notifications_utils.take import Take
 from notifications_utils.timezones import utc_string_to_aware_gmt_datetime
 
@@ -77,14 +76,10 @@ def get_human_day(time, date_prefix=""):
 
 
 def format_time(date):
-    return (
-        {"12:00AM": "Midnight", "12:00PM": "Midday"}
-        .get(
-            utc_string_to_aware_gmt_datetime(date).strftime("%-I:%M%p"),
-            utc_string_to_aware_gmt_datetime(date).strftime("%-I:%M%p"),
-        )
-        .lower()
-    )
+    return {"12:00AM": "Midnight", "12:00PM": "Midday"}.get(
+        utc_string_to_aware_gmt_datetime(date).strftime("%-I:%M%p"),
+        utc_string_to_aware_gmt_datetime(date).strftime("%-I:%M%p"),
+    ).lower()
 
 
 def format_date(date):
@@ -103,8 +98,8 @@ def format_date_human(date):
     return get_human_day(date)
 
 
-def format_datetime_human(date, date_prefix=""):
-    return f"{get_human_day(date, date_prefix='on')} at {format_time(date)}"
+def format_datetime_human(date, date_prefix="on", separator="at"):
+    return f"{get_human_day(date, date_prefix=date_prefix)} {separator} {format_time(date)}"
 
 
 def format_day_of_week(date):
@@ -124,7 +119,7 @@ def naturaltime_without_indefinite_article(date):
 
 
 def format_delta(date):
-    delta = (datetime.now(timezone.utc)) - (utc_string_to_aware_gmt_datetime(date))
+    delta = (datetime.now(UTC)) - (utc_string_to_aware_gmt_datetime(date))
     if delta < timedelta(seconds=30):
         return "just now"
     if delta < timedelta(seconds=60):
@@ -132,14 +127,14 @@ def format_delta(date):
     return naturaltime_without_indefinite_article(delta)
 
 
-def format_delta_days(date):
-    now = datetime.now(timezone.utc)
+def format_delta_days(date, numeric_prefix=""):
+    now = datetime.now(UTC)
     date = utc_string_to_aware_gmt_datetime(date)
     if date.strftime("%Y-%m-%d") == now.strftime("%Y-%m-%d"):
         return "today"
     if date.strftime("%Y-%m-%d") == (now - timedelta(days=1)).strftime("%Y-%m-%d"):
         return "yesterday"
-    return naturaltime_without_indefinite_article(now - date)
+    return numeric_prefix + naturaltime_without_indefinite_article(now - date)
 
 
 def valid_phone_number(phone_number):
@@ -202,40 +197,36 @@ def format_notification_status_as_time(status, created, updated):
 
 
 def format_notification_status_as_field_status(status, notification_type):
-    return (
+    return {
+        "letter": {
+            "failed": "error",
+            "technical-failure": "error",
+            "temporary-failure": "error",
+            "permanent-failure": "error",
+            "delivered": None,
+            "sent": None,
+            "sending": None,
+            "created": None,
+            "accepted": None,
+            "pending-virus-check": None,
+            "virus-scan-failed": "error",
+            "returned-letter": None,
+            "cancelled": "error",
+        },
+    }.get(
+        notification_type,
         {
-            "letter": {
-                "failed": "error",
-                "technical-failure": "error",
-                "temporary-failure": "error",
-                "permanent-failure": "error",
-                "delivered": None,
-                "sent": None,
-                "sending": None,
-                "created": None,
-                "accepted": None,
-                "pending-virus-check": None,
-                "virus-scan-failed": "error",
-                "returned-letter": None,
-                "cancelled": "error",
-            },
-        }
-        .get(
-            notification_type,
-            {
-                "failed": "error",
-                "technical-failure": "error",
-                "temporary-failure": "error",
-                "permanent-failure": "error",
-                "delivered": None,
-                "sent": "sent-international" if notification_type == "sms" else None,
-                "sending": "default",
-                "created": "default",
-                "pending": "default",
-            },
-        )
-        .get(status, "error")
-    )
+            "failed": "error",
+            "technical-failure": "error",
+            "temporary-failure": "error",
+            "permanent-failure": "error",
+            "delivered": None,
+            "sent": "sent-international" if notification_type == "sms" else None,
+            "sending": "default",
+            "created": "default",
+            "pending": "default",
+        },
+    ).get(status, "error")
 
 
 def format_notification_status_as_url(status, notification_type):
@@ -272,12 +263,12 @@ def format_pounds_as_currency(number: float):
     return format_pennies_as_currency(round(number * 100), long=False)
 
 
-def format_pennies_as_currency(pennies: Union[int, float], long: bool) -> str:
+def format_pennies_as_currency(pennies: int | float, long: bool) -> str:
     # \/ Avoid floating point precision errors with fractional pennies, eg for SMS rates \/
     pennies = decimal.Decimal(str(pennies))
     if pennies >= 100:
         pennies = round(pennies)
-        return f"£{pennies//100:,}.{pennies%100:02}"
+        return f"£{pennies // 100:,}.{pennies % 100:02}"
     elif long:
         return f"{pennies} pence"
 
@@ -293,16 +284,16 @@ def format_list_items(items, format_string, *args, **kwargs):
     return [format_string.format(*args, item=item, **kwargs) for item in items]
 
 
-def linkable_name(value):
-    return urllib.parse.quote_plus(value)
-
-
 def format_thousands(value):
     if isinstance(value, Number):
         return f"{value:,.0f}"
     if value is None:
         return ""
     return value
+
+
+def insert_wbr(string):
+    return Markup(string.replace(",", ",<wbr />"))
 
 
 def redact_mobile_number(mobile_number, spacing=""):
@@ -315,12 +306,11 @@ def redact_mobile_number(mobile_number, spacing=""):
 
 
 def get_time_left(created_at, service_data_retention_days=7):
+    if not isinstance(created_at, datetime):
+        created_at = dateutil.parser.parse(created_at)
     return ago.human(
-        (datetime.now(timezone.utc))
-        - (
-            dateutil.parser.parse(created_at).replace(hour=0, minute=0, second=0)
-            + timedelta(days=service_data_retention_days + 1)
-        ),
+        (datetime.now(UTC))
+        - (created_at.replace(hour=0, minute=0, second=0) + timedelta(days=service_data_retention_days + 1)),
         future_tense="Data available for {}",
         past_tense="Data no longer available",  # No-one should ever see this
         precision=1,
@@ -360,29 +350,32 @@ def guess_name_from_email_address(email_address):
     )
 
 
-def message_count_label(count, template_type, suffix="sent"):
+def message_count_label(count, message_type, suffix="sent"):
     if suffix:
-        return f"{message_count_noun(count, template_type)} {suffix}"
-    return message_count_noun(count, template_type)
+        return f"{message_count_noun(count, message_type)} {suffix}"
+    return message_count_noun(count, message_type)
 
 
-def message_count_noun(count, template_type):
+def message_count_noun(count, message_type):
     singular = count == 1
 
-    if template_type == "sms":
+    if message_type == "sms":
         return "text message" if singular else "text messages"
 
-    if template_type == "email":
+    if message_type == "email":
         return "email" if singular else "emails"
 
-    if template_type == "letter":
+    if message_type == "letter":
         return "letter" if singular else "letters"
+
+    if message_type and message_type.endswith("request"):
+        return message_type if singular else message_type + "s"
 
     return "message" if singular else "messages"
 
 
-def message_count(count, template_type):
-    return f"{format_thousands(count)} {message_count_noun(count, template_type)}"
+def message_count(count, message_type):
+    return f"{format_thousands(count)} {message_count_noun(count, message_type)}"
 
 
 def recipient_count_label(count, template_type):
@@ -439,6 +432,10 @@ def format_auth_type(auth_type, with_indefinite_article=False):
         return f"{indefinite_article} {auth_type.lower()}"
 
     return auth_type
+
+
+def extract_path_from_url(url):
+    return urllib.parse.urlunsplit(urllib.parse.urlsplit(url)._replace(scheme="", netloc=""))
 
 
 def sentence_case(sentence):

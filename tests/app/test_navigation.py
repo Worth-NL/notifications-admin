@@ -26,7 +26,6 @@ EXCLUDED_ENDPOINTS = set(
             "add_organisation_from_nhs_local_service",
             "add_organisation_letter_branding_options",
             "add_organisation",
-            "add_or_join_service",
             "add_service_template",
             "add_service",
             "api_callbacks",
@@ -52,10 +51,10 @@ EXCLUDED_ENDPOINTS = set(
             "check_messages",
             "check_notification",
             "check_tour_notification",
-            "choose_account",
+            "your_services",
             "choose_from_contact_list",
             "choose_service",
-            "choose_service_to_join",
+            "join_service_choose_service",
             "choose_template_to_copy",
             "choose_template",
             "clear_cache",
@@ -73,6 +72,7 @@ EXCLUDED_ENDPOINTS = set(
             "create_email_branding_government_identity_colour",
             "create_email_branding_government_identity_logo",
             "create_letter_branding",
+            "create_unsubscribe_request_report",
             "data_retention",
             "delete_contact_list",
             "delete_service_template",
@@ -82,6 +82,7 @@ EXCLUDED_ENDPOINTS = set(
             "download_contact_list",
             "download_notifications_csv",
             "download_organisation_usage_report",
+            "download_unsubscribe_request_report",
             "edit_data_retention",
             "edit_organisation_agreement",
             "edit_organisation_billing_details",
@@ -168,6 +169,9 @@ EXCLUDED_ENDPOINTS = set(
             "index",
             "invite_org_user",
             "invite_user",
+            "service_join_request_approve",
+            "service_join_request_choose_permissions",
+            "service_join_request_refused",
             "json_updates.conversation_updates",
             "json_updates.get_notifications_page_partials_as_json",
             "json_updates.inbox_updates",
@@ -175,27 +179,26 @@ EXCLUDED_ENDPOINTS = set(
             "json_updates.service_verify_reply_to_address_updates",
             "json_updates.view_job_updates",
             "json_updates.view_notification_updates",
-            "join_service",
-            "join_service_requested",
+            "join_service_ask",
+            "join_service_you_have_asked",
             "letter_branding_options",
             "letter_branding_request",
             "letter_branding_set_name",
             "letter_branding_upload_branding",
             "letter_branding",
             "letter_spec",
-            "letter_template",
             "letter_template_attach_pages",
             "letter_template_change_language",
             "letter_template_confirm_remove_welsh",
             "letter_template_edit_pages",
             "link_service_to_organisation",
             "live_services_csv",
-            "live_services",
             "main.redirects.historical_redirects",
             "manage_org_users",
             "manage_template_folder",
             "manage_users",
             "monthly",
+            "new_terms_of_use",
             "new_password",
             "no_cookie.check_messages_preview",
             "no_cookie.check_notification_preview",
@@ -222,6 +225,7 @@ EXCLUDED_ENDPOINTS = set(
             "org_member_make_service_live_contact_user",
             "org_member_make_service_live_decision",
             "performance",
+            "performance_json",
             "platform_admin_archive_email_branding",
             "platform_admin_confirm_archive_email_branding",
             "platform_admin_create_email_branding",
@@ -232,7 +236,6 @@ EXCLUDED_ENDPOINTS = set(
             "platform_admin_update_email_branding",
             "platform_admin_view_email_branding",
             "platform_admin_view_letter_branding",
-            "platform_admin",
             "privacy",
             "public_agreement",
             "public_download_agreement",
@@ -293,6 +296,7 @@ EXCLUDED_ENDPOINTS = set(
             "service_preview_branding",
             "service_receive_text_messages_start",
             "service_receive_text_messages_stop",
+            "service_receive_text_messages_stop_success",
             "service_receive_text_messages",
             "service_set_auth_type_for_users",
             "service_set_auth_type",
@@ -330,12 +334,17 @@ EXCLUDED_ENDPOINTS = set(
             "thanks",
             "tour_step",
             "triage",
-            "trial_services",
             "two_factor_email_interstitial",
             "two_factor_email_sent",
             "two_factor_email",
             "two_factor_sms",
             "two_factor_webauthn",
+            "unsubscribe",
+            "unsubscribe_confirmed",
+            "unsubscribe_example",
+            "unsubscribe_example_confirmed",
+            "unsubscribe_request_reports_summary",
+            "unsubscribe_request_report",
             "update_letter_branding",
             "upload_contact_list",
             "upload_letter",
@@ -352,6 +361,7 @@ EXCLUDED_ENDPOINTS = set(
             "user_profile_email_authenticate",
             "user_profile_email_confirm",
             "user_profile_email",
+            "user_profile_get_emails_about_new_features",
             "user_profile_manage_security_key",
             "user_profile_mobile_number_authenticate",
             "user_profile_mobile_number_confirm",
@@ -385,17 +395,15 @@ EXCLUDED_ENDPOINTS = set(
 )
 
 
-def flask_app():
+def _get_all_endpoints():
     app = Flask("app")
     create_app(app)
 
-    ctx = app.app_context()
-    ctx.push()
-
-    yield app
+    with app.app_context():
+        return {rule.endpoint for rule in app.url_map.iter_rules()}
 
 
-all_endpoints = set(rule.endpoint for rule in next(flask_app()).url_map.iter_rules())
+all_endpoints = _get_all_endpoints()
 
 navigation_instances = (
     MainNavigation(),
@@ -411,12 +419,12 @@ navigation_instances = (
 )
 def test_navigation_items_are_properly_defined(navigation_instance):
     for endpoint in navigation_instance.endpoints_with_navigation:
-        assert endpoint in all_endpoints, "{} is not a real endpoint (in {}.mapping)".format(
-            endpoint, type(navigation_instance).__name__
+        assert endpoint in all_endpoints, (
+            f"{endpoint} is not a real endpoint (in {type(navigation_instance).__name__}.mapping)"
         )
-        assert (
-            navigation_instance.endpoints_with_navigation.count(endpoint) == 1
-        ), f"{endpoint} found more than once in {type(navigation_instance).__name__}.mapping"
+        assert navigation_instance.endpoints_with_navigation.count(endpoint) == 1, (
+            f"{endpoint} found more than once in {type(navigation_instance).__name__}.mapping"
+        )
 
 
 def test_excluded_endpoints_are_all_found_in_app():

@@ -328,37 +328,6 @@ describe('TemplateFolderForm', () => {
 
   });
 
-  describe("Click 'New template' for single channel service", () => {
-    test("should redirect to new template page", () => {
-      setFixtures(hierarchy, "data-channel='sms' data-service='123'")
-      templateFolderForm = document.querySelector('form[data-notify-module=template-folder-form]');
-
-      // start module
-      window.GOVUK.notifyModules.start();
-
-      formControls = templateFolderForm.querySelector('#sticky_template_forms');
-
-      // reset sticky JS mocks called when the module starts
-      resetStickyMocks();
-      // add listener for url change
-      const descriptor1 = Object.getOwnPropertyDescriptor(window, 'location');
-      delete window.location
-
-      const mockCallback = jest.fn(x => {});
-
-      Object.defineProperty(window, 'location', {
-        set: mockCallback
-      });
-      // click
-      helpers.triggerEvent(formControls.querySelector('[value=add-new-template]'), 'click');
-      // expect url to change
-      expect(mockCallback).toHaveBeenCalledWith("/services/123/templates/add-sms")
-
-      setFixtures(hierarchy)
-      resetStickyMocks()
-    });
-  })
-
   describe("Clicking 'New template'", () => {
 
     beforeEach(() => {
@@ -978,6 +947,45 @@ describe('TemplateFolderForm', () => {
 
     });
 
+  });
+
+  describe("When a form is submitted without a selection and page renders with an error-summary", () => {
+    beforeEach(() => {
+      const errorSummary = 
+        `<div class="govuk-error-summary" data-module="govuk-error-summary">
+            <div role="alert">
+              <h2 class="govuk-error-summary__title">
+                There is a problem
+              </h2>
+              <div class="govuk-error-summary__body">
+                <ul class="govuk-list govuk-error-summary__list">
+                  <li>
+                    <a href="#">Error</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        `;
+      
+      // fake page refresh that sets a state of last submitted form
+      templateFolderForm.setAttribute('data-prev-state',"add-new-template" );
+      // append the error summary to fake an error
+      $(errorSummary).insertBefore(templateFolderForm);
+      // start module
+      window.GOVUK.notifyModules.start();
+
+      formControls = templateFolderForm.querySelector('#sticky_template_forms');
+
+    });
+    test("region should not be focused", () => {
+      // we can't import govuk-frontend in here for it to focus the error summary
+      // as it's an ES Module, but as this module checks for the presence 
+      // of error summary to determine whether or not to focus the form
+      // we can just check whether the form is focussed or not
+      expect(document.activeElement).not.toBe(formControls.querySelector('#add_new_template_form'));
+
+    });
   });
 
 });
