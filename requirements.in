@@ -19,7 +19,7 @@ fido2==1.1.3
 # Run `make bump-utils` to update to the latest version
 notifications-utils @ git+https://github.com/Worth-NL/notifications-utils.git@alphagovMerge
 
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/notifynl-frontend-jinja.git@20240402.2-notifynl
+govuk-frontend-jinja @ git+https://github.com/Worth-NL/LandRegistry-frontend-jinja.git
 
 # gds-metrics requires prometheseus 0.2.0, override that requirement as later versions bring significant performance gains
 prometheus-client==0.15.0

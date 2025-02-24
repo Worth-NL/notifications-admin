@@ -2,8 +2,6 @@
 #    uv pip compile requirements.in -o requirements.txt
 ago==0.0.95
     # via -r requirements.in
-async-timeout==5.0.1
-    # via redis
 awscrt==0.23.8
     # via botocore
 blinker==1.9.0
@@ -68,7 +66,7 @@ gds-metrics @ git+https://github.com/alphagov/gds_metrics_python.git@6f1840a57b6
     # via -r requirements.in
 govuk-bank-holidays==0.15
     # via notifications-utils
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/notifynl-frontend-jinja.git@fe8674b6c9dc454c24d8d9a795f34e9eaf610159
+govuk-frontend-jinja @ git+https://github.com/Worth-NL/LandRegistry-frontend-jinja.git@4eaddf2c577d1efac3b677bc3a973f23508f0639
     # via -r requirements.in
 greenlet==3.1.1
     # via eventlet
@@ -78,10 +76,6 @@ humanize==4.4.0
     # via -r requirements.in
 idna==3.10
     # via requests
-importlib-metadata==8.6.1
-    # via
-    #   flask
-    #   segno
 itsdangerous==2.2.0
     # via
     #   flask
@@ -202,9 +196,6 @@ typing-extensions==4.12.2
     # via
     #   flask-limiter
     #   limits
-    #   pypdf
-    #   python-json-logger
-    #   rich
 urllib3==1.26.20
     # via
     #   botocore
@@ -222,5 +213,3 @@ xlrd==2.0.1
     # via pyexcel-xls
 xlwt==1.3.0
     # via pyexcel-xls
-zipp==3.21.0
-    # via importlib-metadata

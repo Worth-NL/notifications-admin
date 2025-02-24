@@ -2,10 +2,6 @@
 #    uv pip compile requirements_for_test.in -o requirements_for_test.txt
 ago==0.0.95
     # via -r requirements.txt
-async-timeout==5.0.1
-    # via
-    #   -r requirements.txt
-    #   redis
 awscrt==0.23.8
     # via
     #   -r requirements.txt
@@ -80,8 +76,6 @@ eventlet==0.39.0
     # via
     #   -r requirements.txt
     #   gunicorn
-exceptiongroup==1.2.2
-    # via pytest
 execnet==2.1.1
     # via pytest-xdist
 fido2==1.1.3
@@ -115,7 +109,7 @@ govuk-bank-holidays==0.15
     # via
     #   -r requirements.txt
     #   notifications-utils
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/notifynl-frontend-jinja.git@fe8674b6c9dc454c24d8d9a795f34e9eaf610159
+govuk-frontend-jinja @ git+https://github.com/Worth-NL/LandRegistry-frontend-jinja.git@4eaddf2c577d1efac3b677bc3a973f23508f0639
     # via -r requirements.txt
 greenlet==3.1.1
     # via
@@ -133,11 +127,6 @@ idna==3.10
     # via
     #   -r requirements.txt
     #   requests
-importlib-metadata==8.6.1
-    # via
-    #   -r requirements.txt
-    #   flask
-    #   segno
 iniconfig==2.0.0
     # via pytest
 itsdangerous==2.2.0
@@ -349,18 +338,11 @@ texttable==1.7.0
     # via
     #   -r requirements.txt
     #   pyexcel
-tomli==2.2.1
-    # via
-    #   pytest
-    #   pytest-env
 typing-extensions==4.12.2
     # via
     #   -r requirements.txt
     #   flask-limiter
     #   limits
-    #   pypdf
-    #   python-json-logger
-    #   rich
 urllib3==1.26.20
     # via
     #   -r requirements.txt
@@ -394,7 +376,3 @@ xlwt==1.3.0
     #   pyexcel-xls
 xmltodict==0.14.2
     # via moto
-zipp==3.21.0
-    # via
-    #   -r requirements.txt
-    #   importlib-metadata
