@@ -284,13 +284,16 @@ details .arrow {
     }
 
   }
-
 }
 
 .dutch-logo-above-header {
-  background-image: file-url('Logo_rijksoverheid.svg');
-  background-repeat: no-repeat;
-  background-position: 50% 0%;
+  display: flex;
+  justify-content: center;
   background-color: white;
   height: 110px;
+}
+
+
+.govuk-header { 
+  background-color: #154273;
 }
