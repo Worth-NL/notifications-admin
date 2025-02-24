@@ -1,5 +1,6 @@
 {% extends "govuk_frontend_jinja/template.html"%}
 
+{% set productName = 'NotifyNL' %}
 {% set cspNonce = request.csp_nonce %}
 
 {% block headIcons %}
@@ -10,7 +11,7 @@
   <link rel="icon" sizes="any" href="{{ asset_url('images/favicon.svg') }}" type="image/svg+xml">
   <link rel="mask-icon" href="{{ asset_url('images/govuk-icon-mask.svg') }}" color="#0b0c0c">
   <link rel="apple-touch-icon" href="{{ asset_url('images/govuk-icon-180.png') }}">
-  <link rel="manifest" href="{{ asset_url('manifest.json') }}"> -->
+  <link rel="manifest" href="{{ asset_url('manifest.json') }}"> --> 
 {% endblock %}
 
 {% block head %}
@@ -48,93 +49,12 @@
 {% block header %}
   {{ govukHeader({
     "homepageUrl": url_for('main.show_accounts_or_dashboard'),
-    "productName": "NotifyNL",
+    "productName": productName,
     "navigation": header_navigation.visible_header_nav(),
     "navigationClasses": "govuk-header__navigation--end",
-    "assetsPath": asset_path + "images"
+    "assetsPath": asset_path + "images",
   }) }}
 {% endblock %}
-
-{# commented-out
-  {% block footer %}
-    {% set meta_items = [
-      {
-        "href": url_for("main.privacy"),
-        "text": "Privacy"
-      },
-      {
-        "href": url_for("main.accessibility_statement"),
-        "text": "Accessibility statement"
-      },
-      {
-        "href": url_for("main.terms_of_use"),
-        "text": "Terms of use"
-      },
-      {
-        "href": url_for("main.cookies"),
-        "text": "Cookies"
-      }
-    ] %}
-
-    {% set meta_suffix = 'Built by the <a href="https://www.gov.uk/government/organisations/government-digital-service" class="govuk-footer__link">Government Digital Service</a>' %}
-
-    {{ govukFooter({
-      "classes": "js-footer",
-      "navigation": [
-        {
-          "title": "About Notify",
-          "columns": 1,
-          "width": "one-half",
-          "items": [
-            {
-              "href": url_for("main.guidance_features"),
-              "text": "Features"
-            },
-            {
-              "href": url_for("main.guidance_pricing"),
-              "text": "Pricing"
-            },
-            {
-              "href": url_for("main.guidance_using_notify"),
-              "text": "Using Notify"
-            },
-            {
-              "href": "https://gds.blog.gov.uk/category/gov-uk-notify/",
-              "text": "Blog"
-            }
-          ]
-        },
-        {
-          "title": "Support",
-          "columns": 1,
-          "width": "one-half",
-          "items": [
-            {
-              "href": url_for('main.support'),
-              "text": "Contact support"
-            },
-            {
-              "href": "https://ukgovernmentdigital.slack.com/messages/C0E1ADVPC",
-              "text": "Chat to us on Slack"
-            },
-            {
-              "href": "https://status.notifications.service.gov.uk",
-              "text": "System status"
-            },
-            {
-              "href": url_for("main.guidance_api_documentation"),
-              "text": "API documentation"
-            }
-          ]
-        },
-      ],
-      "meta": {
-        "items": meta_items,
-        "html": meta_suffix
-      }
-    }) }}
-  {% endblock %}
-#}
 
 {% block bodyEnd %}
   {% block extra_javascripts %}
