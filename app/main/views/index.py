@@ -315,12 +315,22 @@ def guidance_schedule_messages():
     )
 
 
-# @main.route("/using-notify/send-files-by-email")
-# def guidance_send_files_by_email():
-#     return render_template(
-#         "views/guidance/using-notify/send-files-by-email.html",
-#         navigation_links=using_notify_nav(),
-#     )
+@main.route("/using-notify/send-files-by-email")
+@RateLimit.NO_LIMIT
+def guidance_send_files_by_email():
+    return render_template(
+        "views/guidance/using-notify/send-files-by-email.html",
+        navigation_links=using_notify_nav(),
+    )
+
+
+@main.route("/using-notify/sign-in-method")
+@RateLimit.NO_LIMIT
+def guidance_sign_in_method():
+    return render_template(
+        "views/guidance/using-notify/sign-in-method.html",
+        navigation_links=using_notify_nav(),
+    )
 
 
 @main.route("/using-notify/team-members-and-permissions")
