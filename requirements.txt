@@ -66,7 +66,7 @@ gds-metrics @ git+https://github.com/alphagov/gds_metrics_python.git@6f1840a57b6
     # via -r requirements.in
 govuk-bank-holidays==0.15
     # via notifications-utils
-govuk-frontend-jinja @ git+https://github.com/Worth-NL/LandRegistry-frontend-jinja.git@4eaddf2c577d1efac3b677bc3a973f23508f0639
+govuk-frontend-jinja @ git+https://github.com/Worth-NL/LandRegistry-frontend-jinja.git@40a9ebd52ee1d17b75d707a8005a2b9bb6645a1a
     # via -r requirements.in
 greenlet==3.1.1
     # via eventlet
@@ -114,7 +114,7 @@ mistune==0.8.4
     # via notifications-utils
 notifications-python-client==10.0.0
     # via -r requirements.in
-notifications-utils @ git+https://github.com/Worth-NL/notifications-utils.git@1da35b40184901c3f37e43fce42912ab7f8845dd
+notifications-utils @ git+https://github.com/Worth-NL/notifications-utils.git@693165e224cba58003f23b173eb0acf3dcb22c8e
     # via -r requirements.in
 openpyxl==3.1.5
     # via pyexcel-xlsx
