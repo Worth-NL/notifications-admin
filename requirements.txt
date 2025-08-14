@@ -181,7 +181,7 @@ pygments==2.18.0
     # via rich
 pyjwt==2.4.0
     # via notifications-python-client
-pypdf==3.13.0
+pypdf==6.0.0
     # via notifications-utils
 python-dateutil==2.8.2
     # via
